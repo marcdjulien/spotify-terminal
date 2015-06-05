@@ -305,7 +305,11 @@ def evaluate_input(input_str):
 def init():
     global shortcuts
     global env_info
-    rc_file = open("stermrc","r")
+    try:
+        rc_file = open("stermrc","r")
+    except:
+        print "No configuration file 'stermrc'"
+        return
     for line in rc_file:
         line = line.strip()
         if "<-" in line:

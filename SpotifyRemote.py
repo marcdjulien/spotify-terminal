@@ -12,8 +12,6 @@ import urllib2
 import json
 import time
 import sys
-import spotipy
-import spotipy.util as util
 
 PORT = 4370
 DEFAULT_RETURN_ON = ['login', 'logout', 'play', 'pause', 'error', 'ap']
