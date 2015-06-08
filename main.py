@@ -1,15 +1,15 @@
 import time
-import sys
 import json
 import string
 from threading import Timer
 from SpotifyRemote import SpotifyRemote
 
-sp = SpotifyRemote()
-commands = ["set", "exit", "pause", "play", "user", "playlists", "search-artist", "sar",
+CONFIG_FILENAME = "stermrc"
+SPOTIFY = SpotifyRemote()
+COMMANDS = ["set", "exit", "pause", "play", "user", "playlists", "search-artist", "sar",
             "search-album", "sal", "search-track", "str", "last-album", "lal", "last-artist",
             "lar", "help"]
-env_info = {"user":""}
+ENV_INFO = {"user":""}
     
 ARTIST_STATE = 0
 ALBUM_STATE = 1
@@ -25,25 +25,30 @@ last_album = []
 last_artist = []
 last_track = []
 
-shortcuts = {}
+SHORTCUTS = {}
 
 class InvalidSelectionError(Exception):
     pass
+
 class EmptySelectionError(Exception):
     pass
 
 def display_help_message():
-    help_msg = """
-search-album
-search-album
-search-artist
-last_album
-last_artist
-last_track
-set
-exit
-"""
-    print help_msg 
+    info = {}
+    info['exit'] = ["exit", "Exit the program"]
+    info['play'] = ["play", "Play music"]
+    info['pause'] = ["pause [d]", "Pause music, if the optional argument is used it will pause for d seconds"]
+    info['user'] = ["user", "Display user info"]
+    #info['playlists'] = ["playlists", "List the current users playlists for selection"]
+    info['search-artists'] = ["search-artist/sar", "Search for an artist to play"]
+    info['search-albums'] = ["search-album/sal", "Search for an album to play"]
+    info['search-tracks'] = ["search-track/str", "Search for a track to play"]
+    info['help'] = ["help", "Display this help message"]
+
+    print ""
+    for line in info:
+        print "%20s %s"%(info[line][0], info[line][1])
+
 def is_int(n):
     try:
         n = int(n)
@@ -53,22 +58,22 @@ def is_int(n):
     return False
 
 def set_command(prop, value):
-    if prop not in env_info.keys():
+    if prop not in ENV_INFO.keys():
         print "This property does not exit"
     else:
-        env_info[prop] = value
+        ENV_INFO[prop] = value
     return
 
 def pause_command(time):
-    sp.pause(pause=True)
-    Timer(time, sp.pause, [False]).start()
+    SPOTIFY.pause(pause=True)
+    Timer(time, SPOTIFY.pause, [False]).start()
 
 def play_command(n):
     if is_int(n):
         n = int(n)
         if (0 <= n) and (n < len(last_selection)):
             track_uri = last_selection[n]['uri']
-            sp.play(track_uri)
+            SPOTIFY.play(track_uri)
         else:
             print "Error: Invalid Track Selection"
             return
@@ -76,12 +81,12 @@ def play_command(n):
         return
 
 def user_command(username):
-    info = sp.get_user_info(username)
+    info = SPOTIFY.get_user_info(username)
     print "{0} [{1}]".format(info["display_name"], info['id'])
     print "Account Type: {0}".format(info['type'])
 
 def playlists_command(username):
-    playlists = sp.get_user_playlists(username)
+    playlists = SPOTIFY.get_user_playlists(username)
 
 def search_command(query, type):
     try:
@@ -89,7 +94,7 @@ def search_command(query, type):
         if uri == None:
             return
         else:
-            sp.play(uri)
+            SPOTIFY.play(uri)
     except EmptySelectionError:
         return
 
@@ -110,7 +115,7 @@ def select_from_list(selections):
     if selections == []:
         print "Found nothing."
         raise EmptySelectionError
-    input_str = raw_input("")
+    input_str = raw_input("Enter a number: ")
     if input_str == "":
         raise EmptySelectionError
 
@@ -124,22 +129,20 @@ def select_from_list(selections):
         if len(selections) > 2:
             ltr = input_str[0]
             try:
-                n = int(input_str[1::])
+                n = int(input_str[1::].strip())
                 return selections[n],True
-            except:
+            except Exception,e:
+                print e
                 return None,None
-
-def is_uri(string):
-    return "spotify:" in string
 
 def search_for_uri(query, type):
     global last_selection
     global last_artist
     global last_album
     global last_track
-    global shortcuts
-    if query in shortcuts.keys():
-        query = shortcuts[query]
+    global SHORTCUTS
+    if query in SHORTCUTS.keys():
+        query = SHORTCUTS[query]
 
     uri = None
     tracks = None
@@ -154,57 +157,61 @@ def search_for_uri(query, type):
 
     while cur_state != DONE_STATE:
         if cur_state == ARTIST_STATE:
-            artists = sp.search(type, query)['artists']
+            artists = SPOTIFY.search(type, query)['artists']
             if artists == []: return None
             print_list(artists, "Artists")
-            artist,er = select_from_list(artists)
-            artist_id = artist['id'] if not er else None
+            artist,play_now = select_from_list(artists)
+            if play_now:
+                uri = artist['uri'] if artist != None else None
+                cur_state = DONE_STATE
+                continue
+            artist_id = artist['id'] if artist != None else None
             last_artist = artist['name'] is artist != None
             cur_state = ALBUM_STATE
         elif cur_state == ALBUM_STATE:
             if artist_id == None:
                 print "Error: Invalid Artist Selection"
                 return
-            albums = sp.get_artist_albums(artist_id)
+            albums = SPOTIFY.get_artist_albums(artist_id)
             print_list(albums, "Albums")
-            album,er = select_from_list(albums)
+            album,play_now = select_from_list(albums)
             last_album = album
-            if er:
-                uri = album['uri']
+            if play_now:
+                uri = album['uri'] if album != None else None
                 cur_state = DONE_STATE
                 continue
-            album_id = album['id']
+            album_id = album['id'] if album != None else None
             cur_state = TRACK_STATE
         elif cur_state  == TRACK_STATE:
             if album_id == None:
                 print "Error: Invalid Album Selection"
                 return
-            tracks = sp.get_album_tracks(album_id)
+            tracks = SPOTIFY.get_album_tracks(album_id)
             print_list(tracks, "Tracks")
-            track,er = select_from_list(tracks)
-            if track != None: uri = track['uri']
+            track,play_now = select_from_list(tracks)
+            uri = track['uri'] if track != None else None
             cur_state = DONE_STATE
         elif cur_state == ALBUM_QUERY_STATE:
-            albums = sp.search(type, query)['albums']
+            albums = SPOTIFY.search(type, query)['albums']
             if albums == []: return None
             print_list(albums, "Albums")
-            album,er = select_from_list(albums)
+            album,play_now = select_from_list(albums)
             last_album = album
-            if er:
-                uri = album['uri']
+            if play_now:
+                uri = album['uri'] if album != None else None
                 cur_state = DONE_STATE
                 continue
-            album_id = album['id']
+            album_id = album['id'] if album != None else None
             cur_state = TRACK_STATE
         elif cur_state  == TRACK_QUERY_STATE:
-            tracks = sp.search(type, query)['tracks']
+            tracks = SPOTIFY.search(type, query)['tracks']
             if tracks == []: return None
             print_list(tracks, "Tracks")
-            track,er = select_from_list(tracks)
-            if track != None: uri = track['uri']
+            track,play_now = select_from_list(tracks)
+            uri = track['uri']  if track != None else None
             cur_state = DONE_STATE
         elif cur_state == COMBO_SEARCH_STATE:
-            results = sp.search(type, query)
+            results = SPOTIFY.search(type, query)
             combined = []
             combined.append(results["artists"])
             combined.append(results["albums"])
@@ -214,8 +221,12 @@ def search_for_uri(query, type):
             combined.extend(results["artists"])
             combined.extend(results["albums"])
             combined.extend(results["tracks"])
-            something,er = select_from_list(combined)
+            something,play_now = select_from_list(combined)
             if something == None:
+                cur_state = DONE_STATE
+                continue
+            if play_now:
+                uri = something['uri']
                 cur_state = DONE_STATE
                 continue
             if something['type'] == 'artist':
@@ -230,15 +241,6 @@ def search_for_uri(query, type):
 
     return uri
 
-def in_range(n, lower, upper):
-    if n >= lower:
-        if upper == INF:
-            return True
-        else:
-            return n <= upper
-    else:
-        return False
-
 def evaluate_input(input_str):
     toks = input_str.split(" ")
     n_toks = len(toks)
@@ -248,8 +250,8 @@ def evaluate_input(input_str):
     command = toks[0]
     cl = len(command)
 
-    if command not in commands:
-        print "This command does not exist. Searching."
+    if command not in COMMANDS:
+        print "This command does not exist. Searching for %s instead."%(input_str)
 
     if command == "set":
         if n_args == 2:
@@ -260,14 +262,14 @@ def evaluate_input(input_str):
         exit()
     elif command == "play":
         if n_args == 0:
-            sp.pause(pause=False)
+            SPOTIFY.pause(pause=False)
         elif n_args == 1:
             play_command(toks[1])
     elif command == "pause":
         if n_args == 0:
-            sp.pause(pause=True)
+            SPOTIFY.pause(pause=True)
         elif n_args > 1:
-            print "The 'pause' command only uses 1 argument"
+            print "The 'pause' command only uses 0 or 1 argument"
             return
         else:
             pause_command(int(toks[1]))
@@ -276,13 +278,13 @@ def evaluate_input(input_str):
         if n_args == 1:
             username = toks[1]
         else:
-            username = env_info["user"]
+            username = ENV_INFO["user"]
         user_command(username)
     elif command == "playlists":
         if n_args == 1:
             playlists_command(toks[1])
         else:
-            playlists_command(env_info["user"])
+            playlists_command(ENV_INFO["user"])
     elif command in ["search-artist", "sar"]:
         if n_args >= 1:
             search_command(input_str[cl+1::], ["artists"])
@@ -301,34 +303,40 @@ def evaluate_input(input_str):
     else:
         search_command(input_str, ["artists","tracks","albums"])
 
-
+"""
+Initializes the users settings based on the stermrc file
+"""
 def init():
-    global shortcuts
-    global env_info
+    global SHORTCUTS
+    global ENV_INFO
     try:
-        rc_file = open("stermrc","r")
+        rc_file = open(CONFIG_FILENAME,"r")
     except:
         print "No configuration file 'stermrc'"
         return
+
     for line in rc_file:
         line = line.strip()
+        line = line.split("#")[0] # Ignore comments
         if "<-" in line:
             toks = line.split("<-")
-            env_info[toks[0]] = toks[1]
+            ENV_INFO[toks[0]] = toks[1]
             continue
         toks = line.split("=")
         if len(toks) != 2:
             print "Error parsing rc file"
             return
-        shortcuts[toks[0]] = toks[1]
+        SHORTCUTS[toks[0]] = toks[1]
 
 def main():
     init()
     done = False
-    if env_info['user'] == "":
+    if ENV_INFO['user'] == "":
         print "Welcome to Spotify Terminal!"
     else:
-        print "Welcome %s."%(env_info['user'])
+        print "Welcome %s."%(ENV_INFO['user'])
+    print "Remember: When making a selection, putting 'p' before will start playing"
+    print "          For example, 'p3' or 'p 3', will start playing selection 3"
     while not done:
         user_input = raw_input("spotify>")
         evaluate_input(user_input)

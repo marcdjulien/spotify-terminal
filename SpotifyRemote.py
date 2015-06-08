@@ -104,13 +104,24 @@ class SpotifyRemote(object):
         return get(get_url('/remote/open.json'), headers=ORIGIN_HEADER).text
             
     ###################################
-    ### Added by MArc-Daniel Julien ###
+    ### Added by Marc-Daniel Julien ###
     ###################################
 
+    """ 
+    Returns a dict of the a users info
+    """
     def get_user_info(self, username):
         url = "https://api.spotify.com/v1/users/"+username
         return self.get_json(url)
 
+    """
+    Calls Spotify's search api
+    types: a list containing string of the type of search 
+           (ie, 'artist', 'track', 'album')
+    query: a string of what to search for
+    limit: limit on the amount of results te return per type of search
+           in 'types'
+    """
     def search(self, types, query, limit=20):
         for i in xrange(len(types)): types[i] = types[i][:-1]
         type_str = string.join(types,",")
@@ -126,6 +137,12 @@ class SpotifyRemote(object):
         for type in types:
             ret[type+'s'] = result[type+'s']['items']
         return ret
+
+    """
+    Calls Spotify's API to get a list of albums from a certain artist
+    id1: the id of the artist
+    type: which types of albums to return
+    """
     def get_artist_albums(self, id1, type=["album","single"]):
         url = "https://api.spotify.com/v1/artists/{}/albums".format(id1)
         albums = []
@@ -141,11 +158,18 @@ class SpotifyRemote(object):
                 final.append(album)
                 titles.append(album['name'])
         return final
-
+    """
+    Calls Spotify's API to get a list of tracks from a certain album
+    id1: the id of the album
+    """
     def get_album_tracks(self, id1):
         url = "https://api.spotify.com/v1/albums/{}/tracks".format(id1)
         return self.get_json(url)['items']
 
+    """ Not working!
+    Calls Spotify's API to get a list of playlists from a certain user
+    username: user name of the user
+    """
     def get_user_playlists(self, username):
         url = "https://api.spotify.com/v1/users/{}/playlists".format(username)
         results = self.get_json(url)
