@@ -12,7 +12,7 @@ import urllib2
 import json
 import time
 import sys
-
+from SpotifyAuthentication import *
 PORT = 4370
 DEFAULT_RETURN_ON = ['login', 'logout', 'play', 'pause', 'error', 'ap']
 ORIGIN_HEADER = {'Origin': 'https://open.spotify.com'}
@@ -166,11 +166,32 @@ class SpotifyRemote(object):
         url = "https://api.spotify.com/v1/albums/{}/tracks".format(id1)
         return self.get_json(url)['items']
 
+    
+
     """ Not working!
     Calls Spotify's API to get a list of playlists from a certain user
     username: user name of the user
     """
-    def get_user_playlists(self, username):
+    def _get_user_playlists(self, username, token_type, token):
+        # Check if authenticated
+        # Authenticate every hour?
+        # Send with auth code
+        # need to parse this suff doem SpotofyAuthenticaiton
+        # Should be passes in as an arg?
+        header = {"Authorization": "%s %s"%(token_type, token)}
         url = "https://api.spotify.com/v1/users/{}/playlists".format(username)
-        results = self.get_json(url)
-        return results
+        page = self.get_json(url, headers=header)
+        lists = []
+        lists.extend(page['items'])
+        while page['next'] != None:
+            page = self.get_json(page['next'], headers=header)
+            lists.extend(page['items'])
+        return lists
+
+    def get_user_playlists(self, *args):
+        try:
+           return self. _get_user_playlists(*args)
+        except Exception, e:
+            print e
+            authenticate()
+            return self._get_user_playlists(*args)

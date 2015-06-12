@@ -1,10 +1,12 @@
+from Globals import *
+import os
 import time
 import json
 import string
 from threading import Timer
 from SpotifyRemote import SpotifyRemote
+from SpotifyAuthentication import authenticate
 
-CONFIG_FILENAME = "stermrc"
 SPOTIFY = SpotifyRemote()
 COMMANDS = ["set", "exit", "pause", "play", "user", "playlists", "search-artist", "sar",
             "search-album", "sal", "search-track", "str", "last-album", "lal", "last-artist",
@@ -86,8 +88,16 @@ def user_command(username):
     print "Account Type: {0}".format(info['type'])
 
 def playlists_command(username):
-    playlists = SPOTIFY.get_user_playlists(username)
-
+    playlists = SPOTIFY.get_user_playlists(username,ENV_INFO['token_type'], 
+                                ENV_INFO['access_token'])
+    if playlists == []: return None
+    print_list(playlists, "Playlists")
+    playlist,play_now = select_from_list(playlists)
+    if play_now:
+        uri = playlist['uri'] if playlist != None else None
+        SPOTIFY.play(uri)
+        #else:
+        #    tracks = 
 def search_command(query, type):
     try:
         uri = search_for_uri(query, type)
@@ -306,7 +316,7 @@ def evaluate_input(input_str):
 """
 Initializes the users settings based on the stermrc file
 """
-def init():
+def configure():
     global SHORTCUTS
     global ENV_INFO
     try:
@@ -320,16 +330,32 @@ def init():
         line = line.split("#")[0] # Ignore comments
         if "<-" in line:
             toks = line.split("<-")
+            if len(toks) != 2:
+                print "Error parsing rc file"
+                return
             ENV_INFO[toks[0]] = toks[1]
             continue
-        toks = line.split("=")
-        if len(toks) != 2:
-            print "Error parsing rc file"
-            return
-        SHORTCUTS[toks[0]] = toks[1]
+        elif "=" in line:
+            toks = line.split("=")
+            if len(toks) != 2:
+                print "Error parsing rc file"
+                return
+            SHORTCUTS[toks[0]] = toks[1]
+
+def establish_authentication():
+    if os.path.isfile(AUTH_FILENAME):
+        auth_file = open(AUTH_FILENAME)
+        for line in auth_file:
+            line = line.strip()
+            toks = line.split("=")
+            ENV_INFO[toks[0]] = toks[1]
+        print "Authentication file found"
+    else:
+        auth_data = authenticate()
 
 def main():
-    init()
+    configure()
+    establish_authentication()
     done = False
     if ENV_INFO['user'] == "":
         print "Welcome to Spotify Terminal!"
