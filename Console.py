@@ -112,6 +112,7 @@ class Console(object):
         self.last_selection = selections
         play_now = False
         if is_int(input_str):
+            n = int(input_str)
             if in_range(n, selections):
                 play_now = False
                 return selections[n], play_now

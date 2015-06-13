@@ -1,9 +1,9 @@
 # spotifyterminal
-Terminal program to play/control music via Spotify
+Terminal program to play/control music via Spotify <br>
 
-Just run sterm.py and you should be good to go!
+Just run sterm.py and you should be good to go!<br>
 
-spotify>sar nine inch nails                        <----- Search for artists
+spotify>sar nine inch nails                        <----- Search for artists<br>
 ---Artists---
 [0] Nine Inch Nails
 Enter a number: 0                                   <----- Make a selection
