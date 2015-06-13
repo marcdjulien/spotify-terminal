@@ -173,11 +173,6 @@ class SpotifyRemote(object):
     username: user name of the user
     """
     def _get_user_playlists(self, username, token_type, token):
-        # Check if authenticated
-        # Authenticate every hour?
-        # Send with auth code
-        # need to parse this suff doem SpotofyAuthenticaiton
-        # Should be passes in as an arg?
         header = {"Authorization": "%s %s"%(token_type, token)}
         url = "https://api.spotify.com/v1/users/{}/playlists".format(username)
         page = self.get_json(url, headers=header)
@@ -190,7 +185,7 @@ class SpotifyRemote(object):
 
     def get_user_playlists(self, *args):
         try:
-           return self. _get_user_playlists(*args)
+           return self._get_user_playlists(*args)
         except Exception, e:
             print e
             authenticate()
