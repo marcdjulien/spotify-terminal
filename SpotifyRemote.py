@@ -162,13 +162,13 @@ class SpotifyRemote(object):
     Calls Spotify's API to get a list of tracks from a certain album
     id1: the id of the album
     """
-    def get_album_tracks(self, id1):
-        url = "https://api.spotify.com/v1/albums/{}/tracks".format(id1)
+    def get_album_tracks(self, id):
+        url = "https://api.spotify.com/v1/albums/{}/tracks".format(id)
         return self.get_json(url)['items']
 
     
 
-    """ Not working!
+    """
     Calls Spotify's API to get a list of playlists from a certain user
     username: user name of the user
     """
@@ -183,10 +183,18 @@ class SpotifyRemote(object):
             lists.extend(page['items'])
         return lists
 
-    def get_user_playlists(self, *args):
+    def get_user_playlists(self, console):
         try:
-           return self._get_user_playlists(*args)
+            return self._get_user_playlists(console.env_info['user'],
+                                                console.env_info['token_type'],
+                                                console.env_info['access_token'])
         except Exception, e:
             print e
+            # Re authenticate
             authenticate()
-            return self._get_user_playlists(*args)
+            # Reread newly made file into memory
+            console.auth_from_file()
+            # Try again
+            return self._get_user_playlists(console.env_info['user'],
+                                                console.env_info['token_type'],
+                                                console.env_info['access_token'])
