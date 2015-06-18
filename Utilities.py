@@ -24,3 +24,4 @@ def is_int(n):
 
 def in_range(n, list):
 	return (0 <= n) and (n < len(list))
+

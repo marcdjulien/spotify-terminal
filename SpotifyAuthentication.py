@@ -1,3 +1,10 @@
+"""
+Spotify Terminal authenticates with Spotify by directing
+your browser to the authentication link. After you log in 
+and authenticate the redirect url will bring you to a localhost
+page. At this point Spotify Terminal will be running a "web server"
+to obtain the authentication information.
+"""
 from Globals import *
 import os
 import urllib
@@ -17,6 +24,8 @@ PARAMS = { "client_id":CLIENT_ID,
            "response_type":RESPONSE_TYPE 
          }
 URL = HOST+"?"+urllib.urlencode(PARAMS)
+# After you authenticate this page will grab the web hash
+# that contains your auth token
 HTML = """
 <html>
 <div id="hash"></div>
@@ -25,6 +34,7 @@ window.location = window.location.hash.substring(1);
 </script>
 </html>
 """
+# When you are authenticated this page will display
 HTML2 = """
 <html>
 You have been authenticated! Continue jamming!
@@ -54,15 +64,6 @@ class Handler(BaseHTTPRequestHandler):
         return data
 
 
-
-def authenticate():
-    global data
-    web_thread = Thread(target=start_server)
-    web_thread.start()
-    webbrowser.open_new_tab(URL)
-    web_thread.join()
-    write_auth_file()
-    return data
     
 def start_server():
     server = HTTPServer(('localhost', PORT), Handler)
@@ -78,3 +79,17 @@ def write_auth_file():
         auth_file.write("%s=%s\n"%(k,v))
     auth_file.close()
     print "Auth file created"
+
+# This begin the authentication process
+def authenticate():
+    global data
+    # Start running the server
+    web_thread = Thread(target=start_server)
+    web_thread.start()
+    # Open the authentication link
+    webbrowser.open_new_tab(URL)
+    # Wait for the server to make the 2 expected http request
+    web_thread.join()
+    # Save the new authentication information to disk
+    write_auth_file()
+    return data

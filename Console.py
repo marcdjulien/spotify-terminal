@@ -229,6 +229,7 @@ class Console(object):
         return uri
 
     def evaluate_input(self, input_str):
+        logging.info("Input command:  %s"%(input_str))
         toks = input_str.split(" ")
         n_toks = len(toks)
         n_args = n_toks-1
@@ -238,13 +239,13 @@ class Console(object):
         cl = len(command)
 
         if command not in COMMANDS:
-            print "This command does not exist. Searching for %s instead."%(input_str)
+            logging.warning("This command does not exist. Searching for %s instead."%(input_str))
 
         if command == "set":
             if n_args == 2:
                 self.set_command(toks[1], toks[2])
             else:
-                print "Not enough arguments"
+                logging.warning("Not enough arguments")
         elif command == "exit":
             exit()
         elif command == "play":
@@ -256,7 +257,7 @@ class Console(object):
             if n_args == 0:
                 self.spotify.pause(pause=True)
             elif n_args > 1:
-                print "The 'pause' command only uses 0 or 1 argument"
+                logging.warning("The 'pause' command only uses 0 or 1 argument")
                 return
             else:
                 self.pause_command(int(toks[1]))
@@ -306,14 +307,14 @@ class Console(object):
             if "<-" in line:
                 toks = line.split("<-")
                 if len(toks) != 2:
-                    print "Error parsing rc file"
+                    logging.error("Error parsing rc file")
                     return
                 self.env_info[toks[0]] = toks[1]
                 continue
             elif "=" in line:
                 toks = line.split("=")
                 if len(toks) != 2:
-                    print "Error parsing rc file"
+                    logging.error("Error parsing rc file")
                     return
                 self.shortcuts[toks[0]] = toks[1]
 
@@ -324,9 +325,10 @@ class Console(object):
                 line = line.strip()
                 toks = line.split("=")
                 self.env_info[toks[0]] = toks[1]
-            print "Authentication file found"
+            logging.info("Authentication file found")
             return True
         else:
+            logging.info("No authentication file found")
             return False
 
     """
@@ -336,6 +338,7 @@ class Console(object):
         auth_data = authenticate()
         for k,v in auth_data.items():
             self.env_info[k] = v
+        logging.info("Authentication from web complete")
         return True
 
     def init(self):
@@ -347,6 +350,7 @@ class Console(object):
             return
         else:
             self.auth_from_web()
+        logging.info("Initialization complete")
         
     def run(self):
         if self.env_info['user'] == "":

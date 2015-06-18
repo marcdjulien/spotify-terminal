@@ -1,0 +1,9 @@
+# This is the configuration file
+# Use '<-' to set certain fields
+# Use '=' to create shortcuts for searches
+# Anything folling a '#' on a line will be ignored
+
+user<-marcjulien
+dm=deadmau5
+tgm=the glitch mob
+nin=nine inch nails
