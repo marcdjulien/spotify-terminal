@@ -165,6 +165,14 @@ class SpotifyRemote(object):
     def get_album_tracks(self, id):
         url = "https://api.spotify.com/v1/albums/{}/tracks".format(id)
         return self.get_json(url)['items']
+    def get_playlist_tracks(self, owner_id, id, token_type, token):
+        header = {"Authorization": "%s %s"%(token_type, token)}
+        url = "https://api.spotify.com/v1/users/{}/playlists/{}/tracks".format(owner_id, id)
+        playlist_tracks = self.get_json(url, headers=header)['items']
+        tracks = []
+        for ptrack in playlist_tracks:
+            tracks.append(ptrack['track'])
+        return tracks
 
     
 

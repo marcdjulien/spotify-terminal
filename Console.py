@@ -8,9 +8,6 @@ from threading import Timer
 from SpotifyRemote import SpotifyRemote
 from SpotifyAuthentication import authenticate
 
-COMMANDS = ["set", "exit", "pause", "play", "user", "playlists", "search-artist", "sar",
-            "search-album", "sal", "search-track", "str", "last-album", "lal", "last-artist",
-            "lar", "help"]
     
 ARTIST_STATE = 0
 ALBUM_STATE = 1
@@ -61,7 +58,8 @@ class Console(object):
                 self.spotify.play(track_uri)
             else:
                 print "Error: Invalid Track Selection"
-                return
+                raise InvalidSelectionError
+                
 
     def user_command(self, username):
         info = self.spotify.get_user_info(username)
@@ -76,9 +74,12 @@ class Console(object):
         if play_now:
             uri = playlist['uri'] if playlist != None else None
             self.spotify.play(uri)
-            #else:
-            #    tracks = 
-
+        else:
+            tracks = self.spotify.get_playlist_tracks(playlist['owner']['id'], 
+                playlist['id'], self.env_info['token_type'], self.env_info['access_token'])
+            self.print_list(tracks, "Tracks")
+            track, play_now = self.select_from_list(tracks)
+            self.spotify.play(track['uri'])
     def search_command(self, query, type):
         try:
             uri = self.search_for_uri(query, type)
@@ -104,8 +105,9 @@ class Console(object):
     def select_from_list(self, selections):
         if selections == []:
             print "Found nothing."
+            logging.info("Empty selection.")
             raise EmptyInputException
-        input_str = raw_input("Enter a number: ")
+        input_str = self.get_input("Enter a number: ")
         if input_str == "":
             raise EmptyInputException
 
@@ -117,12 +119,15 @@ class Console(object):
                 play_now = False
                 return selections[n], play_now
             else:
-                return None
+                raise InvalidSelectionError
+        # Input was something like: p 9
         else:
             play_now = True
             ltr = input_str[0]
             try:
                 n = int(input_str[1::].strip())
+                if not in_range(n, selections):
+                    raise InvalidSelectionError
                 return selections[n], play_now
             except:
                 return None
@@ -153,7 +158,7 @@ class Console(object):
                     cur_state = DONE_STATE
                     continue
                 artist_id = artist['id'] if artist != None else None
-                last_artist = artist['name'] is artist != None
+                self.last_artist = artist['name'] is artist != None
                 cur_state = ALBUM_STATE
             elif cur_state == ALBUM_STATE:
                 if artist_id == None:
@@ -162,7 +167,7 @@ class Console(object):
                 albums = self.spotify.get_artist_albums(artist_id)
                 self.print_list(albums, "Albums")
                 album,play_now = self.select_from_list(albums)
-                last_album = album
+                self.last_album = album
                 if play_now:
                     uri = album['uri'] if album != None else None
                     cur_state = DONE_STATE
@@ -183,7 +188,7 @@ class Console(object):
                 if albums == []: return None
                 self.print_list(albums, "Albums")
                 album,play_now = self.select_from_list(albums)
-                last_album = album
+                self.last_album = album
                 if play_now:
                     uri = album['uri'] if album != None else None
                     cur_state = DONE_STATE
@@ -194,7 +199,7 @@ class Console(object):
                 tracks = self.spotify.search(type, query)['tracks']
                 if tracks == []: return None
                 self.print_list(tracks, "Tracks")
-                track,play_now = select_from_list(tracks)
+                track,play_now = self.select_from_list(tracks)
                 uri = track['uri']  if track != None else None
                 cur_state = DONE_STATE
             elif cur_state == COMBO_SEARCH_STATE:
@@ -229,7 +234,7 @@ class Console(object):
         return uri
 
     def evaluate_input(self, input_str):
-        logging.info("Input command:  %s"%(input_str))
+        input_str = input_str.strip()
         toks = input_str.split(" ")
         n_toks = len(toks)
         n_args = n_toks-1
@@ -283,11 +288,13 @@ class Console(object):
             if n_args >= 1:
                 self.search_command(input_str[cl+1::], ["tracks"])
         elif command in ["last_album", "lal"]:
-            print last_album
+            last_selection = self.last_album
+            self.print_list(self.last_album, "Tracks")
         elif command in ["last_artist", "lar"]:
-            print last_artist
-        elif command == "help":
-            self.display_help_message()
+            last_selection = self.last_artist
+            self.print_list(self.last_artist, "Albums")
+        elif command in ["help", "h"]:
+            display_help_message()
         else:
             self.search_command(input_str, ["artists","tracks","albums"])
 
@@ -298,7 +305,7 @@ class Console(object):
         try:
             rc_file = open(CONFIG_FILENAME,"r")
         except:
-            print "No configuration file 'stermrc'"
+            print "No configuration file '%s'"%(CONFIG_FILENAME)
             return
 
         for line in rc_file:
@@ -307,15 +314,15 @@ class Console(object):
             if "<-" in line:
                 toks = line.split("<-")
                 if len(toks) != 2:
-                    logging.error("Error parsing rc file")
-                    return
+                    logging.error("Error in line: %s"%(line))
+                    continue
                 self.env_info[toks[0]] = toks[1]
                 continue
             elif "=" in line:
                 toks = line.split("=")
                 if len(toks) != 2:
-                    logging.error("Error parsing rc file")
-                    return
+                    logging.error("Error in line: %s"%(line))
+                    continue
                 self.shortcuts[toks[0]] = toks[1]
 
     def auth_from_file(self):
@@ -351,6 +358,12 @@ class Console(object):
         else:
             self.auth_from_web()
         logging.info("Initialization complete")
+
+    def get_input(self, prompt):
+        input_str = raw_input(prompt)
+        input_str = input_str.strip()
+        logging.info("Input: %s"%(input_str))
+        return input_str
         
     def run(self):
         if self.env_info['user'] == "":
@@ -360,7 +373,7 @@ class Console(object):
         print "Remember: When making a selection, putting 'p' before will start playing"
         print "          For example, 'p3' or 'p 3', will start playing selection 3"
         while True:
-            user_input = raw_input("spotify>")
+            user_input = self.get_input("spotify>")
             self.evaluate_input(user_input)
 
 
