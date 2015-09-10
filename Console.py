@@ -29,7 +29,7 @@ class Console(object):
     """docstring for Console"""
     def __init__(self):
         super(Console, self).__init__()
-        self.env_info = {}
+        self.env_info = { "user": "" }
         self.shortcuts = {}
         self.spotify = SpotifyRemote()
         self.last_selection = []
@@ -251,7 +251,7 @@ class Console(object):
                 self.set_command(toks[1], toks[2])
             else:
                 logging.warning("Not enough arguments")
-        elif command == "exit":
+        elif command == "exit" or command == "q" or command == "quit":
             exit()
         elif command == "play":
             if n_args == 0:

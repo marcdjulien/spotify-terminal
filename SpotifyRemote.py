@@ -27,22 +27,11 @@ class SpotifyRemote(object):
         self.csrf_token = self.get_csrf_token()
         # For user info 
 
-
-
-    # I had some troubles with the version of Spotify's SSL cert and Python 2.7 on Mac.
-    # Did this monkey dirty patch to fix it. Your milage may vary.
-    def new_wrap_socket(self, *args, **kwargs):
-        kwargs['ssl_version'] = ssl.PROTOCOL_SSLv3
-        return self.orig_wrap_socket(*args, **kwargs)
-
-    orig_wrap_socket, ssl.wrap_socket = ssl.wrap_socket, new_wrap_socket
-
     def get_json(self, url, params={}, headers={}):
         if params:
             url += "?" + urllib.urlencode(params)
         request = urllib2.Request(url, headers=headers)
         return json.loads(urllib2.urlopen(request).read())
-
 
     def generate_local_hostname(self):
         """Generate a random hostname under the .spotilocal.com domain"""

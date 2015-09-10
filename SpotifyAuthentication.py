@@ -63,8 +63,6 @@ class Handler(BaseHTTPRequestHandler):
             data[toks[0]] = toks[1]
         return data
 
-
-    
 def start_server():
     server = HTTPServer(('localhost', PORT), Handler)
     server.handle_request() # Get token
@@ -75,9 +73,16 @@ def write_auth_file():
     if not os.path.isdir(TEMP_DIR):
         os.mkdir(TEMP_DIR)
     auth_file = open(AUTH_FILENAME, "w")
-    for k,v in data.items():
-        auth_file.write("%s=%s\n"%(k,v))
-    auth_file.close()
+    try:
+      print data
+      for k,v in data.items():
+          auth_file.write("%s=%s\n"%(k,v))
+      auth_file.close()
+    # If we can't write data to the file, remove it so we ask for authentication
+    # next time.
+    except:
+      auth_file.close()
+      os.remove(AUTH_FILENAME)
     print "Auth file created"
 
 # This begin the authentication process
