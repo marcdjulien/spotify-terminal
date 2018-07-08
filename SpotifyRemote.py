@@ -3,153 +3,112 @@ Modified from Carl Bystrom
 http://cgbystrom.com/articles/deconstructing-spotifys-builtin-http-server/
 https://github.com/cgbystrom/spotify-local-http-api
 """
+
 import ssl
-from string import ascii_lowercase
 import string
-from random import choice
 import urllib
 import urllib2
 import json
 import time
 import sys
-from SpotifyAuthentication import *
-PORT = 4370
-DEFAULT_RETURN_ON = ['login', 'logout', 'play', 'pause', 'error', 'ap']
-ORIGIN_HEADER = {'Origin': 'https://open.spotify.com'}
+
+from string import ascii_lowercase
+from random import choice
+
 
 class SpotifyRemote(object):
-    """docstring for SpotifyRemote"""
-    # Default port that Spotify Web Helper binds to.
-    def __init__(self, username="null"):
-        super(SpotifyRemote, self).__init__()
-        # For the SpotifyWebHelper 
-        self.oauth_token = self.get_oauth_token()
-        self.csrf_token = self.get_csrf_token()
-        # For user info 
 
+    def __init__(self, token_type=None, access_token=None):
+        self.api_token_type = token_type
+        self.api_access_token = access_token
 
+    def play(self, track_uri=None, context_uri=None):
+        """Play a Spotify track.
 
-    # I had some troubles with the version of Spotify's SSL cert and Python 2.7 on Mac.
-    # Did this monkey dirty patch to fix it. Your milage may vary.
-    def new_wrap_socket(self, *args, **kwargs):
-        kwargs['ssl_version'] = ssl.PROTOCOL_SSLv3
-        return self.orig_wrap_socket(*args, **kwargs)
+        Args:
+            track_uri (str): The track uri.
+            context_uri (str): The context uri.
+        """
+        params = {}
+        if context_uri:
+            params = {"context_uri": context_uri}
+            if track_uri is None:
+                params["offset"] = {"position": 0}
+            else:                
+                params["offset"] = {"uri": track_uri}
+        
+        if track_uri and not context_uri:
+            if track_uri.startswith("spotify:track:"):
+                params['uris'] = [track_uri]
 
-    orig_wrap_socket, ssl.wrap_socket = ssl.wrap_socket, new_wrap_socket
+        endpoint = "me/player/play"
+        print params
+        self.put_api_v1(endpoint, params)
 
-    def get_json(self, url, params={}, headers={}):
-        if params:
-            url += "?" + urllib.urlencode(params)
-        request = urllib2.Request(url, headers=headers)
-        return json.loads(urllib2.urlopen(request).read())
+    def next(self):
+        self.post_api_v1("me/player/next")
 
+    def previous(self):
+        self.post_api_v1("me/player/previous")
 
-    def generate_local_hostname(self):
-        """Generate a random hostname under the .spotilocal.com domain"""
-        subdomain = ''.join(choice(ascii_lowercase) for x in range(10))
-        return subdomain + '.spotilocal.com'
+    def pause(self):
+        self.put_api_v1("me/player/pause")
 
+    def get_currently_playing(self):
+        """Return the currently playing track."""
+        return self.get_api_v1("me/player/currently-playing")
 
-    def get_url(self, url):
-        return "https://%s:%d%s" % (self.generate_local_hostname(), PORT, url)
-
-
-    def get_version(self):
-        return self.get_json(self.get_url('/service/version.json'), params={'service': 'remote'}, headers=ORIGIN_HEADER)
-
-
-    def get_oauth_token(self):
-        data = self.get_json('http://open.spotify.com/token')
-        return data['t']
-
-    def get_csrf_token(self):
-        # Requires Origin header to be set to generate the CSRF token.
-        return self.get_json(self.get_url('/simplecsrf/token.json'), headers=ORIGIN_HEADER)['token']
-
-
-    def get_status(self, oauth_token, csrf_token, return_after=59, return_on=DEFAULT_RETURN_ON):
-        params = {
-            'oauth': self.oauth_token,
-            'csrf': self.csrf_token,
-            'returnafter': return_after,
-            'returnon': ','.join(return_on)
-        }
-        return self.get_json(self.get_url('/remote/status.json'), params=params, headers=ORIGIN_HEADER)
-
-
-    def pause(self, pause):
-        params = {
-            'oauth': self.oauth_token,
-            'csrf': self.csrf_token,
-            'pause': 'true' if pause else 'false'
-        }
-        self.get_json(self.get_url('/remote/pause.json'), params=params, headers=ORIGIN_HEADER)
-
-
-    def unpause(self):
-        self.pause(pause=False)
-
-
-    def play(self, spotify_uri):
-        params = {
-            'oauth': self.oauth_token,
-            'csrf': self.csrf_token,
-            'uri': spotify_uri,
-            'context': spotify_uri,
-        }
-        self.get_json(self.get_url('/remote/play.json'), params=params, headers=ORIGIN_HEADER)
-
-
-    def open_spotify_client(self):
-        return get(get_url('/remote/open.json'), headers=ORIGIN_HEADER).text
-            
-    ###################################
-    ### Added by Marc-Daniel Julien ###
-    ###################################
-
-    """ 
-    Returns a dict of the a users info
-    """
     def get_user_info(self, username):
-        url = "https://api.spotify.com/v1/users/"+username
-        return self.get_json(url)
+        """Returns a dict of the a users info.
+        
+        username (str): The username.
 
-    """
-    Calls Spotify's search api
-    types: a list containing string of the type of search 
-           (ie, 'artist', 'track', 'album')
-    query: a string of what to search for
-    limit: limit on the amount of results te return per type of search
-           in 'types'
-    """
+        Returns:
+            dict: The JSON dictionary containing the users information.
+        """
+        return self.get_api_v1("users/{}".format(username))
+
     def search(self, types, query, limit=20):
-        for i in xrange(len(types)): types[i] = types[i][:-1]
+        """Calls Spotify's search api.
+
+        Args:
+            types (list): Strings of the type of search (i.e, 'artist', 
+                'track', 'album')
+            query (str): What to search for
+            limit (int): Limit on the amount of results te return per 
+                type of search in 'types'
+        
+        Returns:
+            dict: Collection of 'artist', 'album', and 'track' objects. 
+        """
+        # The API returns these with 's' at the end.
+        # But the query doesn't use 's'. 
+        # Strip them so we can chain calls together.
+        for i in xrange(len(types)): 
+            types[i] = types[i][:-1]
+
         type_str = string.join(types,",")
-        params = {
-                    'type':type_str,
-                    'q':query,
-                    'limit':limit
-                 }
-        url = "https://api.spotify.com/v1/search"
-        url += "?" + urllib.urlencode(params)
-        result = self.get_json(url)
+        params = {'type':type_str,
+                  'q':query,
+                  'limit':limit}
+        
+        result = self.get_api_v1("search", params)
         ret = {}
         for type in types:
             ret[type+'s'] = result[type+'s']['items']
         return ret
 
-    """
-    Calls Spotify's API to get a list of albums from a certain artist
-    id1: the id of the artist
-    type: which types of albums to return
-    """
-    def get_artist_albums(self, id1, type=["album","single"]):
-        url = "https://api.spotify.com/v1/artists/{}/albums".format(id1)
+    def get_albums_from_artist(self, id1, type=("album","single")):
+        """Get a list of albums from a certain artist
+        
+        id1 (str): The id of the artist
+        type (iter): Which types of albums to return
+        """
         albums = []
-        page = self.get_json(url)
+        page = self.get_api_v1("artists/{}/albums".format(id1))
         albums.extend(page['items'])
         while page['next'] != None:
-            page = self.get_json(page['next'])
+            page = self.get_api_v1(page['next'].split('/v1/')[-1])
             albums.extend(page['items'])
         titles = []
         final = []
@@ -158,51 +117,76 @@ class SpotifyRemote(object):
                 final.append(album)
                 titles.append(album['name'])
         return final
-    """
-    Calls Spotify's API to get a list of tracks from a certain album
-    id1: the id of the album
-    """
-    def get_album_tracks(self, id):
-        url = "https://api.spotify.com/v1/albums/{}/tracks".format(id)
-        return self.get_json(url)['items']
-    def get_playlist_tracks(self, owner_id, id, token_type, token):
-        header = {"Authorization": "%s %s"%(token_type, token)}
-        url = "https://api.spotify.com/v1/users/{}/playlists/{}/tracks".format(owner_id, id)
-        playlist_tracks = self.get_json(url, headers=header)['items']
+
+    def get_tracks_from_album(self, id):
+        """Get a list of tracks from a certain album."""
+        return self.get_api_v1("albums/{}/tracks".format(id))['items']
+
+    def get_tracks_from_playlist(self, owner_id, id):
+        url = "users/{}/playlists/{}/tracks".format(owner_id, id)
+        playlist_tracks = self.get_api_v1(url)['items']
         tracks = []
         for ptrack in playlist_tracks:
             tracks.append(ptrack['track'])
         return tracks
 
-    
+    def get_artists_from_track(self, track_id):
+        return self.get_api_v1("tracks/{}".format(track_id))['artists']
 
-    """
-    Calls Spotify's API to get a list of playlists from a certain user
-    username: user name of the user
-    """
-    def _get_user_playlists(self, username, token_type, token):
-        header = {"Authorization": "%s %s"%(token_type, token)}
-        url = "https://api.spotify.com/v1/users/{}/playlists".format(username)
-        page = self.get_json(url, headers=header)
+    def get_artists_from_album(self, album_id):
+        return self.get_api_v1("albums/{}".format(album_id))['artists']
+
+    def get_saved_tracks(self, offset, limit):
+        params = {"offset": offset, "limit":limit}
+        tracks = []
+        for track in self.get_api_v1("me/tracks", params=params)["items"]:
+            tracks.append(track['track'])
+        return tracks
+
+    def get_user_playlists(self, username):
+        """Get a list of playlists from a certain user."""
+        url = "users/{}/playlists".format(username)
+        page = self.get_api_v1(url)
         lists = []
         lists.extend(page['items'])
         while page['next'] != None:
-            page = self.get_json(page['next'], headers=header)
+            page = self.get_api_v1(page['next'].split('/v1/')[-1])
             lists.extend(page['items'])
         return lists
 
-    def get_user_playlists(self, console):
-        try:
-            return self._get_user_playlists(console.env_info['user'],
-                                                console.env_info['token_type'],
-                                                console.env_info['access_token'])
-        except Exception, e:
-            print e
-            # Re authenticate
-            authenticate()
-            # Reread newly made file into memory
-            console.auth_from_file()
-            # Try again
-            return self._get_user_playlists(console.env_info['user'],
-                                                console.env_info['token_type'],
-                                                console.env_info['access_token'])
+    def get_api_v1(self, endpoint, params=None):
+        headers = {"Authorization": "%s %s"%(self.api_token_type, self.api_access_token)}
+        api_url = "https://api.spotify.com/v1/{}".format(endpoint)
+        return self.get_json(api_url, headers=headers, params=params)
+
+    def put_api_v1(self, endpoint, params=None):
+        headers = {"Authorization": "%s %s"%(self.api_token_type, self.api_access_token),
+                   "Content-Type": "application/json",
+                   "Accept": "application/json"}
+        api_url = "https://api.spotify.com/v1/{}".format(endpoint)
+        request = urllib2.Request(api_url, headers=headers, data=json.dumps(params))
+        request.get_method = lambda: 'PUT'
+        return urllib2.urlopen(request)
+
+    def post_api_v1(self, endpoint, params=None):
+        headers = {"Authorization": "%s %s"%(self.api_token_type, self.api_access_token)}
+        api_url = "https://api.spotify.com/v1/{}".format(endpoint)
+        request = urllib2.Request(api_url, headers=headers, data=json.dumps(params))
+        request.get_method = lambda: 'POST'
+        return urllib2.urlopen(request)
+
+    def get_json(self, url, params={}, headers={}):
+        """Return a JSON from a GET request.
+
+        Args:
+            url (str): The URL.
+            params (dict): URL parameters.
+            headers (dict): HTTP headers.
+
+        Returns:
+            dict: The resulting JSON.
+        """ 
+        if params:
+            url += "?" + urllib.urlencode(params)
+        request = urllib2.Request(url, headers=headers)
+        return json.loads(urllib2.urlopen(request).read())

@@ -3,12 +3,13 @@ from Utilities import *
 import os
 import time
 import json
+import urllib2
 import string
 from threading import Timer
 from SpotifyRemote import SpotifyRemote
 from SpotifyAuthentication import authenticate
+from Cache import Cache
 
-    
 ARTIST_STATE = 0
 ALBUM_STATE = 1
 TRACK_STATE = 2
@@ -26,16 +27,18 @@ class EmptyInputException(Exception):
     pass
 
 class Console(object):
-    """docstring for Console"""
+
     def __init__(self):
         super(Console, self).__init__()
+        self.spotify = SpotifyRemote()
+        self.cache = Cache(self.spotify)
         self.env_info = {}
         self.shortcuts = {}
-        self.spotify = SpotifyRemote()
         self.last_selection = []
-        self.last_album = []
-        self.last_artist = []
-        self.last_track = []
+        self.last_album = {}
+        self.last_artist = {}
+        self.last_track = {}
+        self.last_context = None
 
     def set_command(self, prop, value):
         if prop not in self.env_info.keys():
@@ -43,23 +46,23 @@ class Console(object):
         else:
             self.env_info[prop] = value
 
-    def pause_command(self, time):
-        self.spotify.pause(pause=True)
-        Timer(time, self.spotify.pause, [False]).start()
+    def pause_command(self):
+        self.spotify.pause()
 
-    """
-    Plays seleciton n from the last seleciton print_list
-    """
-    def play_command(self, n):
+    def play_command(self, n=None):
+        """Plays seleciton n from the last seleciton print_list"""
         if is_int(n):
             n = int(n)
             if in_range(n, self.last_selection):
                 track_uri = self.last_selection[n]['uri']
-                self.spotify.play(track_uri)
+                if track_uri:
+                    self.spotify.play(track_uri, context_uri=self.last_context)
+                else:
+                    logging.info("Error: Can't choose a song.")
             else:
-                print "Error: Invalid Track Selection"
-                raise InvalidSelectionError
-                
+                logging.info("Error: Invalid Track Selection")
+        else:
+            self.spotify.play(None, None)
 
     def user_command(self, username):
         info = self.spotify.get_user_info(username)
@@ -67,39 +70,66 @@ class Console(object):
         print "Account Type: {0}".format(info['type'])
 
     def playlists_command(self, username):
-        playlists = self.spotify.get_user_playlists(self)
+        playlists = self.spotify.get_user_playlists(username)
         if playlists == []: return None
         self.print_list(playlists, "Playlists")
-        playlist,play_now = self.select_from_list(playlists)
+        playlist, play_now = self.select_from_list(playlists)
         if play_now:
             uri = playlist['uri'] if playlist != None else None
-            self.spotify.play(uri)
+            self.spotify.play(None, uri)
         else:
-            tracks = self.spotify.get_playlist_tracks(playlist['owner']['id'], 
-                playlist['id'], self.env_info['token_type'], self.env_info['access_token'])
+            tracks = self.spotify.get_tracks_from_playlist(playlist['owner']['id'], 
+                                                           playlist['id'])
             self.print_list(tracks, "Tracks")
             track, play_now = self.select_from_list(tracks)
-            self.spotify.play(track['uri'])
+            self.spotify.play(track['uri'], playlist['uri'])
     def search_command(self, query, type):
         try:
-            uri = self.search_for_uri(query, type)
-            if uri == None:
+            track_uri, context_uri = self.search_for_uri(query, type)
+            if track_uri == None and context_uri == None:
                 return
             else:
-                self.spotify.play(uri)
+                self.last_context = context_uri
+                self.spotify.play(track_uri, context_uri)
         except EmptyInputException:
             return
 
-    def print_list(self, selections, title="", offset=0):
+    def current_command(self):
+        track = self.spotify.get_currently_playing()
+        print "Artist(s): {}".format(", ".join(
+            [artist['name'] for artist in track['item']['artists']]
+        ))
+        print "Album:     {}".format(track['item']['album']['name'])
+        print "Title:     {}".format(track['item']['name'])
+
+    def saved_command(self, offset=0, limit=10):
+        songs = self.spotify.get_saved_tracks(offset, limit)
+        self.print_list(songs)
+        track, play_now = self.select_from_list(songs)
+        if track:
+            self.spotify.play(track['uri'], None)
+
+    def print_list(self, selections, title="", offset=0, clear_console=True):
+        if clear_console:   
+           clear()
+
         if selections == []: return
-        print "---%s---"%(title)
-        for i in xrange(len(selections)-1,-1,-1):
-            print "[%d] %s"%(i+offset, selections[i]['name'].encode('ascii', 'ignore'))
+        print FMT%("---%s---"%(title))
+        for i in xrange(len(selections)):
+            if "Artist" in title or "Playlist" in title:
+                print FMT%("%s [%d]"%(selections[i]['name'].encode('ascii', 'ignore'),
+                                      i+offset))
+            else:
+                names = self.cache.get_name_uri(selections[i]['uri'])
+                print FMT%("%50s [%d]  %s"%(selections[i]['name'].encode('ascii', 'ignore'),
+                                        i+offset,
+                                         names))
 
     def print_2d_list(self, selections, title=""):
+        clear()
         offset = 0
         for i in xrange(len(selections)):
-            self.print_list(selections[i], title[i], offset)
+            self.print_list(selections[i], title[i], offset, clear_console=(i==0))
             offset += len(selections[i])
 
     def select_from_list(self, selections):
@@ -109,7 +139,8 @@ class Console(object):
             raise EmptyInputException
         input_str = self.get_input("Enter a number: ")
         if input_str == "":
-            raise EmptyInputException
+            logging.info("Nothing entered.")
+            return None, None
 
         self.last_selection = selections
         play_now = False
@@ -119,7 +150,7 @@ class Console(object):
                 play_now = False
                 return selections[n], play_now
             else:
-                raise InvalidSelectionError
+                logging.info("Invalid selection")
         # Input was something like: p 9
         else:
             play_now = True
@@ -152,9 +183,11 @@ class Console(object):
                 artists = self.spotify.search(type, query)['artists']
                 if artists == []: return None
                 self.print_list(artists, "Artists")
-                artist,play_now = self.select_from_list(artists)
+                artist, play_now = self.select_from_list(artists)
+                self.last_artist = artist
                 if play_now:
                     uri = artist['uri'] if artist != None else None
+                    track_uri, context_uri = 0, uri
                     cur_state = DONE_STATE
                     continue
                 artist_id = artist['id'] if artist != None else None
@@ -164,12 +197,13 @@ class Console(object):
                 if artist_id == None:
                     print "Error: Invalid Artist Selection"
                     return
-                albums = self.spotify.get_artist_albums(artist_id)
+                albums = self.spotify.get_albums_from_artist(artist_id)
                 self.print_list(albums, "Albums")
-                album,play_now = self.select_from_list(albums)
+                album, play_now = self.select_from_list(albums)
                 self.last_album = album
                 if play_now:
                     uri = album['uri'] if album != None else None
+                    track_uri, context_uri = 0, uri
                     cur_state = DONE_STATE
                     continue
                 album_id = album['id'] if album != None else None
@@ -178,19 +212,21 @@ class Console(object):
                 if album_id == None:
                     print "Error: Invalid Album Selection"
                     return
-                tracks = self.spotify.get_album_tracks(album_id)
+                tracks = self.spotify.get_tracks_from_album(album_id)
                 self.print_list(tracks, "Tracks")
-                track,play_now = self.select_from_list(tracks)
+                track, play_now = self.select_from_list(tracks)
                 uri = track['uri'] if track != None else None
+                track_uri, context_uri = uri, self.last_album['uri']
                 cur_state = DONE_STATE
             elif cur_state == ALBUM_QUERY_STATE:
                 albums = self.spotify.search(type, query)['albums']
                 if albums == []: return None
                 self.print_list(albums, "Albums")
-                album,play_now = self.select_from_list(albums)
+                album, play_now = self.select_from_list(albums)
                 self.last_album = album
                 if play_now:
                     uri = album['uri'] if album != None else None
+                    track_uri, context_uri = 0, uri
                     cur_state = DONE_STATE
                     continue
                 album_id = album['id'] if album != None else None
@@ -201,6 +237,7 @@ class Console(object):
                 self.print_list(tracks, "Tracks")
                 track,play_now = self.select_from_list(tracks)
                 uri = track['uri']  if track != None else None
+                track_uri, context_uri = uri, None
                 cur_state = DONE_STATE
             elif cur_state == COMBO_SEARCH_STATE:
                 results = self.spotify.search(type, query)
@@ -213,25 +250,42 @@ class Console(object):
                 combined.extend(results["artists"])
                 combined.extend(results["albums"])
                 combined.extend(results["tracks"])
-                something,play_now = self.select_from_list(combined)
+                something, play_now = self.select_from_list(combined)
                 if something == None:
+                    track_uri, context_uri = None, None
                     cur_state = DONE_STATE
                     continue
                 if play_now:
-                    uri = something['uri']
+                    if something['type'] == 'artist':
+                        self.last_artist = something
+                        track_uri = None                
+                        context_uri = something['uri']
+                    elif something['type'] == 'album':
+                        self.last_album = something   
+                        track_uri = None
+                        context_uri = something['uri']
+                    else:
+                        track_uri = something
+                        context_uri = None
                     cur_state = DONE_STATE
                     continue
                 if something['type'] == 'artist':
+                    self.last_artist = something
                     artist_id = something['id']
                     cur_state = ALBUM_STATE
+                elif something['type'] == 'album':
+                    self.last_album = something
+                    album_id = something['id']
+                    cur_state = TRACK_STATE
                 else:
                     uri = something['uri']
+                    track_uri, context_uri = uri, None
                     cur_state = DONE_STATE
             else:
                 print "Error: Invalid State"
                 return
 
-        return uri
+        return track_uri, context_uri
 
     def evaluate_input(self, input_str):
         input_str = input_str.strip()
@@ -243,29 +297,25 @@ class Console(object):
         command = toks[0]
         cl = len(command)
 
-        if command not in COMMANDS:
-            logging.warning("This command does not exist. Searching for %s instead."%(input_str))
-
         if command == "set":
             if n_args == 2:
                 self.set_command(toks[1], toks[2])
             else:
                 logging.warning("Not enough arguments")
+        elif command == '.':
+            self.current_command()
         elif command == "exit":
             exit()
         elif command == "play":
-            if n_args == 0:
-                self.spotify.pause(pause=False)
-            elif n_args == 1:
-                self.play_command(toks[1])
+            self.play_command(*toks[1::])
         elif command == "pause":
-            if n_args == 0:
-                self.spotify.pause(pause=True)
-            elif n_args > 1:
-                logging.warning("The 'pause' command only uses 0 or 1 argument")
-                return
-            else:
-                self.pause_command(int(toks[1]))
+            self.pause_command()
+        elif command in ["next", 'n']:
+            self.spotify.next()
+        elif command in ["prev", "previous", 'p']:
+            self.spotify.previous()
+        elif command in ['saved', 's']:
+            self.saved_command(*toks[1::])
         elif command == "user":
             username = ""
             if n_args == 1:
@@ -288,15 +338,20 @@ class Console(object):
             if n_args >= 1:
                 self.search_command(input_str[cl+1::], ["tracks"])
         elif command in ["last_album", "lal"]:
-            last_selection = self.last_album
-            self.print_list(self.last_album, "Tracks")
+            self.last_selection = self.spotify.get_tracks_from_album(self.last_album['id'])
+            self.print_list(self.last_selection, "Tracks")
         elif command in ["last_artist", "lar"]:
-            last_selection = self.last_artist
-            self.print_list(self.last_artist, "Albums")
+            self.last_selection = self.spotify.get_albums_from_artist(self.last_artist['id'])
+            self.print_list(self.last_selection, "Albums")
         elif command in ["help", "h"]:
             display_help_message()
         else:
-            self.search_command(input_str, ["artists","tracks","albums"])
+            # If a number try to play form last selection
+            if is_int(input_str):
+                self.evaluate_input("play {}".format(input_str))
+            # Do a search for it
+            else:
+                self.search_command(input_str, ["artists","tracks","albums"])
 
     """
     Initializes the users settings based on the stermrc file
@@ -331,7 +386,7 @@ class Console(object):
             for line in auth_file:
                 line = line.strip()
                 toks = line.split("=")
-                self.env_info[toks[0]] = toks[1]
+                setattr(self.spotify, "api_{}".format(toks[0]), toks[1])
             logging.info("Authentication file found")
             return True
         else:
@@ -344,7 +399,7 @@ class Console(object):
     def auth_from_web(self):
         auth_data = authenticate()
         for k,v in auth_data.items():
-            self.env_info[k] = v
+            setattr(self.spotify, "api_{}".format(k), v)
         logging.info("Authentication from web complete")
         return True
 
@@ -352,10 +407,7 @@ class Console(object):
         # Configure form stermrc file
         self.configure()
         # Authenticate form file if available or web
-        success = self.auth_from_file()
-        if success:
-            return
-        else:
+        if not self.auth_from_file():
             self.auth_from_web()
         logging.info("Initialization complete")
 
@@ -374,6 +426,13 @@ class Console(object):
         print "          For example, 'p3' or 'p 3', will start playing selection 3"
         while True:
             user_input = self.get_input("spotify>")
-            self.evaluate_input(user_input)
+            try:
+                self.evaluate_input(user_input)
+            except urllib2.HTTPError as e:
+                if "Unauthorized" in e.msg:
+                    self.auth_from_web()
+                    self.evaluate_input(user_input)
+                else:
+                    raise
 
 

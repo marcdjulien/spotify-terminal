@@ -16,7 +16,13 @@ PORT = 80
 HOST = "https://accounts.spotify.com/authorize"
 CLIENT_ID = "bd392941710943429ba45210c9b2c640"
 REDIRECT_URI = "http://localhost/"
-SCOPE = "playlist-read-private playlist-read-collaborative"
+SCOPE = " ".join([
+    "playlist-read-private", 
+    "playlist-read-collaborative", 
+    "user-read-currently-playing",
+    "user-modify-playback-state",
+    "user-library-read"
+])
 RESPONSE_TYPE = "token"
 PARAMS = { "client_id":CLIENT_ID,
            "redirect_uri":REDIRECT_URI,
