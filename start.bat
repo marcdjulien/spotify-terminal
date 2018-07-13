@@ -1,0 +1,2 @@
+python spotify.py
+pause

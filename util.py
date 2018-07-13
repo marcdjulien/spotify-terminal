@@ -32,7 +32,7 @@ def in_range(n, list):
     Returns:
         bool: True if n is in range.
     """
-	return (0 <= n) and (n < len(list))
+    return (0 <= n) and (n < len(list))
 
 
 def ascii(string):
@@ -44,7 +44,7 @@ def ascii(string):
     Returns:
         str: The ascii encoded string.
     """
-    return string.encode('ascii', 'ignore')
+    return string.encode('ascii', 'replace')
 
 
 def clamp(value, low, high):

@@ -1,24 +1,29 @@
 """
 Spotify Terminal authenticates with Spotify by directing
-your browser to the authentication link. After you log in 
-and authenticate the redirect url will bring you to a localhost
+your browser to the authentication link.
+
+After you log in and authenticate the redirect url will bring you to a localhost
 page. At this point Spotify Terminal will be running a "web server"
 to obtain the authentication information.
 """
-from Globals import *
+from globals import *
 import os
 import urllib
 from threading import Thread
 import webbrowser
 from BaseHTTPServer import *
 
+
+logger = logging.getLogger(__name__)
+
+
 PORT = 80
 HOST = "https://accounts.spotify.com/authorize"
 CLIENT_ID = "bd392941710943429ba45210c9b2c640"
 REDIRECT_URI = "http://localhost/"
 SCOPE = " ".join([
-    "playlist-read-private", 
-    "playlist-read-collaborative", 
+    "playlist-read-private",
+    "playlist-read-collaborative",
     "user-read-currently-playing",
     "user-modify-playback-state",
     "user-library-read"
@@ -27,7 +32,7 @@ RESPONSE_TYPE = "token"
 PARAMS = { "client_id":CLIENT_ID,
            "redirect_uri":REDIRECT_URI,
            "scope":SCOPE,
-           "response_type":RESPONSE_TYPE 
+           "response_type":RESPONSE_TYPE
          }
 URL = HOST+"?"+urllib.urlencode(PARAMS)
 # After you authenticate this page will grab the web hash
@@ -43,12 +48,14 @@ window.location = window.location.hash.substring(1);
 # When you are authenticated this page will display
 HTML2 = """
 <html>
-You have been authenticated! Continue jamming!
+{}
+\n
+You may close this tab and continue to jam!
 </html>
-"""
+""".format(HTML_TITLE)
 data = "Empty"
 class Handler(BaseHTTPRequestHandler):
-    
+
     def do_GET(self):
         global data
         if "access_token" in self.path:
@@ -70,7 +77,7 @@ class Handler(BaseHTTPRequestHandler):
         return data
 
 
-    
+
 def start_server():
     server = HTTPServer(('localhost', PORT), Handler)
     server.handle_request() # Get token
@@ -84,7 +91,7 @@ def write_auth_file():
     for k,v in data.items():
         auth_file.write("%s=%s\n"%(k,v))
     auth_file.close()
-    print "Auth file created"
+    logger.debug("Auth file created")
 
 # This begin the authentication process
 def authenticate():
@@ -92,10 +99,14 @@ def authenticate():
     # Start running the server
     web_thread = Thread(target=start_server)
     web_thread.start()
+
     # Open the authentication link
     webbrowser.open_new_tab(URL)
+
     # Wait for the server to make the 2 expected http request
     web_thread.join()
+
     # Save the new authentication information to disk
     write_auth_file()
+
     return data
