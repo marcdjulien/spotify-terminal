@@ -22,6 +22,8 @@ class Window(object):
 
 class CursesDisplay(object):
 
+    RENDER_PERIOD = 1
+
     def __init__(self, stdscr, sp_state):
         self.state = sp_state
         """The SpotifyState object."""
@@ -68,6 +70,8 @@ class CursesDisplay(object):
         self._update_time = time.time()
         self._last_update_time = time.time()
 
+        self._last_render_time = time.time()
+
         # Initialize the display.
         self._init_curses()
 
@@ -102,14 +106,17 @@ class CursesDisplay(object):
 
             # Render the display if needed.
             # TODO: Also render periodically.
-            if pressed:
+            rerender = time.time()-self._last_render_time > self.RENDER_PERIOD
+            if pressed or rerender:
                 self.render()
+                self._last_render_time = time.time()
 
             # Sleep for an amount of time.
             time.sleep(0.05)
 
         # Tear down the display.
         uc.endwin()
+        clear()
 
     def process_input(self):
         """Process all keyboard input.
