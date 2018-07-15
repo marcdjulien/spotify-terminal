@@ -253,7 +253,7 @@ class SpotifyState(object):
         try:
             rc_file = open(CONFIG_FILENAME,"r")
         except:
-            print "No configuration file '%s'"%(CONFIG_FILENAME)
+            loger.debug("No configuration file '%s'"%(CONFIG_FILENAME))
             return
 
         for line in rc_file:
