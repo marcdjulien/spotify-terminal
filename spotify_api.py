@@ -2,6 +2,7 @@ import string
 import urllib
 import urllib2
 import json
+from collections import defaultdict
 
 from authentication import authenticate
 from util import *
@@ -38,27 +39,40 @@ def authenticate_retry(func):
     return retry
 
 
-def cache(func):
-    def try_cache(*args, **kwargs):
-        result = getattr(args[0], "_cached_"+func.__name__)(*args[1::], **kwargs)
+def uri_cache(func):
+    """Use the cache to fetch a URI"""
+
+    def try_cache(self, obj, *args, **kwargs):
+        """Check the cache first."""
+        key = func.__name__+str(obj['uri'])
+        result = self._uri_cache.get(key)
         if result:
-            logger.debug("Cache hit: %s %s %s", func.__name__, str(args), str(kwargs))
+            logger.debug("Cache hit: %s(%s %s %s)", func.__name__, obj, str(args), str(kwargs))
             return result
         else:
-            logger.debug("Cache miss: %s %s %s", func.__name__, str(args), str(kwargs))
-            return func(*args, **kwargs)
+            logger.debug("Cache miss: %s(%s %s %s)", func.__name__, obj, str(args), str(kwargs))
+            result = func(self, obj, *args, **kwargs)
+            self._uri_cache[key] = result
+            return result
+
     return try_cache
 
 
 class SpotifyApi(object):
-    def __init__(self):
+    """Interface to make API calls."""
+
+    def __init__(self, username):
+        self.username = username
         self.api_token_type = None
         self.api_access_token = None
         if not self.auth_from_file():
             self.auth_from_web()
 
         # caches
-        self._get_tracks_from_playlist_cache = {}
+        self._uri_cache = {}
+
+    def get_username(self):
+        return self.username
 
     def play(self, track_uri=None, context_uri=None):
         """Play a Spotify track.
@@ -100,6 +114,13 @@ class SpotifyApi(object):
     def repeat(self, repeat):
         p = urllib.urlencode({"state":repeat})
         self.put_api_v1("me/player/repeat?"+p)
+
+    def volume(self, volume):
+        p = urllib.urlencode({"volume_percent":volume})
+        self.put_api_v1("me/player/volume?"+p)
+
+    def get_player_state(self):
+        return self.get_api_v1("me/player")
 
     def get_currently_playing(self):
         obj = self.get_api_v1("me/player/currently-playing")
@@ -152,11 +173,16 @@ class SpotifyApi(object):
 
         return ret
 
+    @uri_cache
     def get_albums_from_artist(self, artist, type=("album","single")):
         """Get a list of albums from a certain artist
 
-        id1 (str): The id of the artist
-        type (iter): Which types of albums to return
+        Args:
+            artist (Artist): The artist.
+            type (iter): Which types of albums to return.
+
+        Returns:
+            list: The Albums.
         """
         page = self.get_api_v1("artists/{}/albums".format(artist['id']))
         albums = self.extract_page(page)
@@ -168,8 +194,9 @@ class SpotifyApi(object):
                 final.append(Album(album))
                 # TODO: Figure out why I ned the following
                 titles.append(album['name'])
-        return final
+        return tuple(final)
 
+    @uri_cache
     def get_tracks_from_album(self, album):
         """Get a list of tracks from a certain album."""
         page = self.get_api_v1("albums/{}/tracks".format(album['id']))
@@ -178,9 +205,9 @@ class SpotifyApi(object):
             track['album'] = album
             track = Track(track)
             tracks.append(track)
-        return tracks
+        return tuple(tracks)
 
-    @cache
+    @uri_cache
     def get_tracks_from_playlist(self, playlist):
         # Special case for the Saved Tracks Playlist
         if playlist['uri'] is None:
@@ -191,10 +218,7 @@ class SpotifyApi(object):
             page = self.get_api_v1(url)
             result = [Track(track["track"]) for track in self.extract_page(page)]
 
-        # Cache by Playlist URI.
-        self._get_tracks_from_playlist_cache[playlist['uri']] = result
-
-        return result
+        return tuple(result)
 
     def get_artists_from_track(self, track_id):
         return self.get_api_v1("tracks/{}".format(track_id))['artists']
@@ -206,9 +230,9 @@ class SpotifyApi(object):
         page = self.get_api_v1("me/tracks")
         return [Track(saved["track"]) for saved in self.extract_page(page)]
 
-    def get_user_playlists(self, username):
-        """Get a list of playlists from a certain user."""
-        url = "users/{}/playlists".format(username)
+    def get_user_playlists(self):
+        """Get a list of playlists from the current user."""
+        url = "users/{}/playlists".format(self.username)
         page = self.get_api_v1(url)
         return self.extract_page(page)
 
@@ -283,9 +307,3 @@ class SpotifyApi(object):
         # Assuming this will work everytime for now
         return True
 
-    ###################################
-    ### Cached version of functions ###
-    ###################################
-
-    def _cached_get_tracks_from_playlist(self, playlist):
-        return self._get_tracks_from_playlist_cache.get(playlist['uri'])

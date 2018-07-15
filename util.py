@@ -1,10 +1,12 @@
 import os
-
+import platform
 
 def clear():
     """Clear the terminal."""
-    os.system('cls')
-
+    if platform.system() == "Windows":
+        os.system('cls')
+    elif platform.system() == "Linux":
+        os.system("clear")
 
 def is_int(n):
     """Returns True if 'n' is an integet.

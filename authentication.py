@@ -1,9 +1,9 @@
 """
 Spotify Terminal authenticates with Spotify by directing
-your browser to the authentication link.
+your browser to the locally hosted authentication link.
 
 After you log in and authenticate the redirect url will bring you to a localhost
-page. At this point Spotify Terminal will be running a "web server"
+page. At this point Spotify Terminal will be running a web server
 to obtain the authentication information.
 """
 from globals import *
@@ -17,56 +17,74 @@ from BaseHTTPServer import *
 logger = logging.getLogger(__name__)
 
 
-PORT = 80
-HOST = "https://accounts.spotify.com/authorize"
 CLIENT_ID = "bd392941710943429ba45210c9b2c640"
-REDIRECT_URI = "http://localhost/"
+
+PORT = 12345
+
+REDIRECT_URI = "http://localhost:{}/".format(PORT)
+
 SCOPE = " ".join([
     "playlist-read-private",
     "playlist-read-collaborative",
     "user-read-currently-playing",
+    "user-read-playback-state",
     "user-modify-playback-state",
     "user-library-read"
 ])
+
 RESPONSE_TYPE = "token"
-PARAMS = { "client_id":CLIENT_ID,
-           "redirect_uri":REDIRECT_URI,
-           "scope":SCOPE,
-           "response_type":RESPONSE_TYPE
-         }
-URL = HOST+"?"+urllib.urlencode(PARAMS)
+
+PARAMS = {
+    "client_id": CLIENT_ID,
+    "redirect_uri": REDIRECT_URI,
+    "scope": SCOPE,
+    "response_type": RESPONSE_TYPE
+}
+
+URL =  "https://accounts.spotify.com/authorize"+"?"+urllib.urlencode(PARAMS)
+
 # After you authenticate this page will grab the web hash
-# that contains your auth token
+# that contains your auth token and redirect us to a url
+# that we can use to exract it.
 HTML = """
 <html>
-<div id="hash"></div>
-<script type="text/javascript">
-window.location = window.location.hash.substring(1);
-</script>
+    <div id="hash"></div>
+
+    <script type="text/javascript">
+        window.location = window.location.hash.substring(1);
+    </script>
 </html>
 """
-# When you are authenticated this page will display
+
+# When you are authenticated this page will be returned
+# which closes the tab.
 HTML2 = """
 <html>
-{}
-\n
-You may close this tab and continue to jam!
+    <script type="text/javascript">
+            window.close();
+    </script>
 </html>
-""".format(HTML_TITLE)
+"""
+
 data = "Empty"
-class Handler(BaseHTTPRequestHandler):
+
+
+class AuthenticationHandler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         global data
+        logger.info(self.path)
         if "access_token" in self.path:
             data = self.parse_path(self.path[1::])
             self.send_response(200)
+            self.end_headers()
             self.wfile.write(HTML2)
             return
-        self.send_response(200)
-        self.end_headers()
-        self.wfile.write(HTML)
-        return
+        else:
+            self.send_response(200)
+            self.end_headers()
+            self.wfile.write(HTML)
+            return
 
     def parse_path(self, path):
         data = {}
@@ -76,25 +94,28 @@ class Handler(BaseHTTPRequestHandler):
             data[toks[0]] = toks[1]
         return data
 
+    def log_message(self, format, *args):
+        logger.debug(format, *args)
 
 
 def start_server():
-    server = HTTPServer(('localhost', PORT), Handler)
+    server = HTTPServer(('localhost', PORT), AuthenticationHandler)
     server.handle_request() # Get token
-    server.handle_request() # Return Token wis URL
+    server.handle_request() # Return Token in URL
 
-def write_auth_file():
-    global data
+
+def write_auth_file(data):
     if not os.path.isdir(TEMP_DIR):
         os.mkdir(TEMP_DIR)
     auth_file = open(AUTH_FILENAME, "w")
     for k,v in data.items():
         auth_file.write("%s=%s\n"%(k,v))
     auth_file.close()
-    logger.debug("Auth file created")
+    logger.debug("%s created", AUTH_FILENAME)
 
-# This begin the authentication process
+
 def authenticate():
+    """Execute the authentication process."""
     global data
     # Start running the server
     web_thread = Thread(target=start_server)
@@ -107,6 +128,6 @@ def authenticate():
     web_thread.join()
 
     # Save the new authentication information to disk
-    write_auth_file()
+    write_auth_file(data)
 
     return data

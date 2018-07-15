@@ -1,6 +1,7 @@
-import unicurses as uc
-import time
 import string
+import sys
+import time
+import unicurses as uc
 
 from spotify_api import SpotifyApi
 from model import SpotifyState
@@ -19,7 +20,7 @@ class Window(object):
         self.window = window
 
 
-class UnicursesDisplay(object):
+class CursesDisplay(object):
 
     def __init__(self, stdscr, sp_state):
         self.state = sp_state
@@ -28,10 +29,10 @@ class UnicursesDisplay(object):
         self.stdscr = stdscr
         """The unicurses standard window."""
 
-        self.panels = {}
+        self._panels = {}
         """Panels."""
 
-        self.windows = {}
+        self._windows = {}
         """Windows."""
 
         self._key_buf = []
@@ -45,32 +46,33 @@ class UnicursesDisplay(object):
 
         # Add the windows.
         user = (self._rows-2, self._cols/4, 0, 0)
-        self.windows['user'] = Window('user', uc.newwin(*user))
-        self.panels['user'] = uc.new_panel(self.windows['user'].window)
-        self._ordered_windows.append(self.windows['user'])
+        self._windows['user'] = Window('user', uc.newwin(*user))
+        self._panels['user'] = uc.new_panel(self._windows['user'].window)
+        self._ordered_windows.append(self._windows['user'])
 
         tracks = (self._rows*2/3, (self._cols - 1 - (user[1])), 0, user[1]+user[3])
-        self.windows['tracks'] = Window('tracks', uc.newwin(*tracks))
-        self.panels['tracks'] = uc.new_panel(self.windows['tracks'].window)
-        self._ordered_windows.append(self.windows['tracks'])
+        self._windows['tracks'] = Window('tracks', uc.newwin(*tracks))
+        self._panels['tracks'] = uc.new_panel(self._windows['tracks'].window)
+        self._ordered_windows.append(self._windows['tracks'])
 
         player = (self._rows*1/3-2, tracks[1], tracks[0], tracks[3])
-        self.windows['player'] = Window('player', uc.newwin(*player))
-        self.panels['player'] = uc.new_panel(self.windows['player'].window)
-        self._ordered_windows.append(self.windows['player'])
+        self._windows['player'] = Window('player', uc.newwin(*player))
+        self._panels['player'] = uc.new_panel(self._windows['player'].window)
+        self._ordered_windows.append(self._windows['player'])
 
         search = (self._rows*8/10, self._cols*8/10, self._rows/10, self._cols/10)
-        self.windows['search'] = Window('search', uc.newwin(*search))
-        self.panels['search'] = uc.new_panel(self.windows['search'].window)
-        self._ordered_windows.append(self.windows['search'])
+        self._windows['search'] = Window('search', uc.newwin(*search))
+        self._panels['search'] = uc.new_panel(self._windows['search'].window)
+        self._ordered_windows.append(self._windows['search'])
 
         self._update_time = time.time()
         self._last_update_time = time.time()
 
         # Initialize the display.
-        self.init_curses()
+        self._init_curses()
 
-    def init_curses(self):
+    def _init_curses(self):
+        """Initialize the curses environment and windows."""
         for win in self.get_windows():
             # Make getch and getstr non-blocking.
             uc.nodelay(win, True)
@@ -84,8 +86,6 @@ class UnicursesDisplay(object):
         # Don't show the cursor.
         uc.curs_set(False)
 
-        uc.top_panel(self.panels["search"])
-
     def start(self):
         # Initial render.
         self.render()
@@ -94,20 +94,29 @@ class UnicursesDisplay(object):
             # Handle user input.
             pressed = self.process_input()
 
+            # Are we still running?
+            self._running = self.state.is_running()
+
             # Do any calculations related to rendering.
             self.render_calcs()
 
             # Render the display if needed.
+            # TODO: Also render periodically.
             if pressed:
                 self.render()
 
             # Sleep for an amount of time.
-            time.sleep(0.01)
+            time.sleep(0.05)
 
         # Tear down the display.
         uc.endwin()
 
     def process_input(self):
+        """Process all keyboard input.
+
+        Returns:
+            bool: True if a key was pressed.
+        """
         for win in self.get_windows():
             key = uc.wgetch(win)
             if key != -1:
@@ -117,12 +126,12 @@ class UnicursesDisplay(object):
         while self._key_buf:
             key_pressed = True
 
-            key = self._key_buf.pop()
-            if key in [27]:
-                self._running = False
 
+            key = self._key_buf.pop()
+
+            # Enter key
             if key in [13, 10]:
-                self._update_time = time.time()+0.5
+                self._update_time = time.time() + 1
 
             self.state.process_key(key)
 
@@ -146,7 +155,7 @@ class UnicursesDisplay(object):
         uc.doupdate()
 
     def _init_render_window(self, window_name):
-        win = self.windows[window_name].window
+        win = self._windows[window_name].window
         uc.werase(win)
         rows, cols = uc.getmaxyx(win)
         return win, rows, cols
@@ -199,16 +208,12 @@ class UnicursesDisplay(object):
         uc.mvwaddnstr(win, 1, 1, self.state.get_currently_playing_track().track, cols-3, style)
         uc.mvwaddnstr(win, 2, 1, self.state.get_currently_playing_track().album, cols-3, style)
         uc.mvwaddnstr(win, 3, 1, self.state.get_currently_playing_track().artist, cols-3, style)
-        progress = (1000*(time.time()-self._last_update_time)) + self.state.get_currently_playing_track()["progress_ms"]
-        uc.mvwaddnstr(win, 4, 1,
-                      time.strftime("%M:%S", time.gmtime(progress/1000.0)),
-                      cols-3, style)
 
         for i, action in enumerate(self.state.main_model.get_list("player")):
             if (i == self.state.main_model.get_list_current_entry_i('player')) and self.is_active_window("player"):
                 style = uc.A_BOLD | uc.A_STANDOUT
             else:
-                style = None
+                style = uc.A_NORMAL
             uc.mvwaddstr(win, 5, cols/2 + i*4, action.title, style)
 
     def render_footer(self):
@@ -228,9 +233,9 @@ class UnicursesDisplay(object):
         # Determine the correct panel order.
         # TODO: Move this out to a more generic function?
         if self.is_active_window("search"):
-            uc.top_panel(self.panels["search"])
+            uc.top_panel(self._panels["search"])
         else:
-            for panel_name, panel in self.panels.items():
+            for panel_name, panel in self._panels.items():
                 if panel_name != "search":
                     uc.top_panel(panel)
 
@@ -257,7 +262,7 @@ class UnicursesDisplay(object):
             if i == (selected_i-start_entry_i) and is_active:
                 style = uc.A_BOLD | uc.A_STANDOUT
             else:
-                style = None
+                style = uc.A_NORMAL
             uc.mvwaddnstr(win, row_start+i, col_start, text, n_cols, style)
 
     def update_currently_playing_track(self):
@@ -280,10 +285,10 @@ class UnicursesDisplay(object):
         return self._ordered_windows[self.state.main_model.list_i]
 
     def get_windows(self):
-        return [w.window for w in self.windows.values()]
+        return [w.window for w in self._windows.values()]
 
     def get_panels(self):
-        return self.panels.values()
+        return self._panels.values()
 
     @property
     def _rows(self):
@@ -295,14 +300,19 @@ class UnicursesDisplay(object):
 
 
 if __name__ == '__main__':
+    if len(sys.argv) != 2:
+        print("Usage: spotify.py [username]")
+        exit(1)
+
     clear()
     print(TITLE)
 
     # Initialize the curses screen.
     stdscr = uc.initscr()
 
-    sp_state = SpotifyState(SpotifyApi())
+    # Create Spotify state.
+    sp_state = SpotifyState(SpotifyApi(sys.argv[1]))
 
     # Create the display and start!
-    display = UnicursesDisplay(stdscr, sp_state)
+    display = CursesDisplay(stdscr, sp_state)
     display.start()

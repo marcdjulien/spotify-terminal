@@ -219,6 +219,9 @@ class SpotifyState(object):
         self.shuffle = False
         """Whether to shuffle or not."""
 
+        self.volume = 0
+        """Volume of the player."""
+
         self.repeat = self.REPEAT_CONTEXT
         """Whether to repeat or not. Default is context."""
 
@@ -230,6 +233,17 @@ class SpotifyState(object):
 
         self.searching = False
         self.search_query = ""
+
+        self.running = True
+
+        self.commands = {
+            "search": self._execute_search,
+            "find": self._execute_find,
+            "volume": self._execute_volume,
+            "play": self._execute_play,
+            "pause": self._execute_pause,
+            "exit": self._execute_exit,
+        }
 
         # Initialize some things.
         self.init()
@@ -266,7 +280,7 @@ class SpotifyState(object):
         # Get the users playlists.
         # Get the playlists from the API and convert it to our Playlist objects.
         playlists = [Playlist(playlist)
-                    for playlist in self.api.get_user_playlists(self.env_info['user'])]
+                    for playlist in self.api.get_user_playlists()]
 
         saved = Playlist({"name": "Saved",
                           "uri": None,
@@ -285,15 +299,34 @@ class SpotifyState(object):
                 PlayerAction("(P)", self.toggle_play),
                 PlayerAction(">>", self.api.next),
                 PlayerAction("(R)", self.toggle_repeat),
-                PlayerAction("++", None),
-                PlayerAction("--", None),
+                PlayerAction("--", self.decrease_volume),
+                PlayerAction("++", self.increase_volume),
             ])
 
-        # Get the current track (if there is one)
-        self.currently_playing_track = self.api.get_currently_playing()
+        # Get current player state
+        player = self.api.get_player_state()
+        if not player:
+            print("No Spotify player found.")
+            print("Please open the Spotify app on your Desktop, mobile, etc.")
+            print("before starting the terminal application.")
+            exit(1)
 
-        # Initialize paused.
-        self.paused = self.currently_playing_track == NoneTrack
+        # Get the current track (if there is one)
+        self.currently_playing_track = Track(player['item']) if player['item'] else NoneTrack
+
+        repeat = {"off": self.REPEAT_OFF,
+                  "track": self.REPEAT_TRACK,
+                  "context": self.REPEAT_CONTEXT}[player['repeat_state']]
+        self._set_repeat(repeat)
+
+        self.shuffle = player['shuffle_state']
+
+        self.paused = not player['is_playing']
+
+        self.volume = player['device']['volume_percent']
+
+    def get_username(self):
+        return self.api.get_username()
 
     def is_creating_command(self):
         return self.creating_command
@@ -301,14 +334,14 @@ class SpotifyState(object):
     def is_searching(self):
         return self.searching
 
-    def get_username(self):
-        return self.env_info['user']
-
     def get_command_query(self):
         return self.command_query
 
     def set_command_query(self, text):
         self.command_query = list(text)
+
+    def is_running(self):
+        return self.running
 
     def get_currently_playing_track(self):
         return self.currently_playing_track
@@ -426,12 +459,12 @@ class SpotifyState(object):
 
             # Creating a command -> Construct text
             if self.is_creating_command():
-                if char not in string.whitespace or char == " ":
+                if 32 <= key and key <= 126:
                     self.get_command_query().insert(self.command_cursor_i, char)
                     self.command_cursor_i += 1
                     return
 
-            if char in ['/', ':']:
+            if char in ['/', ':', '#']:
                 # Start creating command
                 if not self.is_creating_command():
                     self.set_command_query(char)
@@ -497,6 +530,7 @@ class SpotifyState(object):
         else:
             self.current_model = self.main_model
 
+
     def _clamp_values(self):
         # Clamp values.
         self.command_cursor_i = clamp(self.command_cursor_i,
@@ -511,7 +545,17 @@ class SpotifyState(object):
 
         # Convert special commands.
         if command_input[0] == ":":
-            command_input = "search {}".format(command_input[1::])
+            if command_input == ":":
+                return
+            elif command_input == ":q":
+                command_input = "exit"
+            else:
+                command_input = command_input[1::]
+        elif command_input[0] == "#":
+            if command_input == "#":
+                return
+            else:
+                command_input = "search {}".format(command_input[1::])
         elif command_input[0] == "/":
             command_input = "find 0 {}".format(command_input[1::])
 
@@ -520,6 +564,10 @@ class SpotifyState(object):
 
         # Get the command.
         command = toks[0]
+        if command not in self.commands:
+            return
+
+        logger.debug("Final command: %s", toks)
 
         # Get the arguments for the command.
         command_args = toks[1::] if len(toks) > 1 else []
@@ -528,20 +576,18 @@ class SpotifyState(object):
         self.prev_command = toks
 
         # Execute the appropriate command.
-        if command == "search":
-            self._execute_search_command(" ".join(command_args))
-        elif command == "find":
-            self._execute_find_command(command_args[0], " ".join(command_args[1::]))
-
+        self.commands[command](*command_args)
         self.creating_command = False
 
-    def _execute_search_command(self, query):
+    def _execute_search(self, *query):
+        query = " ".join(query)
         logger.debug("search %s", query)
         results = self.api.search(("artists","tracks","albums"), query)
         self.search_model["results"].update_list(results)
         self.searching = True
 
-    def _execute_find_command(self, i, query):
+    def _execute_find(self, i, *query):
+        query = " ".join(query)
         logger.debug("find:%s", query)
         cur_list = self.current_model.get_current_list()
 
@@ -555,6 +601,22 @@ class SpotifyState(object):
             if found == i:
                 self.main_model.get_current_list().set_selection(index)
                 return
+
+    def _execute_volume(self, volume):
+        volume = int(volume)
+        self.volume = clamp(volume, 0, 100)
+        self.api.volume(self.volume)
+
+    def _execute_play(self):
+        self.paused = False
+        self.api.play(None, None)
+
+    def _execute_pause(self):
+        self.paused = True
+        self.api.pause()
+
+    def _execute_exit(self):
+        self.running = False
 
     def _select_playlist(self, playlist):
         self.context = playlist['uri']
@@ -576,19 +638,29 @@ class SpotifyState(object):
                                          self.main_model.get_list('tracks').list))
         self.main_model.get_list('tracks').update_list(tracks)
 
+    def _set_repeat(self, state):
+        self.repeat = state
+        self.main_model.get_list('player')[4].title = "({})".format(['x','o','1'][self.repeat])
+
     def toggle_play(self):
-        self.paused = not self.paused
         if self.paused:
-            self.api.pause()
+            self._process_command("play")
         else:
-            self.api.play(None, None)
+            self._process_command("pause")
 
     def toggle_shuffle(self):
+        # TODO: convert to command
         self.shuffle = not self.shuffle
         self.api.shuffle(self.shuffle)
 
     def toggle_repeat(self):
-        self.repeat = (self.repeat+1) % 3
+        # TODO: convert to commmand
+        self._set_repeat((self.repeat+1)%3)
         self.api.repeat(['off', 'context', 'track'][self.repeat])
-        self.main_model.get_list('player')[4].title = "({})".format(['x','o','1'][self.repeat])
+
+    def decrease_volume(self):
+        self._process_command("volume {}".format(self.volume - 5))
+
+    def increase_volume(self):
+        self._process_command("volume {}".format(self.volume + 5))
 
