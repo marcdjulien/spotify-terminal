@@ -3,6 +3,7 @@ Terminal program to play/control music via Spotify.
 
 # Install
 Unicurses for Python is required to run this program.
+
 See https://pypi.org/project/UniCurses
 
 # Usage
@@ -17,11 +18,17 @@ By typing ```#``` you can begin a search.
 
 # : Commands
 By typing ```:``` you can enter commands. The following is a list of all commands:
+
 search [query]
+
 find [index] [query]
+
 volume [0-100]
+
 play
+
 pause
+
 exit
 
 # Other Tips
