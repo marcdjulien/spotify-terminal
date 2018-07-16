@@ -193,7 +193,7 @@ class SpotifyState(object):
 
     def __init__(self, api):
         self.api = api
-        """Used ot make API calls."""
+        """SpotifyApi object to make Spotify API calls."""
 
         self.env_info = {}
         """Environment information."""
@@ -210,8 +210,10 @@ class SpotifyState(object):
                                   [List("results")])
 
         self.current_model = self.main_model
+        """The current model that we are acting on."""
 
         self.previous_tracks = []
+        """Keeps track of previously displayed Tracks."""
 
         self.paused = True
         """Whether the play is paused or not."""
@@ -225,16 +227,26 @@ class SpotifyState(object):
         self.repeat = self.REPEAT_CONTEXT
         """Whether to repeat or not. Default is context."""
 
-        self.current_track = None
+        self.currently_playing_track = None
+        """The currently playing track."""
 
         self.creating_command = False
+        """Whether we are typing a command or not."""
+
         self.command_cursor_i = 0
+        """The cursor location of the command."""
+
         self.command_query = []
+        """The command being typed."""
 
         self.searching = False
+        """Whether we are in the search menu or not."""
+
         self.search_query = ""
+        """The current search query."""
 
         self.running = True
+        """Whether we're running or not."""
 
         self.commands = {
             "search": self._execute_search,
@@ -244,11 +256,65 @@ class SpotifyState(object):
             "pause": self._execute_pause,
             "exit": self._execute_exit,
         }
+        """Dictionary of commands and their execution functions."""
 
-        # Initialize some things.
+        # Initialize the state.
         self.init()
 
-    def configure(self):
+    def init(self):
+        # Configure from stermrc file.
+        self.read_rc_file()
+
+        # Get current player state.
+        player = self.api.get_player_state()
+        if not player:
+            print("No Spotify player found.")
+            print("Please open the Spotify app on your desktop, mobile, etc.")
+            print("before starting the terminal application.")
+            exit(1)
+
+        # Get the current track (if there is one)
+        self.currently_playing_track = Track(player['item']) if player['item'] else NoneTrack
+
+        self.shuffle = player['shuffle_state']
+
+        self.paused = not player['is_playing']
+
+        self.volume = player['device']['volume_percent']
+
+        # Get the users playlists.
+        # Get the playlists from the API and convert it to our Playlist objects.
+        playlists = [Playlist(playlist)
+                    for playlist in self.api.get_user_playlists()]
+
+        # Add the Saved "playlist".
+        saved = Playlist({"name": "Saved",
+                          "uri": None,
+                          "id": "",
+                          "owner_id":""})
+        playlists.insert(0, saved)
+        self.main_model['playlists'].update_list(playlists)
+
+        # Initialize track list to first playlist.
+        self._select_playlist(self.main_model['playlists'][0])
+
+        # Initialize PlayerActions.
+        self.main_model['player'].update_list([
+                PlayerAction("(S)", self.toggle_shuffle),
+                PlayerAction("<<", self.api.previous),
+                PlayerAction("(P)", self.toggle_play),
+                PlayerAction(">>", self.api.next),
+                PlayerAction("(R)", self.toggle_repeat),
+                PlayerAction("--", self.decrease_volume),
+                PlayerAction("++", self.increase_volume),
+            ])
+
+        repeat = {"off": self.REPEAT_OFF,
+                  "track": self.REPEAT_TRACK,
+                  "context": self.REPEAT_CONTEXT}[player['repeat_state']]
+        self._set_repeat(repeat)
+
+    def read_rc_file(self):
         """Initializes the users settings based on the stermrc file"""
         try:
             rc_file = open(CONFIG_FILENAME,"r")
@@ -272,58 +338,6 @@ class SpotifyState(object):
                     logger.error("Error in line: %s"%(line))
                     exit()
                 self.shortcuts[toks[0]] = toks[1]
-
-    def init(self):
-        # Configure from stermrc file
-        self.configure()
-
-        # Get the users playlists.
-        # Get the playlists from the API and convert it to our Playlist objects.
-        playlists = [Playlist(playlist)
-                    for playlist in self.api.get_user_playlists()]
-
-        saved = Playlist({"name": "Saved",
-                          "uri": None,
-                          "id": "",
-                          "owner_id":""})
-        playlists.insert(0, saved)
-        self.main_model['playlists'].update_list(playlists)
-
-        # Initialize track list to first playlist.
-        self._select_playlist(self.main_model['playlists'][0])
-
-        # Initialize PlayerActions
-        self.main_model['player'].update_list([
-                PlayerAction("(S)", self.toggle_shuffle),
-                PlayerAction("<<", self.api.previous),
-                PlayerAction("(P)", self.toggle_play),
-                PlayerAction(">>", self.api.next),
-                PlayerAction("(R)", self.toggle_repeat),
-                PlayerAction("--", self.decrease_volume),
-                PlayerAction("++", self.increase_volume),
-            ])
-
-        # Get current player state
-        player = self.api.get_player_state()
-        if not player:
-            print("No Spotify player found.")
-            print("Please open the Spotify app on your Desktop, mobile, etc.")
-            print("before starting the terminal application.")
-            exit(1)
-
-        # Get the current track (if there is one)
-        self.currently_playing_track = Track(player['item']) if player['item'] else NoneTrack
-
-        repeat = {"off": self.REPEAT_OFF,
-                  "track": self.REPEAT_TRACK,
-                  "context": self.REPEAT_CONTEXT}[player['repeat_state']]
-        self._set_repeat(repeat)
-
-        self.shuffle = player['shuffle_state']
-
-        self.paused = not player['is_playing']
-
-        self.volume = player['device']['volume_percent']
 
     def get_username(self):
         return self.api.get_username()
@@ -349,21 +363,20 @@ class SpotifyState(object):
     def poll_currently_playing_track(self):
         # TODO: Maybe instead we should raise an exception with empty content
         track = self.api.get_currently_playing()
-        if track:
-            self.currently_playing_track = Track(track)
+        self.currently_playing_track = Track(track) if track else NoneTrack
 
     def get_cursor_i(self):
         return self.command_cursor_i
-
-    def process_key(self, key):
-        self._process_key(key)
-        self._clamp_values()
 
     def in_main_menu(self):
         return self.current_model.name == "main"
 
     def in_search_menu(self):
         return self.current_model.name == "search"
+
+    def process_key(self, key):
+        self._process_key(key)
+        self._clamp_values()
 
     def _process_key(self, key):
         # Left Key
@@ -396,13 +409,11 @@ class SpotifyState(object):
                             self.main_model.get_current_list().increment_selection()
                         else:
                             self.main_model.increment_list()
-
-            if self.in_search_menu():
+            elif self.in_search_menu():
                 entry = self.search_model.get_current_list_entry()
                 if isinstance(entry, Album):
                     self.searching = False
                     self._select_album(entry)
-
 
         # Up Key
         elif key in [uc.KEY_UP, 547]:
@@ -413,8 +424,7 @@ class SpotifyState(object):
                 # In another section -> Move selection up
                 else:
                    self.main_model.get_current_list().decrement_selection(10 if key == 547 else None)
-
-            if self.in_search_menu():
+            elif self.in_search_menu():
                 self.search_model.get_current_list().decrement_selection()
 
         # Down Key
@@ -445,8 +455,7 @@ class SpotifyState(object):
                 # No text to delete -> Stop creating command
                 else:
                     self.creating_command = False
-
-            if self.in_main_menu():
+            elif self.in_main_menu():
                 if self.previous_tracks:
                     header, tracks = self.previous_tracks.pop()
                     self._register_tracks(tracks)
@@ -473,14 +482,14 @@ class SpotifyState(object):
                     return
 
             if char == "n":
-                if self.prev_command[0] in ["find", "playlist"]:
+                if self.prev_command[0] in ["find"]:
                     i = int(self.prev_command[1])
                     command = self.prev_command
                     command[1] = str(i+1)
                     self._process_command(" ".join(command))
 
             if char == "p":
-                if self.prev_command[0] in ["find", "playlist"]:
+                if self.prev_command[0] in ["find"]:
                     i = int(self.prev_command[1])
                     command = self.prev_command
                     command[1] = str(i-1)
@@ -564,19 +573,21 @@ class SpotifyState(object):
 
         # Get the command.
         command = toks[0]
+
+        # Execute the command if it exists.
         if command not in self.commands:
-            return
+            logger.debug("%s is not a valid command", command)
+        else:
+            logger.debug("Final command: %s", toks)
+            # Get the arguments for the command.
+            command_args = toks[1::] if len(toks) > 1 else []
 
-        logger.debug("Final command: %s", toks)
+            # Save as the last command.
+            self.prev_command = toks
 
-        # Get the arguments for the command.
-        command_args = toks[1::] if len(toks) > 1 else []
+            # Execute the appropriate command.
+            self.commands[command](*command_args)
 
-        # Save as the last command.
-        self.prev_command = toks
-
-        # Execute the appropriate command.
-        self.commands[command](*command_args)
         self.creating_command = False
 
     def _execute_search(self, *query):
@@ -633,9 +644,12 @@ class SpotifyState(object):
         self.main_model.get_list('tracks').header = album['name']
 
     def _register_tracks(self, tracks):
+        # Save the current Track list to history.
         if self.main_model.get_list('tracks').list:
             self.previous_tracks.append((self.main_model.get_list('tracks').header,
                                          self.main_model.get_list('tracks').list))
+
+        # Update the current Track list to the new set of Tracks.
         self.main_model.get_list('tracks').update_list(tracks)
 
     def _set_repeat(self, state):
@@ -655,7 +669,7 @@ class SpotifyState(object):
 
     def toggle_repeat(self):
         # TODO: convert to commmand
-        self._set_repeat((self.repeat+1)%3)
+        self._set_repeat((self.repeat + 1) % 3)
         self.api.repeat(['off', 'context', 'track'][self.repeat])
 
     def decrease_volume(self):

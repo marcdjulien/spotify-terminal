@@ -89,8 +89,10 @@ class CursesDisplay(object):
 
         # Don't show the cursor.
         uc.curs_set(False)
+        logger.debug("Curses display initialized")
 
     def start(self):
+        logger.info("Starting curses display loop")
         # Initial render.
         self.render()
 
@@ -115,6 +117,7 @@ class CursesDisplay(object):
             time.sleep(0.05)
 
         # Tear down the display.
+        logger.debug("Tearing down curses display")
         uc.endwin()
         clear()
 
@@ -132,7 +135,6 @@ class CursesDisplay(object):
         key_pressed = False
         while self._key_buf:
             key_pressed = True
-
 
             key = self._key_buf.pop()
 
