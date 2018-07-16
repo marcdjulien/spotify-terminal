@@ -41,7 +41,7 @@ PARAMS = {
     "response_type": RESPONSE_TYPE
 }
 
-URL =  "https://accounts.spotify.com/authorize"+"?"+urllib.urlencode(PARAMS)
+URL = "https://accounts.spotify.com/authorize" + "?" + urllib.urlencode(PARAMS)
 
 # After you authenticate this page will grab the web hash
 # that contains your auth token and redirect us to a url
@@ -100,16 +100,16 @@ class AuthenticationHandler(BaseHTTPRequestHandler):
 
 def start_server():
     server = HTTPServer(('localhost', PORT), AuthenticationHandler)
-    server.handle_request() # Get token
-    server.handle_request() # Return Token in URL
+    server.handle_request()  # Get token
+    server.handle_request()  # Return Token in URL
 
 
 def write_auth_file(data):
     if not os.path.isdir(TEMP_DIR):
         os.mkdir(TEMP_DIR)
     auth_file = open(AUTH_FILENAME, "w")
-    for k,v in data.items():
-        auth_file.write("%s=%s\n"%(k,v))
+    for k, v in data.items():
+        auth_file.write("%s=%s\n" % (k, v))
     auth_file.close()
     logger.debug("%s created", AUTH_FILENAME)
 

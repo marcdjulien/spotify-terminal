@@ -1,5 +1,4 @@
 import unicurses as uc
-import string
 
 from util import *
 from globals import *
@@ -45,19 +44,19 @@ class Track(SpotifyObject):
         self.track, self.album, self.artist = self.track_tuple
 
     def __str__(self):
-        return "%s %s %s"%self.track_tuple
+        return "%s %s %s" % self.track_tuple
 
     def str(self, cols):
-        nchrs = cols-3
-        fmt = "%{0}s%{0}s%{0}s".format(nchrs/3)
-        return fmt%(self.track_tuple[0][0:nchrs/3-2],
-                    self.track_tuple[1][0:nchrs/3-2],
-                    self.track_tuple[2][0:nchrs/3-2])
+        nchrs = cols - 3
+        fmt = "%{0}s%{0}s%{0}s".format(nchrs / 3)
+        return fmt % (self.track_tuple[0][0:(nchrs / 3) - 2],
+                      self.track_tuple[1][0:(nchrs / 3) - 2],
+                      self.track_tuple[2][0:(nchrs / 3) - 2])
 
-NoneTrack = Track({"name":"None",
-                   "artists":[{"name":"None"}],
-                   "album":{"name":"None"},
-                   "progress_ms":0})
+
+NoneTrack = Track({"name": "<None>",
+                   "artists": [{"name": "<None>"}],
+                   "album": {"name": "<None>"}})
 
 
 class Artist(SpotifyObject):
@@ -95,7 +94,6 @@ class PlayerAction(object):
         return self.__str__()
 
 
-
 class List(object):
     """Represents a collection of selections."""
 
@@ -114,13 +112,13 @@ class List(object):
 
     def update_list(self, l):
         self.list = tuple(l)
-        self.i = clamp(self.i, 0, len(self.list)-1)
+        self.i = clamp(self.i, 0, len(self.list) - 1)
 
     def current_entry(self):
         return self.list[self.i]
 
     def set_selection(self, i):
-        self.i = clamp(i, 0, len(self.list)-1)
+        self.i = clamp(i, 0, len(self.list) - 1)
 
     def get_selection(self):
         return self.i
@@ -159,10 +157,10 @@ class Model(object):
         self.list_i = 0
 
     def decrement_list(self):
-        self.list_i = clamp(self.list_i-1, 0, len(self.ordered_lists)-1)
+        self.list_i = clamp(self.list_i - 1, 0, len(self.ordered_lists) - 1)
 
     def increment_list(self):
-        self.list_i = clamp(self.list_i+1, 0, len(self.ordered_lists)-1)
+        self.list_i = clamp(self.list_i + 1, 0, len(self.ordered_lists) - 1)
 
     def get_current_list(self):
         return self.ordered_lists[self.list_i]
@@ -285,13 +283,13 @@ class SpotifyState(object):
         # Get the users playlists.
         # Get the playlists from the API and convert it to our Playlist objects.
         playlists = [Playlist(playlist)
-                    for playlist in self.api.get_user_playlists()]
+                     for playlist in self.api.get_user_playlists()]
 
         # Add the Saved "playlist".
         saved = Playlist({"name": "Saved",
                           "uri": None,
                           "id": "",
-                          "owner_id":""})
+                          "owner_id": ""})
         playlists.insert(0, saved)
         self.main_model['playlists'].update_list(playlists)
 
@@ -300,14 +298,14 @@ class SpotifyState(object):
 
         # Initialize PlayerActions.
         self.main_model['player'].update_list([
-                PlayerAction("(S)", self.toggle_shuffle),
-                PlayerAction("<<", self.api.previous),
-                PlayerAction("(P)", self.toggle_play),
-                PlayerAction(">>", self.api.next),
-                PlayerAction("(R)", self.toggle_repeat),
-                PlayerAction("--", self.decrease_volume),
-                PlayerAction("++", self.increase_volume),
-            ])
+            PlayerAction("(S)", self.toggle_shuffle),
+            PlayerAction("<<", self.api.previous),
+            PlayerAction("(P)", self.toggle_play),
+            PlayerAction(">>", self.api.next),
+            PlayerAction("(R)", self.toggle_repeat),
+            PlayerAction("--", self.decrease_volume),
+            PlayerAction("++", self.increase_volume),
+        ])
 
         repeat = {"off": self.REPEAT_OFF,
                   "track": self.REPEAT_TRACK,
@@ -317,25 +315,26 @@ class SpotifyState(object):
     def read_rc_file(self):
         """Initializes the users settings based on the stermrc file"""
         try:
-            rc_file = open(CONFIG_FILENAME,"r")
-        except:
-            loger.debug("No configuration file '%s'"%(CONFIG_FILENAME))
+            rc_file = open(CONFIG_FILENAME, "r")
+        except IOError:
+            loger.debug("No configuration file '%s'" % (CONFIG_FILENAME))
             return
 
         for line in rc_file:
+            # Strip whitespace and comments.
             line = line.strip()
-            line = line.split("#")[0] # Ignore comments
+            line = line.split("#")[0]
             if "<-" in line:
                 toks = line.split("<-")
                 if len(toks) != 2:
-                    logger.error("Error in line: %s"%(line))
+                    logger.error("Error in line: %s" % (line))
                     exit()
                 self.env_info[toks[0]] = toks[1]
                 continue
             elif "=" in line:
                 toks = line.split("=")
                 if len(toks) != 2:
-                    logger.error("Error in line: %s"%(line))
+                    logger.error("Error in line: %s" % (line))
                     exit()
                 self.shortcuts[toks[0]] = toks[1]
 
@@ -423,7 +422,9 @@ class SpotifyState(object):
                     self.main_model.decrement_list()
                 # In another section -> Move selection up
                 else:
-                   self.main_model.get_current_list().decrement_selection(10 if key == 547 else None)
+                    self.main_model.get_current_list().decrement_selection(
+                        10 if key == 547 else 1
+                    )
             elif self.in_search_menu():
                 self.search_model.get_current_list().decrement_selection()
 
@@ -435,13 +436,18 @@ class SpotifyState(object):
                     self.main_model.increment_list()
                 elif self.main_model.get_current_list().name == "tracks":
                     # Last selection in Track section -> Move to next section
-                    if self.main_model.get_list_current_entry_i("tracks") == len(self.main_model.get_list("tracks"))-1:
+                    if self.main_model.get_list_current_entry_i("tracks") \
+                            == len(self.main_model.get_list("tracks")) - 1:
                         self.main_model.increment_list()
                     # Not last selection -> Move selection down
                     else:
-                        self.main_model.get_current_list().increment_selection(10 if key == 548 else None)
+                        self.main_model.get_current_list().increment_selection(
+                            10 if key == 548 else 1
+                        )
                 else:
-                    self.main_model.get_current_list().increment_selection(10 if key == 548 else None)
+                    self.main_model.get_current_list().increment_selection(
+                        10 if key == 548 else 1
+                    )
             elif self.in_search_menu():
                 self.search_model.get_current_list().increment_selection()
 
@@ -450,8 +456,8 @@ class SpotifyState(object):
             # Creating a command -> Treat as a normal backspace
             if self.is_creating_command():
                 if self.command_cursor_i > 0:
-                    self.get_command_query().pop(self.command_cursor_i-1)
-                    self.command_cursor_i-=1
+                    self.get_command_query().pop(self.command_cursor_i - 1)
+                    self.command_cursor_i -= 1
                 # No text to delete -> Stop creating command
                 else:
                     self.creating_command = False
@@ -485,14 +491,14 @@ class SpotifyState(object):
                 if self.prev_command[0] in ["find"]:
                     i = int(self.prev_command[1])
                     command = self.prev_command
-                    command[1] = str(i+1)
+                    command[1] = str(i + 1)
                     self._process_command(" ".join(command))
 
             if char == "p":
                 if self.prev_command[0] in ["find"]:
                     i = int(self.prev_command[1])
                     command = self.prev_command
-                    command[1] = str(i-1)
+                    command[1] = str(i - 1)
                     self._process_command(" ".join(command))
 
             # Hit enter.
@@ -531,14 +537,13 @@ class SpotifyState(object):
             # Hit space -> Toggle play
             if char == " ":
                 self.toggle_play()
-        #else:
-        #    raise Exception(key)
+        # else:
+        #     raise Exception(key)
 
         if self.is_searching():
             self.current_model = self.search_model
         else:
             self.current_model = self.main_model
-
 
     def _clamp_values(self):
         # Clamp values.
@@ -593,7 +598,7 @@ class SpotifyState(object):
     def _execute_search(self, *query):
         query = " ".join(query)
         logger.debug("search %s", query)
-        results = self.api.search(("artists","tracks","albums"), query)
+        results = self.api.search(("artists", "tracks", "albums"), query)
         self.search_model["results"].update_list(results)
         self.searching = True
 
@@ -654,7 +659,7 @@ class SpotifyState(object):
 
     def _set_repeat(self, state):
         self.repeat = state
-        self.main_model.get_list('player')[4].title = "({})".format(['x','o','1'][self.repeat])
+        self.main_model.get_list('player')[4].title = "({})".format(['x', 'o', '1'][self.repeat])
 
     def toggle_play(self):
         if self.paused:

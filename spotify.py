@@ -1,4 +1,3 @@
-import string
 import sys
 import time
 import unicurses as uc
@@ -108,7 +107,7 @@ class CursesDisplay(object):
 
             # Render the display if needed.
             # TODO: Also render periodically.
-            rerender = time.time()-self._last_render_time > self.RENDER_PERIOD
+            rerender = (time.time() - self._last_render_time) > self.RENDER_PERIOD
             if pressed or rerender:
                 self.render()
                 self._last_render_time = time.time()
@@ -277,7 +276,7 @@ class CursesDisplay(object):
     def update_currently_playing_track(self):
         self.state.poll_currently_playing_track()
         self._last_update_time = self._update_time
-        self._update_time = time.time()+30
+        self._update_time = time.time() + 30
 
     def is_active_window(self, window_name):
         if self.state.is_searching():

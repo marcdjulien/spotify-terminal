@@ -4,16 +4,16 @@ import logging
 TEMP_DIR = "tmp"
 
 # Authentication filename
-CACHE_FILENAME = "%s/cache"%(TEMP_DIR)
+CACHE_FILENAME = "%s/cache" % (TEMP_DIR)
 
 # Authentication filename
-AUTH_FILENAME = "%s/auth"%(TEMP_DIR)
+AUTH_FILENAME = "%s/auth" % (TEMP_DIR)
 
 # Configuration filename
 CONFIG_FILENAME = "stermrc"
 
 # Log filename
-LOGGER_FILENAME = "%s/log"%(TEMP_DIR)
+LOGGER_FILENAME = "%s/log" % (TEMP_DIR)
 
 TITLE = """
 
@@ -48,7 +48,7 @@ HTML_TITLE = """
 """
 
 logging.basicConfig(filename=LOGGER_FILENAME,
-				    filemode='w',
+                    filemode='w',
                     format='[%(asctime)s][%(levelname)s][%(name)s] %(message)s',
                     level=logging.DEBUG)
 logging.info("="*25)

@@ -18,6 +18,7 @@ import requests
 
 logger = logging.getLogger(__name__)
 
+
 def authenticate_retry(func):
     def retry(*args, **kwargs):
         try:
@@ -28,7 +29,7 @@ def authenticate_retry(func):
                 args[0].auth_from_web()
                 try:
                     return func(*args, **kwargs)
-                except:
+                except Exception:
                     logger.debug("%s %s", args, kwargs)
                     logger.debug(msg)
                     logger.debug(e)
@@ -44,7 +45,7 @@ def uri_cache(func):
 
     def try_cache(self, obj, *args, **kwargs):
         """Check the cache first."""
-        key = func.__name__+str(obj['uri'])
+        key = func.__name__ + str(obj['uri'])
         result = self._uri_cache.get(key)
         if result:
             logger.debug("Cache hit: %s(%s %s %s)", func.__name__, obj, str(args), str(kwargs))
@@ -108,16 +109,16 @@ class SpotifyApi(object):
         self.post_api_v1("me/player/previous")
 
     def shuffle(self, shuffle):
-        p = urllib.urlencode({"state":shuffle})
-        self.put_api_v1("me/player/shuffle?"+p)
+        p = urllib.urlencode({"state": shuffle})
+        self.put_api_v1("me/player/shuffle?" + p)
 
     def repeat(self, repeat):
-        p = urllib.urlencode({"state":repeat})
-        self.put_api_v1("me/player/repeat?"+p)
+        p = urllib.urlencode({"state": repeat})
+        self.put_api_v1("me/player/repeat?" + p)
 
     def volume(self, volume):
-        p = urllib.urlencode({"volume_percent":volume})
-        self.put_api_v1("me/player/volume?"+p)
+        p = urllib.urlencode({"volume_percent": volume})
+        self.put_api_v1("me/player/volume?" + p)
 
     def get_player_state(self):
         return self.get_api_v1("me/player")
@@ -155,16 +156,16 @@ class SpotifyApi(object):
             dict: Collection of 'artist', 'album', and 'track' objects.
         """
         type_str = string.join([type[:-1] for type in types], ",")
-        params = {'type':type_str,
-                  'q':query,
-                  'limit':limit}
+        params = {'type': type_str,
+                  'q': query,
+                  'limit': limit}
 
         result = self.get_api_v1("search", params)
 
         cast = {
-            'artists':Artist,
-            'tracks':Track,
-            'albums':Album,
+            'artists': Artist,
+            'tracks': Track,
+            'albums': Album,
         }
 
         ret = []
@@ -174,7 +175,7 @@ class SpotifyApi(object):
         return ret
 
     @uri_cache
-    def get_albums_from_artist(self, artist, type=("album","single")):
+    def get_albums_from_artist(self, artist, type=("album", "single")):
         """Get a list of albums from a certain artist
 
         Args:
@@ -239,20 +240,20 @@ class SpotifyApi(object):
     def extract_page(self, page):
         lists = []
         lists.extend(page['items'])
-        while page['next'] != None:
+        while page['next'] is not None:
             page = self.get_api_v1(page['next'].split('/v1/')[-1])
             lists.extend(page['items'])
         return lists
 
     @authenticate_retry
     def get_api_v1(self, endpoint, params=None):
-        headers = {"Authorization": "%s %s"%(self.api_token_type, self.api_access_token)}
+        headers = {"Authorization": "%s %s" % (self.api_token_type, self.api_access_token)}
         api_url = "https://api.spotify.com/v1/{}".format(endpoint)
         return self.get_json(api_url, headers=headers, params=params)
 
     @authenticate_retry
     def put_api_v1(self, endpoint, params=None):
-        headers = {"Authorization": "%s %s"%(self.api_token_type, self.api_access_token),
+        headers = {"Authorization": "%s %s" % (self.api_token_type, self.api_access_token),
                    "Content-Type": "application/json"}
         api_url = "https://api.spotify.com/v1/{}".format(endpoint)
         resp = requests.put(api_url, headers=headers, json=params)
@@ -261,7 +262,7 @@ class SpotifyApi(object):
 
     @authenticate_retry
     def post_api_v1(self, endpoint, params=None):
-        headers = {"Authorization": "%s %s"%(self.api_token_type, self.api_access_token),
+        headers = {"Authorization": "%s %s" % (self.api_token_type, self.api_access_token),
                    "Content-Type": "application/json"}
         api_url = "https://api.spotify.com/v1/{}".format(endpoint)
         resp = requests.post(api_url, headers=headers, json=params)
@@ -302,7 +303,7 @@ class SpotifyApi(object):
 
     def auth_from_web(self):
         auth_data = authenticate()
-        for k,v in auth_data.items():
+        for k, v in auth_data.items():
             setattr(self, "api_{}".format(k), v)
         # Assuming this will work everytime for now
         return True
