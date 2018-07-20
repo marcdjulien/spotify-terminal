@@ -1,19 +1,24 @@
 import logging
+import os
 
-# Temporary directory path
-TEMP_DIR = "tmp"
+import util
+
+
+# Set TEMP_DIR
+TEMP_DIR = util.get_temp_dir()
+
 
 # Authentication filename
-CACHE_FILENAME = "%s/cache" % (TEMP_DIR)
+AUTH_FILENAME = os.path.join(TEMP_DIR, "auth")
 
-# Authentication filename
-AUTH_FILENAME = "%s/auth" % (TEMP_DIR)
 
 # Configuration filename
-CONFIG_FILENAME = "stermrc"
+CONFIG_FILENAME = os.path.join(TEMP_DIR, "spotifyrc")
+
 
 # Log filename
-LOGGER_FILENAME = "%s/log" % (TEMP_DIR)
+LOGGER_FILENAME = os.path.join(TEMP_DIR, "log")
+
 
 TITLE = """
 

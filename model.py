@@ -270,9 +270,6 @@ class SpotifyState(object):
         # Configure from stermrc file.
         self.read_rc_file()
 
-        # Get current player state.
-        self.sync_plater_state()
-
         # Get the users playlists.
         # Get the playlists from the API and convert it to our Playlist objects.
         playlists = [Playlist(playlist)
@@ -300,12 +297,15 @@ class SpotifyState(object):
             PlayerAction("++", self.increase_volume),
         ])
 
+        # Get current player state.
+        self.sync_plater_state()
+
     def read_rc_file(self):
         """Initializes the users settings based on the stermrc file"""
         try:
             rc_file = open(CONFIG_FILENAME, "r")
         except IOError:
-            loger.debug("No configuration file '%s'" % (CONFIG_FILENAME))
+            logger.debug("No configuration file '%s'" % (CONFIG_FILENAME))
             return
 
         for line in rc_file:

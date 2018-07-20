@@ -2,11 +2,19 @@ import os
 import platform
 
 
+def is_windows():
+    return platform.system() == "Windows"
+
+
+def is_linux():
+    return platform.system() == "Linux"
+
+
 def clear():
     """Clear the terminal."""
-    if platform.system() == "Windows":
+    if is_windows():
         os.system('cls')
-    elif platform.system() == "Linux":
+    elif is_linux():
         os.system("clear")
 
 
@@ -63,3 +71,20 @@ def clamp(value, low, high):
         int, float: Value such that low <= value <= high.
     """
     return max(low, min(value, high))
+
+
+def get_temp_dir():
+    """Return the temporary directory.
+
+    Returns:
+        str: The full path to the directory.
+    """
+    if is_windows():
+        dirname = os.path.join(os.getenv('APPDATA'), ".spotifyterminal")
+    elif is_linux():
+        dirname = os.path.join("~", ".spotifyterminal")
+
+    if not os.path.isdir(dirname):
+        os.mkdir(dirname)
+
+    return dirname
