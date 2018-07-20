@@ -20,29 +20,32 @@ logger = logging.getLogger(__name__)
 
 
 def authenticate_retry(func):
+    """Re-authenticate if the API call fails."""
     def retry(*args, **kwargs):
         try:
             return func(*args, **kwargs)
         except requests.HTTPError as e:
+            logger.warning("Failed to make request. Re-authenticating.")
             msg = str(e)
             if "Unauthorized" in msg or "Expired" in msg:
                 args[0].auth_from_web()
                 try:
                     return func(*args, **kwargs)
                 except Exception:
-                    logger.debug("%s %s", args, kwargs)
-                    logger.debug(msg)
-                    logger.debug(e)
+                    logger.warning("Failed again after re-authenticating."
+                                 "Giving up on the following:")
+                    logger.warning("%s %s", args, kwargs)
+                    logger.warning(msg)
+                    logger.warning(e)
             else:
-                logger.debug("%s %s", args, kwargs)
-                logger.debug(msg)
-
+                logger.warning("Failed to make API call:")
+                logger.warning("%s %s", args, kwargs)
+                logger.warning(msg)
     return retry
 
 
 def uri_cache(func):
     """Use the cache to fetch a URI"""
-
     def try_cache(self, obj, *args, **kwargs):
         """Check the cache first."""
         key = func.__name__ + str(obj['uri'])
@@ -55,7 +58,6 @@ def uri_cache(func):
             result = func(self, obj, *args, **kwargs)
             self._uri_cache[key] = result
             return result
-
     return try_cache
 
 
@@ -64,15 +66,28 @@ class SpotifyApi(object):
 
     def __init__(self, username):
         self.username = username
+        """The Spotify username."""
+
         self.api_token_type = None
+        """API token type."""
+
         self.api_access_token = None
+        """API access token."""
+
+        self._uri_cache = {}
+        """Cache of Spotify URIs."""
+
+        # Try to use the saved access token if that fails
+        # re-authenticate from the web.
         if not self.auth_from_file():
             self.auth_from_web()
 
-        # caches
-        self._uri_cache = {}
-
     def get_username(self):
+        """Returns the current username.
+
+        Returns:
+            str: The current username.
+        e"""
         return self.username
 
     def play(self, track_uri=None, context_uri=None):
@@ -81,6 +96,9 @@ class SpotifyApi(object):
         Args:
             track_uri (str): The track uri.
             context_uri (str): The context uri.
+
+        Returns:
+            Reponse: The reponse if successful, otherwise None.
         """
         params = {}
         if context_uri:
@@ -97,7 +115,7 @@ class SpotifyApi(object):
             if track_uri.startswith("spotify:track:"):
                 params['uris'] = [track_uri]
 
-        self.put_api_v1("me/player/play", params)
+        return self.put_api_v1("me/player/play", params)
 
     def pause(self):
         self.put_api_v1("me/player/pause")
@@ -125,10 +143,13 @@ class SpotifyApi(object):
 
     def get_currently_playing(self):
         obj = self.get_api_v1("me/player/currently-playing")
-        track = obj['item']
-        if track:
-            obj.update(track)
-            return Track(obj)
+        if obj:
+            track = obj['item']
+            if track:
+                obj.update(track)
+                return Track(obj)
+            else:
+                return NoneTrack
         else:
             return NoneTrack
 
@@ -257,8 +278,8 @@ class SpotifyApi(object):
                    "Content-Type": "application/json"}
         api_url = "https://api.spotify.com/v1/{}".format(endpoint)
         resp = requests.put(api_url, headers=headers, json=params)
-        self.check(resp)
-        return resp.text
+        self.check_response(resp)
+        return resp
 
     @authenticate_retry
     def post_api_v1(self, endpoint, params=None):
@@ -266,7 +287,7 @@ class SpotifyApi(object):
                    "Content-Type": "application/json"}
         api_url = "https://api.spotify.com/v1/{}".format(endpoint)
         resp = requests.post(api_url, headers=headers, json=params)
-        self.check(resp)
+        self.check_response(resp)
         return resp.text
 
     def get_json(self, url, params={}, headers={}):
@@ -281,13 +302,10 @@ class SpotifyApi(object):
             dict: The resulting JSON.
         """
         resp = requests.get(url, params=params, headers=headers)
-        self.check(resp)
-        if resp.text:
-            return json.loads(resp.text)
-        else:
-            return defaultdict(lambda: "[Null]")
+        self.check_response(resp)
+        return json.loads(resp.text) if resp.text else{}
 
-    def check(self, resp):
+    def check_response(self, resp):
         resp.raise_for_status()
 
     def auth_from_file(self):

@@ -58,6 +58,10 @@ NoneTrack = Track({"name": "<None>",
                    "artists": [{"name": "<None>"}],
                    "album": {"name": "<None>"}})
 
+UnableToFindPlayerTrack = Track({"name": "Unable to find Spotify player",
+                                "artists": [{"name": ""}],
+                                "album": {"name": ""}})
+
 
 class Artist(SpotifyObject):
     def __init__(self, artist):
@@ -225,7 +229,7 @@ class SpotifyState(object):
         self.repeat = self.REPEAT_CONTEXT
         """Whether to repeat or not. Default is context."""
 
-        self.currently_playing_track = None
+        self.currently_playing_track = NoneTrack
         """The currently playing track."""
 
         self.creating_command = False
@@ -246,6 +250,9 @@ class SpotifyState(object):
         self.running = True
         """Whether we're running or not."""
 
+        self.player_state_synced = False
+        """True if the Spotify player's state is synced to the application."""
+
         self.commands = {
             "search": self._execute_search,
             "find": self._execute_find,
@@ -264,21 +271,7 @@ class SpotifyState(object):
         self.read_rc_file()
 
         # Get current player state.
-        player = self.api.get_player_state()
-        if not player:
-            print("No Spotify player found.")
-            print("Please open the Spotify app on your desktop, mobile, etc.")
-            print("before starting the terminal application.")
-            exit(1)
-
-        # Get the current track (if there is one)
-        self.currently_playing_track = Track(player['item']) if player['item'] else NoneTrack
-
-        self.shuffle = player['shuffle_state']
-
-        self.paused = not player['is_playing']
-
-        self.volume = player['device']['volume_percent']
+        self.sync_plater_state()
 
         # Get the users playlists.
         # Get the playlists from the API and convert it to our Playlist objects.
@@ -307,11 +300,6 @@ class SpotifyState(object):
             PlayerAction("++", self.increase_volume),
         ])
 
-        repeat = {"off": self.REPEAT_OFF,
-                  "track": self.REPEAT_TRACK,
-                  "context": self.REPEAT_CONTEXT}[player['repeat_state']]
-        self._set_repeat(repeat)
-
     def read_rc_file(self):
         """Initializes the users settings based on the stermrc file"""
         try:
@@ -338,6 +326,24 @@ class SpotifyState(object):
                     exit()
                 self.shortcuts[toks[0]] = toks[1]
 
+    def sync_plater_state(self):
+        player_state = self.api.get_player_state()
+        if player_state:
+            self.currently_playing_track = Track(player_state['item']) \
+                if player_state['item'] else NoneTrack
+            self.shuffle = player_state['shuffle_state']
+            self.paused = not player_state['is_playing']
+            self.volume = player_state['device']['volume_percent']
+
+            repeat = {"off": self.REPEAT_OFF,
+                      "track": self.REPEAT_TRACK,
+                      "context": self.REPEAT_CONTEXT}[player_state['repeat_state']]
+            self._set_repeat(repeat)
+            self.player_state_synced = True
+        else:
+            self.currently_playing_track = NoneTrack
+            self.player_state_synced = False
+
     def get_username(self):
         return self.api.get_username()
 
@@ -360,9 +366,9 @@ class SpotifyState(object):
         return self.currently_playing_track
 
     def poll_currently_playing_track(self):
-        # TODO: Maybe instead we should raise an exception with empty content
         track = self.api.get_currently_playing()
-        self.currently_playing_track = Track(track) if track else NoneTrack
+        if track != NoneTrack:
+            self.currently_playing_track = track
 
     def get_cursor_i(self):
         return self.command_cursor_i
@@ -508,15 +514,18 @@ class SpotifyState(object):
                 elif self.in_search_menu():
                     entry = self.search_model.get_current_list_entry()
                     if isinstance(entry, Artist):
+                        # TODO: Should play Artist context
+                        # and get top-tracks as the Track list
+                        # Move this to right-arrow key
                         albums = self.api.get_albums_from_artist(entry)
                         self.search_model['results'].update_list(albums)
                     elif isinstance(entry, Album):
                         self.searching = False
                         self._select_album(entry)
-                        self.api.play(None, context_uri=entry['uri'])
+                        self.play(None, context_uri=entry['uri'])
                     elif isinstance(entry, Track):
                         self.searching = False
-                        self.api.play(entry['uri'], context_uri=None)
+                        self.play(entry['uri'], context_uri=None)
                 elif self.in_main_menu():
                     # Playlist was selected.
                     if self.main_model.get_current_list().name == "playlists":
@@ -528,7 +537,7 @@ class SpotifyState(object):
                     elif self.main_model.get_current_list().name == "tracks":
                         # Track selected
                         track = self.main_model.get_current_list_entry()
-                        self.api.play(track['uri'], context_uri=self.context)
+                        self.play(track['uri'], context_uri=self.context)
 
                     # PlayerAction was selected
                     elif self.main_model.get_current_list().name == "player":
@@ -625,7 +634,7 @@ class SpotifyState(object):
 
     def _execute_play(self):
         self.paused = False
-        self.api.play(None, None)
+        self.play(None, None)
 
     def _execute_pause(self):
         self.paused = True
@@ -647,6 +656,14 @@ class SpotifyState(object):
         self.main_model.get_current_list().set_selection(0)
         self._register_tracks(self.api.get_tracks_from_album(album))
         self.main_model.get_list('tracks').header = album['name']
+
+    def play(self, track_uri, context_uri):
+        result = self.api.play(track_uri, context_uri)
+        if not result:
+            self.currently_playing_track = UnableToFindPlayerTrack
+        else:
+            # Sync the player state.
+            self.sync_plater_state()
 
     def _register_tracks(self, tracks):
         # Save the current Track list to history.

@@ -321,6 +321,16 @@ if __name__ == '__main__':
     # Create Spotify state.
     sp_state = SpotifyState(SpotifyApi(sys.argv[1]))
 
-    # Create the display and start!
+    # Create the display!
     display = CursesDisplay(stdscr, sp_state)
-    display.start()
+
+    # Start the display and clear the screen before
+    # raising any Exceptions.
+    try:
+        display.start()
+    except BaseException:
+        clear()
+        raise
+
+    # Clear the screen to leave a clean terminal.
+    clear()
