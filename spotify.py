@@ -58,7 +58,7 @@ class CursesDisplay(object):
         self._panels['tracks'] = uc.new_panel(self._windows['tracks'].window)
         self._ordered_windows.append(self._windows['tracks'])
 
-        player = (self._rows*1/3-2, tracks[1], tracks[0], tracks[3])
+        player = (self._rows*1/3-1, tracks[1], tracks[0], tracks[3])
         self._windows['player'] = Window('player', uc.newwin(*player))
         self._panels['player'] = uc.new_panel(self._windows['player'].window)
         self._ordered_windows.append(self._windows['player'])

@@ -351,12 +351,15 @@ class SpotifyApi(object):
         Returns:
             list: All of the items.
         """
-        lists = []
-        lists.extend(page['items'])
-        while page['next'] is not None:
-            page = self.get_api_v1(page['next'].split('/v1/')[-1])
+        if page and "items" in page:
+            lists = []
             lists.extend(page['items'])
-        return lists
+            while page['next'] is not None:
+                page = self.get_api_v1(page['next'].split('/v1/')[-1])
+                lists.extend(page['items'])
+            return lists
+        else:
+            return {}
 
     @needs_authentication
     def get_api_v1(self, endpoint, params=None):

@@ -385,8 +385,7 @@ class SpotifyState(object):
             self.paused = not player_state['is_playing']
             self.volume = player_state['device']['volume_percent']
 
-            repeat = self.get_repeat_enum(player_state['repeat_state'])
-            self.set_repeat(repeat)
+            self.set_repeat(player_state['repeat_state'])
             self.set_shuffle(player_state['shuffle_state'])
             self.player_state_synced = True
         else:
@@ -750,7 +749,7 @@ class SpotifyState(object):
         self.command_query = list(text)
 
     def set_repeat(self, state):
-        self.repeat = state
+        self.repeat = self.get_repeat_enum(state)
         self.main_menu.get_list('player')[4].title = "({})".format(['x', 'o', '1'][self.repeat])
 
     def set_shuffle(self, state):

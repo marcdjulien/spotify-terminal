@@ -105,8 +105,8 @@ def start_server():
 
 
 def write_auth_file(data):
-    if not os.path.isdir(TEMP_DIR):
-        os.mkdir(TEMP_DIR)
+    if not os.path.isdir(APP_DIR):
+        os.mkdir(APP_DIR)
     auth_file = open(AUTH_FILENAME, "w")
     for k, v in data.items():
         auth_file.write("%s=%s\n" % (k, v))
