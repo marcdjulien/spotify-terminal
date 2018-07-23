@@ -5,19 +5,19 @@ import util
 
 
 # Set TEMP_DIR
-TEMP_DIR = util.get_temp_dir()
+APP_DIR = util.get_app_dir()
 
 
 # Authentication filename
-AUTH_FILENAME = os.path.join(TEMP_DIR, "auth")
+AUTH_FILENAME = os.path.join(APP_DIR, "auth")
 
 
 # Configuration filename
-CONFIG_FILENAME = os.path.join(TEMP_DIR, "spotifyrc")
+CONFIG_FILENAME = os.path.join(APP_DIR, "spotifyrc")
 
 
 # Log filename
-LOGGER_FILENAME = os.path.join(TEMP_DIR, "log")
+LOGGER_FILENAME = os.path.join(APP_DIR, "log")
 
 
 TITLE = """
@@ -56,4 +56,3 @@ logging.basicConfig(filename=LOGGER_FILENAME,
                     filemode='w',
                     format='[%(asctime)s][%(levelname)s][%(name)s] %(message)s',
                     level=logging.DEBUG)
-logging.info("="*25)

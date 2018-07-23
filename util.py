@@ -19,7 +19,7 @@ def clear():
 
 
 def is_int(n):
-    """Returns True if 'n' is an integet.
+    """Returns True if 'n' is an integer.
 
     Args:
         n (anything): The variable to check.
@@ -51,7 +51,7 @@ def ascii(string):
     """Return an ascii encoded version of the string.
 
     Args:
-        string (str): The String to encode.
+        string (str): The string to encode.
 
     Returns:
         str: The ascii encoded string.
@@ -73,8 +73,8 @@ def clamp(value, low, high):
     return max(low, min(value, high))
 
 
-def get_temp_dir():
-    """Return the temporary directory.
+def get_app_dir():
+    """Return the application's directory.
 
     Returns:
         str: The full path to the directory.
@@ -82,7 +82,7 @@ def get_temp_dir():
     if is_windows():
         dirname = os.path.join(os.getenv('APPDATA'), ".spotifyterminal")
     elif is_linux():
-        dirname = os.path.join("~", ".spotifyterminal")
+        dirname = os.path.join(os.path.expanduser("~"), ".spotifyterminal")
 
     if not os.path.isdir(dirname):
         os.mkdir(dirname)

@@ -1,3 +1,5 @@
+#!/usr/bin/env python
+
 import sys
 import time
 import unicurses as uc
@@ -182,8 +184,8 @@ class CursesDisplay(object):
                       uc.A_BOLD)
 
         # Show the playlists.
-        playlists = [str(playlist) for playlist in self.state.main_model.get_list('playlists')]
-        selected_i = self.state.main_model.get_list_current_entry_i("playlists")
+        playlists = [str(playlist) for playlist in self.state.main_menu.get_list('playlists')]
+        selected_i = self.state.main_menu["playlists"].i
         playlist_start_line = username_start_line + 2
         self._render_list(win, playlists, playlist_start_line, rows-4,
                           2, cols-3, selected_i, self.is_active_window("user"))
@@ -197,12 +199,12 @@ class CursesDisplay(object):
         # Show the title of the context.
         title_start_line = 1
         uc.mvwaddnstr(win, title_start_line, 2,
-                      ascii(self.state.main_model['tracks'].header), cols-3, uc.A_BOLD)
+                      ascii(self.state.main_menu['tracks'].header), cols-3, uc.A_BOLD)
 
         # Show the tracks.
-        selected_i = self.state.main_model.get_list_current_entry_i('tracks')
+        selected_i = self.state.main_menu['tracks'].i
         track_start_line = title_start_line + 2
-        tracks = [track.str(cols-3) for track in self.state.main_model.get_list('tracks')]
+        tracks = [track.str(cols-3) for track in self.state.main_menu.get_list('tracks')]
         self._render_list(win, tracks, track_start_line, rows-4,
                           2, cols-3, selected_i, self.is_active_window("tracks"))
 
@@ -217,8 +219,8 @@ class CursesDisplay(object):
         uc.mvwaddnstr(win, 2, 1, self.state.get_currently_playing_track().album, cols-3, style)
         uc.mvwaddnstr(win, 3, 1, self.state.get_currently_playing_track().artist, cols-3, style)
 
-        for i, action in enumerate(self.state.main_model.get_list("player")):
-            if (i == self.state.main_model.get_list_current_entry_i('player')) and self.is_active_window("player"):
+        for i, action in enumerate(self.state.main_menu.get_list("player")):
+            if (i == self.state.main_menu['player'].i) and self.is_active_window("player"):
                 style = uc.A_BOLD | uc.A_STANDOUT
             else:
                 style = uc.A_NORMAL
@@ -234,7 +236,7 @@ class CursesDisplay(object):
                          text[self.state.get_cursor_i()],
                          uc.A_STANDOUT)
         else:
-            text = self.state.main_model.get_current_list_entry().str(self._cols-1)
+            text = self.state.main_menu.get_current_list_entry().str(self._cols-1)
             uc.mvwaddstr(self.stdscr, self._rows-1, 3, text, uc.A_BOLD)
 
     def render_search_panel(self):
@@ -255,8 +257,8 @@ class CursesDisplay(object):
         uc.mvwaddnstr(win, title_start_line, 2,
                       "Search Results", cols-3, uc.A_BOLD)
 
-        selected_i = self.state.search_model.get_current_list().i
-        self._render_list(win, self.state.search_model["results"], 3, rows-4, 2, cols-3, selected_i, self.is_active_window("search"))
+        selected_i = self.state.search_menu.get_current_list().i
+        self._render_list(win, self.state.search_menu["results"], 3, rows-4, 2, cols-3, selected_i, self.is_active_window("search"))
 
     def _render_list(self, win, list, row_start, n_rows,
                      col_start, n_cols, selected_i, is_active):
@@ -282,7 +284,7 @@ class CursesDisplay(object):
         if self.state.is_searching():
             return window_name == "search"
         else:
-            return self.state.main_model.list_i == self.get_window_position(window_name)
+            return self.state.main_menu.list_i == self.get_window_position(window_name)
 
     def get_window_position(self, window_name):
         for i, window in enumerate(self._ordered_windows):
@@ -290,7 +292,7 @@ class CursesDisplay(object):
                 return i
 
     def get_cur_window(self):
-        return self._ordered_windows[self.state.main_model.list_i]
+        return self._ordered_windows[self.state.main_menu.list_i]
 
     def get_windows(self):
         return [w.window for w in self._windows.values()]

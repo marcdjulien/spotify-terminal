@@ -66,7 +66,7 @@ HTML2 = """
 </html>
 """
 
-data = "Empty"
+data = None
 
 
 class AuthenticationHandler(BaseHTTPRequestHandler):
@@ -121,7 +121,9 @@ def authenticate():
     web_thread = Thread(target=start_server)
     web_thread.start()
 
-    # Open the authentication link
+    # Open the authentication link.
+    # A web browser is required because token information is returned
+    # as a hash fragment.
     webbrowser.open_new_tab(URL)
 
     # Wait for the server to make the 2 expected http request
