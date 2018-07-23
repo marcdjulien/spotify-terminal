@@ -61,10 +61,10 @@ class CursesDisplay(object):
         self._panels['search'] = uc.new_panel(self._windows['search'].window)
         self._ordered_windows.append(self._windows['search'])
 
-        self._update_time = time.time()
+        self._next_update_time = time.time()
         self._last_update_time = time.time()
-
         self._last_render_time = time.time()
+        self._last_key_pressed_time = time.time()
 
         # Initialize the display.
         self._init_curses()
@@ -127,6 +127,7 @@ class CursesDisplay(object):
 
         key_pressed = False
         while self._key_buf:
+            self._last_key_pressed_time = time.time()
             key_pressed = True
 
             key = self._key_buf.pop()
@@ -135,7 +136,7 @@ class CursesDisplay(object):
             if key in [13, 10]:
                 # We probably just selected a Track, lket's plan to update the
                 # currently playing track in 1 second.
-                self._update_time = time.time() + 1
+                self._next_update_time = time.time() + 1
 
             self.state.process_key(key)
 
@@ -143,7 +144,8 @@ class CursesDisplay(object):
 
     def render_calcs(self):
         """Perform any calculations related to rendering."""
-        if time.time() > self._update_time:
+        if time.time() > self._next_update_time and \
+            (time.time() - self._last_key_pressed_time) < 10:
             self.update_currently_playing_track()
 
     def render(self):
@@ -272,8 +274,8 @@ class CursesDisplay(object):
 
     def update_currently_playing_track(self):
         self.state.poll_currently_playing_track()
-        self._last_update_time = self._update_time
-        self._update_time = time.time() + 30
+        self._last_update_time = self._next_update_time
+        self._next_update_time = time.time() + 30
 
     def is_active_window(self, window_name):
         if self.state.is_searching():
