@@ -212,9 +212,9 @@ class CursesDisplay(object):
         uc.box(win)
 
         style = uc.A_BOLD
-        uc.mvwaddnstr(win, 1, 1, self.state.get_currently_playing_track().track, cols-3, style)
-        uc.mvwaddnstr(win, 2, 1, self.state.get_currently_playing_track().album, cols-3, style)
-        uc.mvwaddnstr(win, 3, 1, self.state.get_currently_playing_track().artist, cols-3, style)
+        uc.mvwaddnstr(win, 1, 2, self.state.get_currently_playing_track().track, cols-3, style)
+        uc.mvwaddnstr(win, 2, 2, self.state.get_currently_playing_track().album, cols-3, style)
+        uc.mvwaddnstr(win, 3, 2, self.state.get_currently_playing_track().artist, cols-3, style)
 
         for i, action in enumerate(self.state.main_menu.get_list("player")):
             if (i == self.state.main_menu['player'].i) and self.is_active_window("player"):

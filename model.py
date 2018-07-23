@@ -125,7 +125,7 @@ class List(object):
             l (iter): The list ot update to.
         """
         self.list = tuple(l)
-        self.i = common.clamp(self.i, 0, len(self.list) - 1)
+        self.i = 0
 
     def current_entry(self):
         """Return the currently selected entry.
@@ -323,7 +323,11 @@ class SpotifyState(object):
         self.read_rc_file()
 
         # Get the users playlists.
-        playlists = list(self.api.get_user_playlists())
+        playlists = self.api.get_user_playlists()
+        if not playlists:
+            print("Could not load playlists. Try again later.")
+            exit(1)
+        playlists = list(playlists)
 
         # Add the Saved tracks playlist.
         saved = Playlist({"name": "Saved",
@@ -531,7 +535,8 @@ class SpotifyState(object):
                         #       and get top-tracks as the Track list
                         #       and move this current behavior to right-arrow key
                         albums = self.api.get_albums_from_artist(entry)
-                        self.search_menu['results'].update_list(albums)
+                        if albums:
+                            self.search_menu['results'].update_list(albums)
                     elif isinstance(entry, Album):
                         self.searching = False
                         self.set_album(entry)
@@ -621,8 +626,9 @@ class SpotifyState(object):
         query = " ".join(query)
         logger.debug("search %s", query)
         results = self.api.search(("artist", "album", "track"), query)
-        self.search_menu["results"].update_list(results)
-        self.searching = True
+        if results:
+            self.search_menu["results"].update_list(results)
+            self.searching = True
 
     def _execute_find(self, i, *query):
         query = " ".join(query)
@@ -729,15 +735,19 @@ class SpotifyState(object):
         self.current_context = playlist['uri']
         self.main_menu.set_current_list('tracks')
         self.main_menu.get_current_list().set_index(0)
-        self.set_tracks(self.api.get_tracks_from_playlist(playlist))
-        self.main_menu.get_list('tracks').header = playlist['name']
+        tracks = self.api.get_tracks_from_playlist(playlist)
+        if tracks:
+            self.set_tracks(tracks)
+            self.main_menu.get_list('tracks').header = playlist['name']
 
     def set_album(self, album):
         self.current_context = album['uri']
         self.main_menu.set_current_list('tracks')
         self.main_menu.get_current_list().set_index(0)
-        self.set_tracks(self.api.get_tracks_from_album(album))
-        self.main_menu.get_list('tracks').header = album['name']
+        trakcs = self.api.get_tracks_from_album(album)
+        if tracks:
+            self.set_tracks(tracks)
+            self.main_menu.get_list('tracks').header = album['name']
 
     def set_tracks(self, tracks):
         # Save the current Track list to history.
