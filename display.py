@@ -133,6 +133,8 @@ class CursesDisplay(object):
 
             # Enter key
             if key in [13, 10]:
+                # We probably just selected a Track, lket's plan to update the
+                # currently playing track in 1 second.
                 self._update_time = time.time() + 1
 
             self.state.process_key(key)
@@ -140,6 +142,7 @@ class CursesDisplay(object):
         return key_pressed
 
     def render_calcs(self):
+        """Perform any calculations related to rendering."""
         if time.time() > self._update_time:
             self.update_currently_playing_track()
 

@@ -318,7 +318,7 @@ class SpotifyState(object):
     def init(self):
         # Configure from stermrc file.
         # TODO: Right not this does nothing since there's nothing
-        # to set in the rc file.
+        #       to set in the rc file.
         self.read_rc_file()
 
         # Get the users playlists.
@@ -527,8 +527,8 @@ class SpotifyState(object):
                     entry = self.search_menu.get_current_list_entry()
                     if isinstance(entry, Artist):
                         # TODO: Should play Artist context
-                        # and get top-tracks as the Track list
-                        # Move this to right-arrow key
+                        #       and get top-tracks as the Track list
+                        #       and move this current behavior to right-arrow key
                         albums = self.api.get_albums_from_artist(entry)
                         self.search_menu['results'].update_list(albums)
                     elif isinstance(entry, Album):
