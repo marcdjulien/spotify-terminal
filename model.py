@@ -39,7 +39,7 @@ class Track(SpotifyObject):
         self.track, self.album, self.artist = self.track_tuple
 
     def __str__(self):
-        return "%s %s %s" % self.track_tuple
+        return "'%s' on '%s' by '%s'" % self.track_tuple
 
     def str(self, cols):
         nchrs = cols - 3
@@ -76,9 +76,10 @@ class Album(SpotifyObject):
 
     def __init__(self, album):
         super(Album, self).__init__(album)
+        self.artists = ", ".join(a['name'] for a in self['artists'])
 
     def __str__(self):
-        return self.info['name']
+        return "'%s' by '%s'" % (self.info['name'], self.artists)
 
     def str(self, cols):
         return self.__str__()
@@ -619,7 +620,7 @@ class SpotifyState(object):
     def _execute_search(self, *query):
         query = " ".join(query)
         logger.debug("search %s", query)
-        results = self.api.search(("artist", "track", "album"), query)
+        results = self.api.search(("artist", "album", "track"), query)
         self.search_menu["results"].update_list(results)
         self.searching = True
 

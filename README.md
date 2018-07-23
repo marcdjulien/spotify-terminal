@@ -44,5 +44,7 @@ Type ```/``` is a shortcut to the find command. You can also type ```n``` or ```
 
 Use ```:q``` to exit.
 
+Use ```Backspace``` to cycle through previous Track listings.
+
 # Notes
 This has only been tested on Linux and Windows.
