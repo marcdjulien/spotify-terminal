@@ -641,7 +641,7 @@ class SpotifyState(object):
                 found.append(index)
 
         if found:
-            self.main_menu.get_current_list().set_index(found[int(i) % len(found)])
+            self.current_menu.get_current_list().set_index(found[int(i) % len(found)])
 
     def _execute_shuffle(self, state):
         state = state.lower().strip()
@@ -744,7 +744,7 @@ class SpotifyState(object):
         self.current_context = album['uri']
         self.main_menu.set_current_list('tracks')
         self.main_menu.get_current_list().set_index(0)
-        trakcs = self.api.get_tracks_from_album(album)
+        tracks = self.api.get_tracks_from_album(album)
         if tracks:
             self.set_tracks(tracks)
             self.main_menu.get_list('tracks').header = album['name']

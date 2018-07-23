@@ -1,6 +1,7 @@
 import logging
 import os
 import platform
+import unicodedata
 
 
 def is_windows():
@@ -57,7 +58,7 @@ def ascii(string):
     Returns:
         str: The ascii encoded string.
     """
-    return string.encode('ascii', 'replace')
+    return unicodedata.normalize("NFKD", string).encode('ascii', 'ignore')
 
 
 def clamp(value, low, high):
