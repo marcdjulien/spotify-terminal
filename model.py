@@ -640,10 +640,13 @@ class SpotifyState(object):
                 return
 
     def _execute_shuffle(self, state):
-        self.set_shuffle(self.shuffle)
-        self.api.shuffle(self.shuffle)
+        state = state.lower().strip()
+        state = True if state == "true" else False
+        self.set_shuffle(state)
+        self.api.shuffle(state)
 
     def _execute_repeat(self, state):
+        state = state.lower().strip()
         self.set_repeat(state)
         self.api.repeat(state)
 

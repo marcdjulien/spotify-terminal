@@ -2,14 +2,18 @@
 Terminal program to play/control music via Spotify.
 
 # Install
-Unicurses for Python is required to run this program.
+Unicurses and Requests for Python are required to run this program.
 
-See https://pypi.org/project/UniCurses
+https://pypi.org/project/UniCurses
+
+
+http://docs.python-requests.org/en/v2.9.1/user/install/
+
 
 # Usage
 Execute the following command to run the program:
 ```
-python spotify.py [username]
+./spotify.py [username]
 ```
 Where ```username``` is your Spotify username.
 
@@ -19,19 +23,26 @@ By typing ```#``` you can begin a search.
 # : Commands
 By typing ```:``` you can enter commands. The following is a list of all commands:
 
-search [query]
+```search [query]``` | Search for an Artist, Album or Song.
 
-find [index] [query]
+```find [index] [query]``` | Find an entry in the currently list that contains *query*. The UI will automatically go to the *index* found entry.
 
-volume [0-100]
+```volume [0-100]``` | Set the volume.
 
-play
+```play``` | Start playing.
 
-pause
+```pause``` | Pause the player.
 
-exit
+```repeat [off|context|track]``` | Set the repeat mode.
+
+```shuffle [True|False]``` | Set the shuffle mode.
+
+```exit``` | Exit the application.
 
 # Other Tips
 Type ```/``` is a shortcut to the find command. You can also type ```n``` or ```p``` to find a next or previous entry.
 
 Use ```:q``` to exit.
+
+# Notes
+This has only been tested on Linux and Windows.
