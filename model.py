@@ -628,16 +628,13 @@ class SpotifyState(object):
         logger.debug("find:%s", query)
         cur_list = self.current_menu.get_current_list()
 
-        i = int(i) % len(cur_list)
-
-        found = -1
+        found = []
         for index, item in enumerate(cur_list):
-            logger.debug("(%s) in (%s)", query.lower(), str(item).lower())
             if query.lower() in str(item).lower():
-                found += 1
-            if found == i:
-                self.main_menu.get_current_list().set_index(index)
-                return
+                found.append(index)
+
+        if found:
+            self.main_menu.get_current_list().set_index(found[int(i) % len(found)])
 
     def _execute_shuffle(self, state):
         state = state.lower().strip()

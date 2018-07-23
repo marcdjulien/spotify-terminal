@@ -106,13 +106,13 @@ def start_server():
 
 
 def write_auth_file(data):
-    if not os.path.isdir(APP_DIR):
-        os.mkdir(APP_DIR)
-    auth_file = open(AUTH_FILENAME, "w")
+    if not os.path.isdir(common.APP_DIR):
+        os.mkdir(common.APP_DIR)
+    auth_file = open(common.AUTH_FILENAME, "w")
     for k, v in data.items():
         auth_file.write("%s=%s\n" % (k, v))
     auth_file.close()
-    logger.debug("%s created", AUTH_FILENAME)
+    logger.debug("%s created", common.AUTH_FILENAME)
 
 
 def authenticate():
