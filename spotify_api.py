@@ -1,9 +1,10 @@
 import urllib
 import json
+import os
+import requests
 
+import common
 from authentication import authenticate
-from globals import *
-from util import *
 from model import (
     Artist,
     Album,
@@ -12,10 +13,9 @@ from model import (
     Playlist
 )
 
-import requests
 
 
-logger = logging.getLogger(__name__)
+logger = common.logging.getLogger(__name__)
 
 
 def needs_authentication(func):
@@ -117,7 +117,7 @@ class SpotifyApi(object):
                 params["offset"] = {"position": 0}
             else:
                 # Play the requested track within the context.
-                if is_int(track_uri):
+                if common.is_int(track_uri):
                     params["offset"] = {"position": track_uri}
                 else:
                     params["offset"] = {"uri": track_uri}
@@ -243,26 +243,27 @@ class SpotifyApi(object):
                 type of search in 'types'.
 
         Returns:
-            dict: Collection of 'artist', 'album', and 'track' objects.
+            dict: Collection of Artist, Album, and Track objects.
         """
         type_str = ",".join(types)
         params = {'type': type_str,
                   'q': query,
                   'limit': limit}
 
-        result = self.get_api_v1("search", params)
+        results = self.get_api_v1("search", params)
 
         cast = {
-            'artist': Artist,
-            'track': Track,
-            'album': Album,
+            'artists': Artist,
+            'tracks': Track,
+            'albums': Album,
         }
 
         combined = []
-        for type in types:
-            # Results are plural (i.e, 'artists', 'albums', 'tracks')
-            type = type + 's'
-            combined.extend([cast[type](info) for info in result[type]['items']])
+        if results:
+            for type in types:
+                # Results are plural (i.e, 'artists', 'albums', 'tracks')
+                type = type + 's'
+                combined.extend([cast[type](info) for info in results[type]['items']])
 
         return combined
 
@@ -410,7 +411,7 @@ class SpotifyApi(object):
         api_url = "https://api.spotify.com/v1/{}".format(endpoint)
         resp = requests.post(api_url, headers=headers, json=params)
         self.check_response(resp)
-        return ascii(resp.text)
+        return common.ascii(resp.text)
 
     def get_json(self, url, params={}, headers={}):
         """Return a JSON from a GET request.
@@ -425,7 +426,7 @@ class SpotifyApi(object):
         """
         resp = requests.get(url, params=params, headers=headers)
         self.check_response(resp)
-        return json.loads(ascii(resp.text)) if resp.text else {}
+        return json.loads(common.ascii(resp.text)) if resp.text else {}
 
     def check_response(self, resp):
         """Check a HTTP Reponse.
@@ -441,8 +442,8 @@ class SpotifyApi(object):
         Returns:
             bool: True on success.
         """
-        if os.path.isfile(AUTH_FILENAME):
-            auth_file = open(AUTH_FILENAME)
+        if os.path.isfile(common.AUTH_FILENAME):
+            auth_file = open(common.AUTH_FILENAME)
             for line in auth_file:
                 line = line.strip()
                 toks = line.split("=")

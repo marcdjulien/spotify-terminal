@@ -6,15 +6,16 @@ After you log in and authenticate the redirect url will bring you to a localhost
 page. At this point Spotify Terminal will be running a web server
 to obtain the authentication information.
 """
-from globals import *
 import os
 import urllib
-from threading import Thread
 import webbrowser
 from BaseHTTPServer import *
+from threading import Thread
+
+import common
 
 
-logger = logging.getLogger(__name__)
+logger = common.logging.getLogger(__name__)
 
 
 CLIENT_ID = "bd392941710943429ba45210c9b2c640"

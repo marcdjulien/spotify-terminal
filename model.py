@@ -1,10 +1,8 @@
 import unicurses as uc
 
-from util import *
-from globals import *
+import common
 
-
-logger = logging.getLogger(__name__)
+logger = common.logging.getLogger(__name__)
 
 
 class SpotifyObject(object):
@@ -126,7 +124,7 @@ class List(object):
             l (iter): The list ot update to.
         """
         self.list = tuple(l)
-        self.i = clamp(self.i, 0, len(self.list) - 1)
+        self.i = common.clamp(self.i, 0, len(self.list) - 1)
 
     def current_entry(self):
         """Return the currently selected entry.
@@ -142,7 +140,7 @@ class List(object):
         Args:
             i (int): The index.
         """
-        self.i = clamp(i, 0, len(self.list) - 1)
+        self.i = common.clamp(i, 0, len(self.list) - 1)
 
     def get_index(self):
         """Get the current index.
@@ -175,7 +173,7 @@ class List(object):
         return self.list[i]
 
     def __equals__(self, other_list):
-        return this.name == other_list.name
+        return self.name == other_list.name
 
 
 class ListCollection(object):
@@ -189,11 +187,11 @@ class ListCollection(object):
 
     def decrement_list(self):
         """Decrement the currently List."""
-        self.list_i = clamp(self.list_i - 1, 0, len(self.ordered_lists) - 1)
+        self.list_i = common.clamp(self.list_i - 1, 0, len(self.ordered_lists) - 1)
 
     def increment_list(self):
         """Increment the currently List."""
-        self.list_i = clamp(self.list_i + 1, 0, len(self.ordered_lists) - 1)
+        self.list_i = common.clamp(self.list_i + 1, 0, len(self.ordered_lists) - 1)
 
     def get_current_list(self):
         """Get the currently selected List.
@@ -354,9 +352,9 @@ class SpotifyState(object):
     def read_rc_file(self):
         """Initializes the users settings based on the stermrc file"""
         try:
-            rc_file = open(CONFIG_FILENAME, "r")
+            rc_file = open(common.CONFIG_FILENAME, "r")
         except IOError:
-            logger.debug("No configuration file '%s'" % (CONFIG_FILENAME))
+            logger.debug("No configuration file '%s'" % (common.CONFIG_FILENAME))
             return
 
         for line in rc_file:
@@ -484,6 +482,8 @@ class SpotifyState(object):
                     header, tracks = self.previous_tracks.pop()
                     self.set_tracks(tracks)
                     self.main_menu.get_list('tracks').header = header
+            elif self.in_search_menu():
+                self.searching = False
 
         # ASCII character pressed
         elif 0 <= key <= 256:
@@ -568,8 +568,8 @@ class SpotifyState(object):
 
     def _clamp_values(self):
         # Clamp values.
-        self.command_cursor_i = clamp(self.command_cursor_i,
-                                      0, len(self.get_command_query()))
+        self.command_cursor_i = common.clamp(self.command_cursor_i,
+                                             0, len(self.get_command_query()))
 
     def _process_command(self, command_input):
         logger.debug("Processing command: %s", command_input)
@@ -647,13 +647,15 @@ class SpotifyState(object):
 
     def _execute_repeat(self, state):
         state = state.lower().strip()
-        self.set_repeat(state)
-        self.api.repeat(state)
+        if state in ["off", "context", "track"]:
+            self.set_repeat(state)
+            self.api.repeat(state)
 
     def _execute_volume(self, volume):
         volume = int(volume)
-        self.volume = clamp(volume, 0, 100)
-        self.api.volume(self.volume)
+        if 0 <= volume and volume <= 100:
+            self.volume = volume
+            self.api.volume(self.volume)
 
     def _execute_play(self):
         self.paused = False
@@ -757,7 +759,9 @@ class SpotifyState(object):
 
     def set_shuffle(self, state):
         self.shuffle = state
-        self.main_menu.get_list('player')[0].title = "({})".format({True: "S", False: "s"}[self.shuffle])
+        self.main_menu.get_list('player')[0].title = "({})".format(
+            {True: "S", False: "s"}[self.shuffle]
+        )
 
     def in_main_menu(self):
         return self.current_menu.name == "main"
