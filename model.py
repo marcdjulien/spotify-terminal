@@ -54,7 +54,8 @@ NoneTrack = Track({"name": "<None>",
                    "album": {"name": "<None>"}})
 
 UnableToFindPlayerTrack = Track({"name": "Unable to find Spotify player",
-                                 "artists": [{"name": "Press 'p' to see available players."}],
+                                 #"artists": [{"name": "Press 'p' to see available players."}],
+                                 "artists": [{"name": ""}],
                                  "album": {"name": ""}})
 
 
