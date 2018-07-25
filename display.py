@@ -61,7 +61,7 @@ class CursesDisplay(object):
         self._panels['search'] = uc.new_panel(self._windows['search'].window)
         self._ordered_windows.append(self._windows['search'])
 
-        select_player = (self._rows*8/10, self._cols*8/10, self._rows/10, self._cols/10)
+        select_player = (self._rows*6/10, self._cols*6/10, self._rows*2/10, self._cols*2/10)
         self._windows['select_player'] = Window('select_player', uc.newwin(*select_player))
         self._panels['select_player'] = uc.new_panel(self._windows['select_player'].window)
         self._ordered_windows.append(self._windows['select_player'])
