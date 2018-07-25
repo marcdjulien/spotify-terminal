@@ -178,7 +178,7 @@ class SpotifyApi(object):
             Reponse: The reponse if successful, otherwise None.
         """
         q = urllib.urlencode({"state": shuffle})
-        return self.put_api_v1("me/player/shuffle?" + p)
+        return self.put_api_v1("me/player/shuffle?" + q)
 
     def repeat(self, repeat):
         """Set the player to repeat.
@@ -190,7 +190,7 @@ class SpotifyApi(object):
             Reponse: The reponse if successful, otherwise None.
         """
         q = urllib.urlencode({"state": repeat})
-        return self.put_api_v1("me/player/repeat?" + p)
+        return self.put_api_v1("me/player/repeat?" + q)
 
     def volume(self, volume):
         """Set the player volume.
@@ -202,7 +202,7 @@ class SpotifyApi(object):
             Reponse: The reponse if successful, otherwise None.
         """
         q = urllib.urlencode({"volume_percent": volume})
-        return self.put_api_v1("me/player/volume?" + p)
+        return self.put_api_v1("me/player/volume?" + q)
 
     def get_player_state(self):
         """Returns the player state.
