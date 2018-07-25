@@ -17,15 +17,15 @@ class SpotifyObject(object):
     def __setitem__(self, key, value):
         self.info[key] = value
 
+    def str(self, cols):
+        return str(self)
+
 
 class Playlist(SpotifyObject):
     """Represents a Spotify Playlist."""
 
     def __str__(self):
         return self.info['name']
-
-    def str(self, cols):
-        return self.__str__()
 
 
 class Track(SpotifyObject):
@@ -49,14 +49,9 @@ class Track(SpotifyObject):
                       self.track_tuple[2][0:(nchrs / 3) - 2])
 
 
-NoneTrack = Track({"name": "<None>",
-                   "artists": [{"name": "<None>"}],
-                   "album": {"name": "<None>"}})
-
-UnableToFindPlayerTrack = Track({"name": "Unable to find Spotify player",
-                                 #"artists": [{"name": "Press 'p' to see available players."}],
-                                 "artists": [{"name": ""}],
-                                 "album": {"name": ""}})
+NoneTrack = Track({"name": "---",
+                   "artists": [{"name": "---"}],
+                   "album": {"name": "---"}})
 
 
 class Artist(SpotifyObject):
@@ -67,9 +62,6 @@ class Artist(SpotifyObject):
 
     def __str__(self):
         return self.info['name']
-
-    def str(self, cols):
-        return self.__str__()
 
 
 class Album(SpotifyObject):
@@ -82,8 +74,17 @@ class Album(SpotifyObject):
     def __str__(self):
         return "'%s' by '%s'" % (self.info['name'], self.artists)
 
-    def str(self, cols):
-        return self.__str__()
+
+class Device(SpotifyObject):
+    """Represents a device with a Spotify player running."""
+
+    def __str__(self):
+        return "{}: {}".format(self['type'], self['name'])
+
+
+UnableToFindDevice = Device({"type": "Unable to find device",
+                             "name": "Press 's' to see available players",
+                             "id": None})
 
 
 class PlayerAction(object):
@@ -260,6 +261,9 @@ class SpotifyState(object):
         self.search_menu = ListCollection("search",
                                           [List("results")])
 
+        self.select_player_menu = ListCollection("select_player",
+                                                 [List("players")])
+
         self.current_menu = self.main_menu
         """The current model that we are acting on."""
 
@@ -268,6 +272,9 @@ class SpotifyState(object):
 
         self.current_context = None
         """The currently playing context."""
+
+        self.current_device = UnableToFindDevice
+        """The current Device."""
 
         self.paused = True
         """Whether the play is paused or not."""
@@ -295,6 +302,9 @@ class SpotifyState(object):
 
         self.searching = False
         """Whether we are in the search menu or not."""
+
+        self.selecting_player = False
+        """Whether we are selecting a plater or not."""
 
         self.running = True
         """Whether we're running or not."""
@@ -387,13 +397,16 @@ class SpotifyState(object):
             self.currently_playing_track = Track(player_state['item']) \
                 if player_state['item'] else NoneTrack
             self.paused = not player_state['is_playing']
-            self.volume = player_state['device']['volume_percent']
+
+            self.current_device = Device(player_state['device'])
+            self.volume = self.current_device['volume_percent']
 
             self.set_repeat(player_state['repeat_state'])
             self.set_shuffle(player_state['shuffle_state'])
             self.player_state_synced = True
         else:
-            self.currently_playing_track = UnableToFindPlayerTrack
+            self.current_device = UnableToFindDevice
+            self.currently_playing_track = NoneTrack
             self.player_state_synced = False
 
     def process_key(self, key):
@@ -448,8 +461,8 @@ class SpotifyState(object):
                     self.main_menu.get_current_list().decrement_index(
                         10 if key == 547 else 1
                     )
-            elif self.in_search_menu():
-                self.search_menu.get_current_list().decrement_index()
+            else:
+                self.current_menu.get_current_list().decrement_index()
 
         # Down Key
         elif key in [uc.KEY_DOWN, 548]:
@@ -470,8 +483,8 @@ class SpotifyState(object):
                     self.main_menu.get_current_list().increment_index(
                         10 if key == 548 else 1
                     )
-            elif self.in_search_menu():
-                self.search_menu.get_current_list().increment_index()
+            else:
+                self.current_menu.get_current_list().increment_index()
 
         # Backspace
         elif key in [uc.KEY_BACKSPACE, 8]:
@@ -490,6 +503,8 @@ class SpotifyState(object):
                     self.main_menu.get_list('tracks').header = header
             elif self.in_search_menu():
                 self.searching = False
+            elif self.is_selecting_player():
+                self.selecting_player = False
 
         # ASCII character pressed
         elif 0 <= key <= 256:
@@ -524,6 +539,11 @@ class SpotifyState(object):
                     command = self.prev_command
                     command[1] = str(i - 1)
                     self._process_command(" ".join(command))
+
+            if char == 's':
+                self.selecting_player = True
+                devices = self.api.get_devices()
+                self.select_player_menu['players'].update_list(devices)
 
             # Hit enter.
             if key in [13, 10]:
@@ -561,6 +581,10 @@ class SpotifyState(object):
                     # PlayerAction was selected
                     elif self.main_menu.get_current_list().name == "player":
                         self.main_menu.get_current_list_entry().action()
+                elif self.in_select_player_menu():
+                    self.current_device = self.select_player_menu.get_current_list_entry()
+                    self.api.transfer_playback(self.current_device)
+                    self.selecting_player = False
 
             # Hit space -> Toggle play
             if char == " ":
@@ -570,6 +594,8 @@ class SpotifyState(object):
 
         if self.is_searching():
             self.current_menu = self.search_menu
+        elif self.is_selecting_player():
+            self.current_menu = self.select_player_menu
         else:
             self.current_menu = self.main_menu
 
@@ -589,7 +615,7 @@ class SpotifyState(object):
         if command_input[0] == ":":
             if command_input == ":":
                 return
-            elif command_input == ":q":
+            elif command_input.lower() == ":q":
                 command_input = "exit"
             else:
                 command_input = command_input[1::]
@@ -674,12 +700,7 @@ class SpotifyState(object):
         self.running = False
 
     def play(self, track_uri, context_uri):
-        result = self.api.play(track_uri, context_uri)
-        if not result:
-            self.currently_playing_track = UnableToFindPlayerTrack
-        else:
-            # Sync the player state.
-            self.sync_player_state()
+        result = self.api.play(track_uri, context_uri, self.current_device)
 
     def toggle_play(self):
         if self.paused:
@@ -706,6 +727,9 @@ class SpotifyState(object):
 
     def is_searching(self):
         return self.searching
+
+    def is_selecting_player(self):
+        return self.selecting_player
 
     def is_running(self):
         return self.running
@@ -777,3 +801,6 @@ class SpotifyState(object):
 
     def in_search_menu(self):
         return self.current_menu.name == "search"
+
+    def in_select_player_menu(self):
+        return self.current_menu.name == "select_player"
