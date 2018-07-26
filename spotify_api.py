@@ -254,7 +254,7 @@ class SpotifyApi(object):
             list: The Devices.
         """
         results = self.get_api_v1("me/player/devices")
-        if "devices" in results:
+        if results and  "devices" in results:
             return tuple(Device(device) for device in results['devices'])
         else:
             return []
