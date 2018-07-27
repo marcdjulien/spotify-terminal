@@ -2,7 +2,7 @@ import logging
 import os
 import platform
 import unicodedata
-
+import time
 
 def is_windows():
     return platform.system() == "Windows"
@@ -147,3 +147,14 @@ logging.basicConfig(filename=LOGGER_FILENAME,
                     level=logging.DEBUG)
 
 
+class ContextDuration(object):
+    """Measured the duration of the context."""
+
+    def __enter__(self):
+        self.start = time.time()
+        return self
+
+    def __exit__(self, type, value, traceback):
+        self.end = time.time()
+        self.duration = self.end - self.start
+        return self

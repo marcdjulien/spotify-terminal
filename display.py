@@ -19,6 +19,9 @@ class CursesDisplay(object):
     RENDER_PERIOD = 1
 
     def __init__(self, stdscr, sp_state):
+        self.period = 0.05
+        """The period to run the loop."""
+
         self.state = sp_state
         """The SpotifyState object."""
 
@@ -96,23 +99,28 @@ class CursesDisplay(object):
         self.render()
 
         while self._running:
-            # Handle user input.
-            pressed = self.process_input()
+            with common.ContextDuration() as t:
+                # Handle user input.
+                pressed = self.process_input()
 
-            # Are we still running?
-            self._running = self.state.is_running()
+                # Are we still running?
+                self._running = self.state.is_running()
 
-            # Do any calculations related to rendering.
-            self.render_calcs()
+                # Do any calculations related to rendering.
+                self.render_calcs()
 
-            # Render the display if needed.
-            rerender = (time.time() - self._last_render_time) > self.RENDER_PERIOD
-            if pressed or rerender:
-                self.render()
-                self._last_render_time = time.time()
+                # Render the display if needed.
+                rerender = (time.time() - self._last_render_time) > self.RENDER_PERIOD
+                if pressed or rerender:
+                    self.render()
+                    self._last_render_time = time.time()
 
             # Sleep for an amount of time.
-            time.sleep(0.05)
+            sleep_time = self.period - t.duration
+            if sleep_time > 0:
+                time.sleep(sleep_time)
+            else:
+                logger.debug("Cycle took %fs", t.duration)
 
         # Tear down the display.
         logger.debug("Tearing down curses display")

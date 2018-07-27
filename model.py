@@ -108,7 +108,7 @@ class List(object):
     """
 
     def __init__(self, name=None):
-        self.i = 0
+        self.i = -1
         """Currently selected index."""
 
         self.list = tuple()
@@ -127,7 +127,7 @@ class List(object):
             l (iter): The list ot update to.
         """
         self.list = tuple(l)
-        self.i = 0
+        self.i = 0 if self.list else -1
 
     def current_entry(self):
         """Return the currently selected entry.
@@ -135,7 +135,7 @@ class List(object):
         Returns:
             object: The currently selected entry.
         """
-        return self.list[self.i]
+        return self.list[self.i] if self.list else None
 
     def set_index(self, i):
         """Set the selection to 'i'.
@@ -503,11 +503,20 @@ class SpotifyState(object):
                     self.main_menu.get_list('tracks').header = header
             elif self.in_search_menu():
                 self.searching = False
-            elif self.is_selecting_player():
+            elif self.in_select_player_menu():
                 self.selecting_player = False
 
         # ASCII character pressed
         elif 0 <= key <= 256:
+            # Escape
+            if key == 27:
+                if self.in_search_menu():
+                    self.searching = False
+                elif self.in_select_player_menu():
+                    self.selecting_player = False
+                elif self.is_creating_command():
+                    self.creating_command = False
+
             # Convert to character
             char = chr(key)
 
@@ -570,27 +579,31 @@ class SpotifyState(object):
                     if self.main_menu.get_current_list().name == "playlists":
                         # Playlist selected
                         playlist = self.main_menu.get_current_list_entry()
-                        self.set_playlist(playlist)
+                        if playlist:
+                            self.set_playlist(playlist)
 
                     # Track was selected
                     elif self.main_menu.get_current_list().name == "tracks":
                         # Track selected
                         track = self.main_menu.get_current_list_entry()
-                        self.play(track['uri'], context_uri=self.current_context)
+                        if track:
+                            self.play(track['uri'], context_uri=self.current_context)
 
                     # PlayerAction was selected
                     elif self.main_menu.get_current_list().name == "player":
                         self.main_menu.get_current_list_entry().action()
                 elif self.in_select_player_menu():
-                    self.current_device = self.select_player_menu.get_current_list_entry()
-                    self.api.transfer_playback(self.current_device)
-                    self.selecting_player = False
+                    current_device = self.select_player_menu.get_current_list_entry()
+                    if current_device:
+                        self.current_device = current_device
+                        self.api.transfer_playback(self.current_device)
+                        self.selecting_player = False
 
             # Hit space -> Toggle play
             if char == " ":
                 self.toggle_play()
-        # else:
-        #     raise Exception(key)
+        else:
+            logger.debug("Unregistered key: %d", key)
 
         if self.is_searching():
             self.current_menu = self.search_menu
