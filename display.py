@@ -61,6 +61,11 @@ class CursesDisplay(object):
         self._panels['search'] = uc.new_panel(self._windows['search'].window)
         self._ordered_windows.append(self._windows['search'])
 
+        select_player = (self._rows*6/10, self._cols*6/10, self._rows*2/10, self._cols*2/10)
+        self._windows['select_player'] = Window('select_player', uc.newwin(*select_player))
+        self._panels['select_player'] = uc.new_panel(self._windows['select_player'].window)
+        self._ordered_windows.append(self._windows['select_player'])
+
         self._next_update_time = time.time()
         self._last_update_time = time.time()
         self._last_render_time = time.time()
@@ -146,20 +151,33 @@ class CursesDisplay(object):
         """Perform any calculations related to rendering."""
         if time.time() > self._next_update_time and \
             (time.time() - self._last_key_pressed_time) < 10:
-            self.update_currently_playing_track()
+            self.sync_player()
 
     def render(self):
         uc.erase()
+
+        self.set_panel_order()
 
         self.render_user_panel()
         self.render_track_panel()
         self.render_player_panel()
         self.render_footer()
         self.render_search_panel()
+        self.render_select_player_panel()
 
         # Required.
         uc.update_panels()
         uc.doupdate()
+
+    def set_panel_order(self):
+        if self.is_active_window("search"):
+            uc.top_panel(self._panels["search"])
+        elif self.is_active_window("select_player"):
+            uc.top_panel(self._panels["select_player"])
+        else:
+            for panel_name, panel in self._panels.items():
+                if panel_name not in ["search", "select_player"]:
+                    uc.top_panel(panel)
 
     def _init_render_window(self, window_name):
         win = self._windows[window_name].window
@@ -211,17 +229,17 @@ class CursesDisplay(object):
         # Draw border.
         uc.box(win)
 
-        style = uc.A_BOLD
-        uc.mvwaddnstr(win, 1, 2, self.state.get_currently_playing_track().track, cols-3, style)
-        uc.mvwaddnstr(win, 2, 2, self.state.get_currently_playing_track().album, cols-3, style)
-        uc.mvwaddnstr(win, 3, 2, self.state.get_currently_playing_track().artist, cols-3, style)
+        uc.mvwaddnstr(win, 1, 2, self.state.get_currently_playing_track().track, cols-3, uc.A_BOLD)
+        uc.mvwaddnstr(win, 2, 2, self.state.get_currently_playing_track().album, cols-3, uc.A_BOLD)
+        uc.mvwaddnstr(win, 3, 2, self.state.get_currently_playing_track().artist, cols-3, uc.A_BOLD)
+        uc.mvwaddnstr(win, 7, 2, self.state.current_device, cols-3, uc.A_NORMAL)
 
         for i, action in enumerate(self.state.main_menu.get_list("player")):
             if (i == self.state.main_menu['player'].i) and self.is_active_window("player"):
                 style = uc.A_BOLD | uc.A_STANDOUT
             else:
                 style = uc.A_NORMAL
-            uc.mvwaddstr(win, 5, cols/2 + i*4, action.title, style)
+            uc.mvwaddstr(win, 5, 2 + i*4, action.title, style)
 
     def render_footer(self):
         if self.state.is_creating_command():
@@ -237,15 +255,6 @@ class CursesDisplay(object):
             uc.mvwaddstr(self.stdscr, self._rows-1, 3, text, uc.A_BOLD)
 
     def render_search_panel(self):
-        # Determine the correct panel order.
-        # TODO: Move this out to a more generic function?
-        if self.is_active_window("search"):
-            uc.top_panel(self._panels["search"])
-        else:
-            for panel_name, panel in self._panels.items():
-                if panel_name != "search":
-                    uc.top_panel(panel)
-
         win, rows, cols = self._init_render_window("search")
         uc.box(win)
 
@@ -256,6 +265,19 @@ class CursesDisplay(object):
 
         selected_i = self.state.search_menu.get_current_list().i
         self._render_list(win, self.state.search_menu["results"], 3, rows-4, 2, cols-3, selected_i, self.is_active_window("search"))
+
+    def render_select_player_panel(self):
+        win, rows, cols = self._init_render_window("select_player")
+        uc.box(win)
+
+        # Show the title of the context.
+        title_start_line = 1
+        uc.mvwaddnstr(win, title_start_line, 2,
+                      "Select a Player", cols-3, uc.A_BOLD)
+
+        selected_i = self.state.select_player_menu.get_current_list().i
+        self._render_list(win, self.state.select_player_menu["players"], 3, rows-4, 2, cols-3, selected_i, self.is_active_window("select_player"))
+
 
     def _render_list(self, win, list, row_start, n_rows,
                      col_start, n_cols, selected_i, is_active):
@@ -272,14 +294,16 @@ class CursesDisplay(object):
                 style = uc.A_NORMAL
             uc.mvwaddnstr(win, row_start+i, col_start, text, n_cols, style)
 
-    def update_currently_playing_track(self):
-        self.state.poll_currently_playing_track()
+    def sync_player(self):
+        self.state.sync_player_state()
         self._last_update_time = self._next_update_time
         self._next_update_time = time.time() + 30
 
     def is_active_window(self, window_name):
         if self.state.is_searching():
             return window_name == "search"
+        elif self.state.is_selecting_player():
+            return window_name == "select_player"
         else:
             return self.state.main_menu.list_i == self.get_window_position(window_name)
 

@@ -8,11 +8,11 @@ from authentication import authenticate
 from model import (
     Artist,
     Album,
+    Device,
     Track,
     NoneTrack,
     Playlist
 )
-
 
 
 logger = common.logging.getLogger(__name__)
@@ -99,7 +99,7 @@ class SpotifyApi(object):
         """
         return self.username
 
-    def play(self, track_uri=None, context_uri=None):
+    def play(self, track_uri=None, context_uri=None, device=None):
         """Play a Spotify track.
 
         Args:
@@ -127,7 +127,22 @@ class SpotifyApi(object):
             if track_uri.startswith("spotify:track:"):
                 params['uris'] = [track_uri]
 
-        return self.put_api_v1("me/player/play", params)
+        if device and device['id']:
+            query_params = "?" + urllib.urlencode({"device_id": device['id']})
+        else:
+            query_params = ""
+
+        return self.put_api_v1("me/player/play" + query_params, params)
+
+    def transfer_playback(self, device):
+        """Transfer playback to a different Device.
+
+        Args:
+            device (Device): The Device to transfer playback to.
+        """
+        params = {"device_ids": [device['id']],
+                  "play": True}
+        self.put_api_v1("me/player", params)
 
     def pause(self):
         """Pause the player.
@@ -162,8 +177,8 @@ class SpotifyApi(object):
         Returns:
             Reponse: The reponse if successful, otherwise None.
         """
-        p = urllib.urlencode({"state": shuffle})
-        return self.put_api_v1("me/player/shuffle?" + p)
+        q = urllib.urlencode({"state": shuffle})
+        return self.put_api_v1("me/player/shuffle?" + q)
 
     def repeat(self, repeat):
         """Set the player to repeat.
@@ -174,8 +189,8 @@ class SpotifyApi(object):
         Returns:
             Reponse: The reponse if successful, otherwise None.
         """
-        p = urllib.urlencode({"state": repeat})
-        return self.put_api_v1("me/player/repeat?" + p)
+        q = urllib.urlencode({"state": repeat})
+        return self.put_api_v1("me/player/repeat?" + q)
 
     def volume(self, volume):
         """Set the player volume.
@@ -186,8 +201,8 @@ class SpotifyApi(object):
         Returns:
             Reponse: The reponse if successful, otherwise None.
         """
-        p = urllib.urlencode({"volume_percent": volume})
-        return self.put_api_v1("me/player/volume?" + p)
+        q = urllib.urlencode({"volume_percent": volume})
+        return self.put_api_v1("me/player/volume?" + q)
 
     def get_player_state(self):
         """Returns the player state.
@@ -231,6 +246,18 @@ class SpotifyApi(object):
             dict: Users information.
         """
         return self.get_api_v1("users/{}".format(username))
+
+    def get_devices(self):
+        """Return a list of devices with Spotify players running.
+
+        Returns:
+            list: The Devices.
+        """
+        results = self.get_api_v1("me/player/devices")
+        if results and  "devices" in results:
+            return tuple(Device(device) for device in results['devices'])
+        else:
+            return []
 
     def search(self, types, query, limit=20):
         """Calls Spotify's search api.
@@ -284,7 +311,7 @@ class SpotifyApi(object):
         page = self.get_api_v1("artists/{}/albums".format(artist['id']), params)
         albums = self.extract_page(page)
 
-        return tuple([Album(album) for album in albums])
+        return tuple(Album(album) for album in albums)
 
     @uri_cache
     def get_tracks_from_album(self, album):
@@ -331,7 +358,7 @@ class SpotifyApi(object):
             tuple: The Tracks.
         """
         page = self.get_api_v1("me/tracks")
-        return tuple([Track(saved["track"]) for saved in self.extract_page(page)])
+        return tuple(Track(saved["track"]) for saved in self.extract_page(page))
 
     def get_user_playlists(self):
         """Get the Playlists from the current user.
@@ -371,7 +398,7 @@ class SpotifyApi(object):
             params (dict): Query parameters (Default is None).
 
         Returns:
-            Reponse: The HTTP Reponse.
+            dict: The JSON information.
         """
         headers = {"Authorization": "%s %s" % (self.api_token_type, self.api_access_token)}
         api_url = "https://api.spotify.com/v1/{}".format(endpoint)
