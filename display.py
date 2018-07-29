@@ -18,6 +18,8 @@ class CursesDisplay(object):
 
     RENDER_PERIOD = 1
 
+    UPDATE_PERIOD = 30
+
     def __init__(self, stdscr, sp_state):
         self.period = 0.05
         """The period to run the loop."""
@@ -304,8 +306,8 @@ class CursesDisplay(object):
 
     def sync_player(self):
         self.state.sync_player_state()
-        self._last_update_time = self._next_update_time
-        self._next_update_time = time.time() + 30
+        self._last_update_time = time.time()
+        self._next_update_time = time.time() + self.UPDATE_PERIOD
 
     def is_active_window(self, window_name):
         if self.state.is_searching():

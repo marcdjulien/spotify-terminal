@@ -10,9 +10,12 @@ from model import (
     Album,
     Device,
     Track,
+    User,
     NoneTrack,
     Playlist
 )
+
+from cache import UriCache
 
 
 logger = common.logging.getLogger(__name__)
@@ -23,8 +26,8 @@ def needs_authentication(func):
 
     Re-authenticate if the API call fails.
     """
-    def retry(self, *args, **kwargs):
-        """Call then function and retry on authentication failure."""
+    def wrapper(self, *args, **kwargs):
+        """Call then function and wrapper on authentication failure."""
         try:
             return func(self, *args, **kwargs)
         except requests.HTTPError as e:
@@ -47,27 +50,25 @@ def needs_authentication(func):
             logger.warning("Connection Error:")
             logger.warning("\t %s", str(e))
 
-    return retry
+    return wrapper
 
 
 def uri_cache(func):
     """Use the cache to fetch a URI."""
-    def try_cache(self, obj, *args, **kwargs):
-        """USe the cache to fetch the URI."""
-        key = func.__name__ + str(obj['uri'])
+
+    def wrapper(self, obj, *args, **kwargs):
+        """Use the cache to fetch the URI."""
+        key = func.__name__ + ":" + str(obj['uri'])
         result = self._uri_cache.get(key)
         if result:
-            logger.debug("Cache hit: %s(%s %s %s)",
-                         func.__name__, obj, str(args), str(kwargs))
             return result
         else:
-            logger.debug("Cache miss: %s(%s %s %s)",
-                         func.__name__, obj, str(args), str(kwargs))
+            logger.debug("Fetching data from the web")
             result = func(self, obj, *args, **kwargs)
             self._uri_cache[key] = result
             return result
 
-    return try_cache
+    return wrapper
 
 
 class SpotifyApi(object):
@@ -83,7 +84,7 @@ class SpotifyApi(object):
         self.api_access_token = None
         """API access token."""
 
-        self._uri_cache = {}
+        self._uri_cache = UriCache(self.username)
         """Cache of Spotify URIs."""
 
         # Try to use the saved access token.
@@ -360,13 +361,32 @@ class SpotifyApi(object):
         page = self.get_api_v1("me/tracks")
         return tuple(Track(saved["track"]) for saved in self.extract_page(page))
 
-    def get_user_playlists(self):
+    def get_user(self, user_id):
+        """Return a User form an id.
+
+        Args:
+            user_id (str): The user id.
+
+        Returns:
+            USer: The User.
+        """
+        result = self.get_api_v1("users/{}".format(user_id))
+        if result:
+            return User(result)
+        else:
+            return {}
+
+    @uri_cache
+    def get_user_playlists(self, user):
         """Get the Playlists from the current user.
 
+        Args:
+            user (User): The User.
+
         Return:
-            tuple: The Plalists.
+            tuple: The Playlists.
         """
-        url = "users/{}/playlists".format(self.username)
+        url = "users/{}/playlists".format(user['id'])
         page = self.get_api_v1(url)
         return tuple([Playlist(p) for p in self.extract_page(page)])
 

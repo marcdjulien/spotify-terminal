@@ -21,6 +21,10 @@ class SpotifyObject(object):
         return str(self)
 
 
+class User(SpotifyObject):
+    """Represents a Spotify user"""
+
+
 class Playlist(SpotifyObject):
     """Represents a Spotify Playlist."""
 
@@ -333,8 +337,11 @@ class SpotifyState(object):
         #       to set in the rc file.
         self.read_rc_file()
 
+        # Get the User info.
+        self.user = self.api.get_user(self.get_username())
+
         # Get the users playlists.
-        playlists = self.api.get_user_playlists()
+        playlists = self.api.get_user_playlists(self.user)
         if not playlists:
             print("Could not load playlists. Try again later.")
             exit(1)
@@ -354,12 +361,12 @@ class SpotifyState(object):
         # Initialize PlayerActions.
         self.main_menu['player'].update_list([
             PlayerAction("(S)", self.toggle_shuffle),
-            PlayerAction("<<", self.api.previous),
+            PlayerAction("<< ", self.api.previous),
             PlayerAction("(P)", self.toggle_play),
-            PlayerAction(">>", self.api.next),
+            PlayerAction(" >>", self.api.next),
             PlayerAction("(R)", self.toggle_repeat),
-            PlayerAction("--", self.decrease_volume),
-            PlayerAction("++", self.increase_volume),
+            PlayerAction(" --", self.decrease_volume),
+            PlayerAction(" ++", self.increase_volume),
         ])
 
         # Get current player state.
@@ -772,7 +779,6 @@ class SpotifyState(object):
     def set_playlist(self, playlist):
         self.current_context = playlist['uri']
         self.main_menu.set_current_list('tracks')
-        self.main_menu.get_current_list().set_index(0)
         tracks = self.api.get_tracks_from_playlist(playlist)
         if tracks:
             self.set_tracks(tracks)

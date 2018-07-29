@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 
+import argparse
 import sys
 import unicurses as uc
 
@@ -13,18 +14,29 @@ logger = common.logging.getLogger(__name__)
 
 
 if __name__ == '__main__':
-    if len(sys.argv) != 2:
-        print("Usage: spotify.py [username]")
-        exit(1)
+    parser = argparse.ArgumentParser(description="Terminal remote Spotify player.")
+    parser.add_argument("username", help="spotify username")
+    parser.add_argument("-c",
+                      action="store_true",
+                      default=False,
+                      dest="clear_cache",
+                      help="clear the cache")
+    args = parser.parse_args()
 
     common.clear()
     print(common.TITLE)
+
+    # Reset the cache.
+    if args.clear_cache:
+        logger.debug("Clearing the cache")
+        common.clear_cache(args.username)
 
     # Initialize the curses screen.
     stdscr = uc.initscr()
 
     # Create Spotify state.
-    sp_state = SpotifyState(SpotifyApi(sys.argv[1]))
+    api = SpotifyApi(args.username)
+    sp_state = SpotifyState(api)
 
     # Create the display!
     display = CursesDisplay(stdscr, sp_state)

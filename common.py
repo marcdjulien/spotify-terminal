@@ -4,6 +4,7 @@ import platform
 import unicodedata
 import time
 
+
 def is_windows():
     return platform.system() == "Windows"
 
@@ -92,6 +93,48 @@ def get_app_dir():
     return dirname
 
 
+def get_cache(username):
+    """Return the directory of the user's cache.
+
+    Args:
+        username (str): The user name.
+
+    Returns:
+        str: The path to the user's cache.
+    """
+    return os.path.join(CACHE_DIR, username)
+
+
+def clear_cache(username):
+    """Clear the user's cache.
+
+    Args:
+        username (str): The user name.
+    """
+    user_cache = get_cache(username)
+    try:
+        os.rmdir(user_cache)
+    except Exception as e:
+        logger.debug("Could not clear %s", user_cache)
+        logger.debug("%s", e)
+
+
+def create_cache(username):
+    """Create the user's cache.
+
+    If the cache already exists, this has no effect.
+
+    Args:
+        username (str): The user name.
+    """
+    if not os.path.isdir(CACHE_DIR):
+        os.mkdir(CACHE_DIR)
+
+    user_cache = get_cache(username)
+    if not os.path.isdir(user_cache):
+        os.mkdir(user_cache)
+
+
 # Set TEMP_DIR
 APP_DIR = get_app_dir()
 
@@ -99,6 +142,8 @@ APP_DIR = get_app_dir()
 # Authentication filename
 AUTH_FILENAME = os.path.join(APP_DIR, "auth")
 
+# Cache dir
+CACHE_DIR = os.path.join(APP_DIR, ".cache")
 
 # Configuration filename
 CONFIG_FILENAME = os.path.join(APP_DIR, "spotifyrc")
@@ -145,6 +190,9 @@ logging.basicConfig(filename=LOGGER_FILENAME,
                     filemode='w',
                     format='[%(asctime)s][%(levelname)s][%(name)s] %(message)s',
                     level=logging.DEBUG)
+
+
+logger = logging.getLogger(__name__)
 
 
 class ContextDuration(object):
