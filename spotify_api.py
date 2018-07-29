@@ -255,7 +255,7 @@ class SpotifyApi(object):
             list: The Devices.
         """
         results = self.get_api_v1("me/player/devices")
-        if results and  "devices" in results:
+        if results and "devices" in results:
             return tuple(Device(device) for device in results['devices'])
         else:
             return []
@@ -297,7 +297,8 @@ class SpotifyApi(object):
 
     @uri_cache
     def get_albums_from_artist(self, artist,
-                               type=("album", "single", "appears_on", "compilation"), market="US"):
+                               type=("album", "single", "appears_on", "compilation"),
+                               market=common.get_default_market()):
         """Get Albums from a certain Artist.
 
         Args:
@@ -330,6 +331,24 @@ class SpotifyApi(object):
             track['album'] = album
             tracks.append(Track(track))
         return tuple(tracks)
+
+    @uri_cache
+    def get_top_tracks_from_artist(self, artist, market=common.get_default_market()):
+        """Get top tracks from a certain Artist.
+
+        Args:
+            artist (Artist): The Artist to get Tracks from.
+
+        Returns:
+            tuple: The Tracks.
+        """
+        q = urllib.urlencode({"country": market})
+        result = self.get_api_v1("artists/{}/top-tracks?".format(artist['id']) +
+                                 q)
+        if result:
+            return tuple(Track(t) for t in result["tracks"])
+        else:
+            return []
 
     @uri_cache
     def get_tracks_from_playlist(self, playlist):

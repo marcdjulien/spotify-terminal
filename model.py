@@ -456,6 +456,10 @@ class SpotifyState(object):
                 if isinstance(entry, Album):
                     self.searching = False
                     self.set_album(entry)
+                elif isinstance(entry, Artist):
+                    albums = self.api.get_albums_from_artist(entry)
+                    if albums:
+                        self.search_menu['results'].update_list(albums)
 
         # Up Key
         elif key in [uc.KEY_UP, 547]:
@@ -561,6 +565,13 @@ class SpotifyState(object):
                 devices = self.api.get_devices()
                 self.select_player_menu['players'].update_list(devices)
 
+            if char == 'A':
+                entry = self.current_menu.get_current_list_entry()
+                if isinstance(entry, Track):
+                    album = entry['album']
+                    self.set_album(album)
+                    self.searching = False
+
             # Hit enter.
             if key in [13, 10]:
                 if self.is_creating_command():
@@ -568,19 +579,17 @@ class SpotifyState(object):
                 elif self.in_search_menu():
                     entry = self.search_menu.get_current_list_entry()
                     if isinstance(entry, Artist):
-                        # TODO: Should play Artist context
-                        #       and get top-tracks as the Track list
-                        #       and move this current behavior to right-arrow key
-                        albums = self.api.get_albums_from_artist(entry)
-                        if albums:
-                            self.search_menu['results'].update_list(albums)
+                        tracks = self.api.get_top_tracks_from_artist(entry)
+                        if tracks:
+                            self.current_context = None
+                            self.set_tracks(tracks)
+                            self.main_menu.get_list('tracks').header = entry['name'] + " Top Tracks"
                     elif isinstance(entry, Album):
-                        self.searching = False
                         self.set_album(entry)
-                        self.play(None, context_uri=entry['uri'])
                     elif isinstance(entry, Track):
-                        self.searching = False
                         self.play(entry['uri'], context_uri=None)
+                    # Always quit search menu after hitting Enter.
+                    self.searching = False
                 elif self.in_main_menu():
                     # Playlist was selected.
                     if self.main_menu.get_current_list().name == "playlists":

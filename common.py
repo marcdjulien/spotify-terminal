@@ -5,6 +5,17 @@ import unicodedata
 import time
 
 
+def get_default_market():
+    """Return the default market.
+
+    Currently only supports US.
+
+    Returns:
+        str: The default market.
+    """
+    return "US"
+
+
 def is_windows():
     return platform.system() == "Windows"
 
