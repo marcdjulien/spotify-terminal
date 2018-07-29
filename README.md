@@ -91,12 +91,14 @@ By typing ```:``` you can enter commands. The following is a list of all command
 
 ```exit``` | Exit the application.
 
-# Other Tips
+# Other Tips and Tricks
 Type ```/``` is a shortcut to the find command. You can also type ```n``` or ```p``` to find a next or previous entry.
 
-Use ```:q``` to exit.
+```:q``` to exit.
 
-Use ```Backspace``` to cycle through previous Track listings.
+```Backspace``` to cycle through previous Track listings.
+
+```Shift + A``` on any Track to immediately go to the Album track list.
 
 # Notes
 This has only been tested on Linux and Windows.
