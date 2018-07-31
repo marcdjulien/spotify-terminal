@@ -1,6 +1,7 @@
 import logging
 import os
 import platform
+import shutil
 import unicodedata
 import time
 
@@ -124,7 +125,7 @@ def clear_cache(username):
     """
     user_cache = get_cache(username)
     try:
-        os.rmdir(user_cache)
+        shutil.rmtree(user_cache)
     except Exception as e:
         logger.debug("Could not clear %s", user_cache)
         logger.debug("%s", e)

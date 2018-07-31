@@ -49,6 +49,9 @@ def needs_authentication(func):
         except requests.ConnectionError as e:
             logger.warning("Connection Error:")
             logger.warning("\t %s", str(e))
+        except BaseException as e:
+            common.clear()
+            raise
 
     return wrapper
 

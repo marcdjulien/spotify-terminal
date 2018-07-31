@@ -92,7 +92,7 @@ By typing ```:``` you can enter commands. The following is a list of all command
 ```exit``` | Exit the application.
 
 # Other Tips and Tricks
-Type ```/``` is a shortcut to the find command. You can also type ```n``` or ```p``` to find a next or previous entry.
+Type ```/``` is a shortcut to the find command. You can also type ```n``` or ```p``` to find a next or previous entry (similar to vim).
 
 ```:q``` to exit.
 

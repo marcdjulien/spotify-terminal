@@ -29,7 +29,7 @@ class Playlist(SpotifyObject):
     """Represents a Spotify Playlist."""
 
     def __str__(self):
-        return self.info['name']
+        return self['name']
 
 
 class Track(SpotifyObject):
@@ -43,7 +43,7 @@ class Track(SpotifyObject):
         self.track, self.album, self.artist = self.track_tuple
 
     def __str__(self):
-        return "'%s' on '%s' by '%s'" % self.track_tuple
+        return "%s on %s by %s" % self.track_tuple
 
     def str(self, cols):
         nchrs = cols - 3
@@ -65,7 +65,7 @@ class Artist(SpotifyObject):
         super(Artist, self).__init__(artist)
 
     def __str__(self):
-        return self.info['name']
+        return self['name']
 
 
 class Album(SpotifyObject):
@@ -75,8 +75,20 @@ class Album(SpotifyObject):
         super(Album, self).__init__(album)
         self.artists = ", ".join(a['name'] for a in self['artists'])
 
+        if "release_date" in self.info:
+            year = self['release_date'][0:min(4, len(self['release_date']))]
+        else:
+            year = ""
+        info = [self['album_type'].capitalize()]
+        if year:
+            info.append(year)
+
+        self.extra_info = ", ".join(info)
+
     def __str__(self):
-        return "'%s' by '%s'" % (self.info['name'], self.artists)
+        return "%s [%s] by %s" % (self['name'],
+                                  self.extra_info,
+                                  self.artists)
 
 
 class Device(SpotifyObject):
@@ -340,6 +352,10 @@ class SpotifyState(object):
         # Get the User info.
         self.user = self.api.get_user(self.get_username())
 
+        if not self.user:
+            print("Could not load user {}".format(self.get_username()))
+            exit(1)
+
         # Get the users playlists.
         playlists = self.api.get_user_playlists(self.user)
         if not playlists:
@@ -412,7 +428,6 @@ class SpotifyState(object):
             self.set_shuffle(player_state['shuffle_state'])
             self.player_state_synced = True
         else:
-            self.current_device = UnableToFindDevice
             self.currently_playing_track = NoneTrack
             self.player_state_synced = False
 
@@ -564,6 +579,9 @@ class SpotifyState(object):
                 self.selecting_player = True
                 devices = self.api.get_devices()
                 self.select_player_menu['players'].update_list(devices)
+
+            if char == 'r':
+                self.sync_player_state()
 
             if char == 'A':
                 entry = self.current_menu.get_current_list_entry()
