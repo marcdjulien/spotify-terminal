@@ -1,7 +1,6 @@
 #!/usr/bin/env python
 
 import argparse
-import sys
 import unicurses as uc
 
 import common
@@ -17,12 +16,13 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description="Terminal remote Spotify player.")
     parser.add_argument("username", help="spotify username")
     parser.add_argument("-c",
-                      action="store_true",
-                      default=False,
-                      dest="clear_cache",
-                      help="clear the cache")
+                        action="store_true",
+                        default=False,
+                        dest="clear_cache",
+                        help="clear the cache")
     args = parser.parse_args()
 
+    # Clear the console then print the title screen.
     common.clear()
     print(common.TITLE)
 

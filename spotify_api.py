@@ -26,32 +26,30 @@ def needs_authentication(func):
 
     Re-authenticate if the API call fails.
     """
+    @common.catch_exceptions
     def wrapper(self, *args, **kwargs):
         """Call then function and wrapper on authentication failure."""
         try:
             return func(self, *args, **kwargs)
         except requests.HTTPError as e:
             msg = str(e)
+            logger.debug("Exception hit in needs_authentication: %s", msg)
             if "Unauthorized" in msg or "Expired" in msg:
                 logger.warning("Failed to make request. Re-authenticating.")
                 self.auth_from_web()
                 try:
                     return func(*args, **kwargs)
-                except Exception:
+                except Exception as e2:
                     logger.warning("Failed again after re-authenticating. "
                                    "Giving up on the following:")
                     logger.warning("\t%s %s", args, kwargs)
-                    logger.warning("\t %s", e)
+                    logger.warning("\t %s", e2)
             else:
                 logger.warning("Failed to make API call:")
                 logger.warning("\t%s %s", args, kwargs)
                 logger.warning("\t %s", e)
         except requests.ConnectionError as e:
-            logger.warning("Connection Error:")
-            logger.warning("\t %s", str(e))
-        except BaseException as e:
-            common.clear()
-            raise
+            logger.warning("Connection Error: %s", str(e))
 
     return wrapper
 
@@ -59,6 +57,7 @@ def needs_authentication(func):
 def uri_cache(func):
     """Use the cache to fetch a URI."""
 
+    @common.catch_exceptions
     def wrapper(self, obj, *args, **kwargs):
         """Use the cache to fetch the URI."""
         key = func.__name__ + ":" + str(obj['uri'])
@@ -66,7 +65,7 @@ def uri_cache(func):
         if result:
             return result
         else:
-            logger.debug("Fetching data from the web")
+            logger.debug("Fetching data from the web...")
             result = func(self, obj, *args, **kwargs)
             self._uri_cache[key] = result
             return result
@@ -116,7 +115,9 @@ class SpotifyApi(object):
         params = {}
         if context_uri:
             params = {"context_uri": context_uri}
-            if track_uri is None:
+            if context_uri.startswith("spotify:artist"):
+                pass
+            elif track_uri is None:
                 # No track given, play the first one.
                 params["offset"] = {"position": 0}
             else:
@@ -128,7 +129,7 @@ class SpotifyApi(object):
 
         # No context given, just play the track.
         if track_uri and not context_uri:
-            if track_uri.startswith("spotify:track:"):
+            if track_uri.startswith("spotify:track"):
                 params['uris'] = [track_uri]
 
         if device and device['id']:
@@ -339,6 +340,8 @@ class SpotifyApi(object):
     def get_top_tracks_from_artist(self, artist, market=common.get_default_market()):
         """Get top tracks from a certain Artist.
 
+        This also returns a pseudo-track to play the Artist context.
+
         Args:
             artist (Artist): The Artist to get Tracks from.
 
@@ -348,8 +351,12 @@ class SpotifyApi(object):
         q = urllib.urlencode({"country": market})
         result = self.get_api_v1("artists/{}/top-tracks?".format(artist['id']) +
                                  q)
+
+        play_artist = Artist(artist)
+        play_artist['name'] = "Play {}".format(artist['name'])
+
         if result:
-            return tuple(Track(t) for t in result["tracks"])
+            return tuple([play_artist] + list(Track(t) for t in result["tracks"]))
         else:
             return []
 
@@ -444,7 +451,10 @@ class SpotifyApi(object):
         """
         headers = {"Authorization": "%s %s" % (self.api_token_type, self.api_access_token)}
         api_url = "https://api.spotify.com/v1/{}".format(endpoint)
-        return self.get_json(api_url, headers=headers, params=params)
+        data =  self.get_json(api_url, headers=headers, params=params)
+        if not data:
+            logger.info("GET return no data")
+        return data
 
     @needs_authentication
     def put_api_v1(self, endpoint, params=None):

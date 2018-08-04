@@ -2,8 +2,22 @@ import logging
 import os
 import platform
 import shutil
-import unicodedata
 import time
+import traceback
+import unicodedata
+
+
+def catch_exceptions(func):
+    """Catch an exception and print it."""
+    def wrapper(*args, **kwargs):
+        try:
+            return func(*args, **kwargs)
+        except BaseException:
+            clear()
+            traceback.print_exc()
+            os._exit(1)
+
+    return wrapper
 
 
 def get_default_market():
@@ -30,7 +44,7 @@ def clear():
     if is_windows():
         os.system('cls')
     elif is_linux():
-        os.system("clear")
+        os.system("reset")
 
 
 def is_int(n):

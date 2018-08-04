@@ -98,7 +98,12 @@ Type ```/``` is a shortcut to the find command. You can also type ```n``` or ```
 
 ```Backspace``` to cycle through previous Track listings.
 
-```Shift + A``` on any Track to immediately go to the Album track list.
+```Shift + S``` on any entry to immediately go to the Album track list.
+
+```Shift + D``` on any entry to immediately go to the Artist page.
+
+```Shift + R``` to re-sync the payer.
+
 
 # Notes
 This has only been tested on Linux and Windows.

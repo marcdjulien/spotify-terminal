@@ -1,3 +1,4 @@
+import copy
 import unicurses as uc
 
 import common
@@ -9,7 +10,7 @@ class SpotifyObject(object):
     """A SpotifyObject represents a collection of data in Spotify."""
 
     def __init__(self, info):
-        self.info = info
+        self.info = copy.deepcopy(info)
 
     def __getitem__(self, key):
         return self.info[key]
@@ -37,9 +38,9 @@ class Track(SpotifyObject):
 
     def __init__(self, track):
         super(Track, self).__init__(track)
-        self.track_tuple = (track['name'],
-                            track['album']['name'],
-                            ", ".join(artist['name'] for artist in track['artists']))
+        self.track_tuple = (self['name'],
+                            self['album']['name'],
+                            ", ".join(artist['name'] for artist in self['artists']))
         self.track, self.album, self.artist = self.track_tuple
 
     def __str__(self):
@@ -67,6 +68,9 @@ class Artist(SpotifyObject):
     def __str__(self):
         return self['name']
 
+    def str(self, cols):
+        return "%{}s".format(cols-5) % self['name']
+
 
 class Album(SpotifyObject):
     """Represents a Spotify Album."""
@@ -90,6 +94,9 @@ class Album(SpotifyObject):
                                   self.extra_info,
                                   self.artists)
 
+    def str(self, cols):
+        return "%{}s".format(cols-5) % str(self)
+
 
 class Device(SpotifyObject):
     """Represents a device with a Spotify player running."""
@@ -99,7 +106,7 @@ class Device(SpotifyObject):
 
 
 UnableToFindDevice = Device({"type": "Unable to find device",
-                             "name": "Press 's' to see available players",
+                             "name": "Press 'W' to see available players",
                              "id": None})
 
 
@@ -575,20 +582,27 @@ class SpotifyState(object):
                     command[1] = str(i - 1)
                     self._process_command(" ".join(command))
 
-            if char == 's':
+            if char == 'W':
                 self.selecting_player = True
                 devices = self.api.get_devices()
                 self.select_player_menu['players'].update_list(devices)
 
-            if char == 'r':
+            if char == 'R':
                 self.sync_player_state()
 
-            if char == 'A':
+            if char == 'D':
+                entry = self.current_menu.get_current_list_entry()
+                if isinstance(entry, Track):
+                    artist = entry['artists'][0]
+                    self.set_artist(artist)
+
+            if char == 'S':
                 entry = self.current_menu.get_current_list_entry()
                 if isinstance(entry, Track):
                     album = entry['album']
                     self.set_album(album)
-                    self.searching = False
+                elif isinstance(entry, Album):
+                    self.set_album(entry)
 
             # Hit enter.
             if key in [13, 10]:
@@ -597,11 +611,7 @@ class SpotifyState(object):
                 elif self.in_search_menu():
                     entry = self.search_menu.get_current_list_entry()
                     if isinstance(entry, Artist):
-                        tracks = self.api.get_top_tracks_from_artist(entry)
-                        if tracks:
-                            self.current_context = None
-                            self.set_tracks(tracks)
-                            self.main_menu.get_list('tracks').header = entry['name'] + " Top Tracks"
+                        self.set_artist(entry)
                     elif isinstance(entry, Album):
                         self.set_album(entry)
                     elif isinstance(entry, Track):
@@ -616,12 +626,17 @@ class SpotifyState(object):
                         if playlist:
                             self.set_playlist(playlist)
 
-                    # Track was selected
+                    # Track/Artist was selected
                     elif self.main_menu.get_current_list().name == "tracks":
                         # Track selected
-                        track = self.main_menu.get_current_list_entry()
-                        if track:
-                            self.play(track['uri'], context_uri=self.current_context)
+                        entry = self.main_menu.get_current_list_entry()
+                        if isinstance(entry, Artist):
+                            self.play(None, context_uri=entry['uri'])
+                        elif isinstance(entry, Album):
+                            self.set_album(entry)
+                            self.play(None, context_uri=entry['uri'])
+                        elif isinstance(entry, Track):
+                            self.play(entry['uri'], context_uri=self.current_context)
 
                     # PlayerAction was selected
                     elif self.main_menu.get_current_list().name == "player":
@@ -730,7 +745,7 @@ class SpotifyState(object):
             self.api.repeat(state)
 
     def _execute_volume(self, volume):
-        volume = int(volume)
+        volume = common.clamp(int(volume), 0, 100)
         if 0 <= volume and volume <= 100:
             self.volume = volume
             self.api.volume(self.volume)
@@ -747,7 +762,7 @@ class SpotifyState(object):
         self.running = False
 
     def play(self, track_uri, context_uri):
-        result = self.api.play(track_uri, context_uri, self.current_device)
+        self.api.play(track_uri, context_uri, self.current_device)
 
     def toggle_play(self):
         if self.paused:
@@ -805,22 +820,32 @@ class SpotifyState(object):
 
     def set_playlist(self, playlist):
         self.current_context = playlist['uri']
-        self.main_menu.set_current_list('tracks')
         tracks = self.api.get_tracks_from_playlist(playlist)
         if tracks:
             self.set_tracks(tracks)
             self.main_menu.get_list('tracks').header = playlist['name']
 
+    def set_artist(self, artist):
+        self.searching = False
+        self.current_context = None
+        selections = self.api.get_top_tracks_from_artist(artist)
+        selections += self.api.get_albums_from_artist(artist)
+        if selections:
+            self.set_tracks(selections)
+            self.main_menu.get_list('tracks').header = artist['name']
+
     def set_album(self, album):
+        self.searching = False
         self.current_context = album['uri']
-        self.main_menu.set_current_list('tracks')
-        self.main_menu.get_current_list().set_index(0)
         tracks = self.api.get_tracks_from_album(album)
         if tracks:
             self.set_tracks(tracks)
             self.main_menu.get_list('tracks').header = album['name']
 
     def set_tracks(self, tracks):
+        self.main_menu.set_current_list('tracks')
+        self.main_menu.get_list('tracks').set_index(0)
+
         # Save the current Track list to history.
         if self.main_menu.get_list('tracks').list:
             self.previous_tracks.append((self.main_menu.get_list('tracks').header,

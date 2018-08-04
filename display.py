@@ -47,37 +47,34 @@ class CursesDisplay(object):
 
         # Add the windows.
         user = (self._rows-2, self._cols/4, 0, 0)
-        self._windows['user'] = Window('user', uc.newwin(*user))
-        self._panels['user'] = uc.new_panel(self._windows['user'].window)
-        self._ordered_windows.append(self._windows['user'])
-
         tracks = (self._rows*2/3, (self._cols - 1 - (user[1])), 0, user[1]+user[3])
-        self._windows['tracks'] = Window('tracks', uc.newwin(*tracks))
-        self._panels['tracks'] = uc.new_panel(self._windows['tracks'].window)
-        self._ordered_windows.append(self._windows['tracks'])
-
-        player = (self._rows*1/3-1, tracks[1], tracks[0], tracks[3])
-        self._windows['player'] = Window('player', uc.newwin(*player))
-        self._panels['player'] = uc.new_panel(self._windows['player'].window)
-        self._ordered_windows.append(self._windows['player'])
-
+        player = (self._rows*1/3-2, tracks[1], tracks[0], tracks[3])
         search = (self._rows*8/10, self._cols*8/10, self._rows/10, self._cols/10)
-        self._windows['search'] = Window('search', uc.newwin(*search))
-        self._panels['search'] = uc.new_panel(self._windows['search'].window)
-        self._ordered_windows.append(self._windows['search'])
-
         select_player = (self._rows*6/10, self._cols*6/10, self._rows*2/10, self._cols*2/10)
-        self._windows['select_player'] = Window('select_player', uc.newwin(*select_player))
-        self._panels['select_player'] = uc.new_panel(self._windows['select_player'].window)
-        self._ordered_windows.append(self._windows['select_player'])
+
+        self._register_window(user, "user")
+        self._register_window(tracks, "tracks")
+        self._register_window(player, "player")
+        self._register_window(search, "search")
+        self._register_window(select_player, "select_player")
 
         self._next_update_time = time.time()
-        self._last_update_time = time.time()
         self._last_render_time = time.time()
         self._last_key_pressed_time = time.time()
 
         # Initialize the display.
         self._init_curses()
+
+    def _register_window(self, size, name):
+        """Register a window
+
+        Args:
+            size (tuple): The size of the window.
+            name (str): The name of the window.
+        """
+        self._windows[name] = Window(name, uc.newwin(*size))
+        self._panels[name] = uc.new_panel(self._windows[name].window)
+        self._ordered_windows.append(self._windows[name])
 
     def _init_curses(self):
         """Initialize the curses environment and windows."""
@@ -97,6 +94,7 @@ class CursesDisplay(object):
 
     def start(self):
         logger.info("Starting curses display loop")
+
         # Initial render.
         self.render()
 
@@ -160,7 +158,7 @@ class CursesDisplay(object):
     def render_calcs(self):
         """Perform any calculations related to rendering."""
         if time.time() > self._next_update_time and \
-            (time.time() - self._last_key_pressed_time) < 10:
+           (time.time() - self._last_key_pressed_time) < 10:
             self.sync_player()
 
     def render(self):
@@ -306,7 +304,6 @@ class CursesDisplay(object):
 
     def sync_player(self):
         self.state.sync_player_state()
-        self._last_update_time = time.time()
         self._next_update_time = time.time() + self.UPDATE_PERIOD
 
     def is_active_window(self, window_name):
