@@ -142,12 +142,11 @@ class CursesDisplay(object):
         while self._key_buf:
             self._last_key_pressed_time = time.time()
             key_pressed = True
-
             key = self._key_buf.pop()
 
             # Enter key
             if key in [13, 10]:
-                # We probably just selected a Track, lket's plan to update the
+                # We probably just selected a Track, let's plan to update the
                 # currently playing track in 1 second.
                 self._next_update_time = time.time() + 1
 

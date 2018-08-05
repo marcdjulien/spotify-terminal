@@ -102,7 +102,7 @@ Type ```/``` is a shortcut to the find command. You can also type ```n``` or ```
 
 ```Shift + D``` on any entry to immediately go to the Artist page.
 
-```Shift + R``` to re-sync the payer.
+```Shift + R``` to re-sync the player.
 
 
 # Notes

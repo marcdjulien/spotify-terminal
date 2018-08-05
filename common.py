@@ -188,29 +188,15 @@ TITLE = """
 /____/ .___/\____/\__/_/_/  \__, /
     /_/                    /____/
        ______                    _             __
-      /_  _____  _________ ___  (_____  ____ _/ /
+      /_  _____  _________ ___  (_)___  ____ _/ /
        / / / _ \/ ___/ __ `__ \/ / __ \/ __ `/ /
       / / /  __/ /  / / / / / / / / / / /_/ / /
      /_/  \___/_/  /_/ /_/ /_/_/_/ /_/\__,_/_/
 
- by marcdjulien
+
+   [marcdjulien] v0.8
 """
 
-HTML_TITLE = """
-<br>
-<br>   _____             __  _ ____
-<br>  / ___/____  ____  / /_(_/ ____  __
-<br>  \__ \/ __ \/ __ \/ __/ / /_/ / / /
-<br> ___/ / /_/ / /_/ / /_/ / __/ /_/ /
-<br>/____/ .___/\____/\__/_/_/  \__, /
-<br>    /_/                    /____/
-<br>       ______                    _             __
-<br>      /_  _____  _________ ___  (_____  ____ _/ /
-<br>       / / / _ \/ ___/ __ `__ \/ / __ \/ __ `/ /
-<br>      / / /  __/ /  / / / / / / / / / / /_/ / /
-<br>     /_/  \___/_/  /_/ /_/ /_/_/_/ /_/\__,_/_/
-<br>
-"""
 
 logging.basicConfig(filename=LOGGER_FILENAME,
                     filemode='w',
@@ -228,7 +214,8 @@ class ContextDuration(object):
         self.start = time.time()
         return self
 
-    def __exit__(self, type, value, traceback):
+    def __exit__(self, exception, value, traceback):
         self.end = time.time()
         self.duration = self.end - self.start
-        return self
+        if not exception:
+            return self

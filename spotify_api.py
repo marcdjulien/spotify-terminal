@@ -2,9 +2,11 @@ import urllib
 import json
 import os
 import requests
+from threading import Thread
 
 import common
 from authentication import authenticate
+from cache import UriCache
 from model import (
     Artist,
     Album,
@@ -14,8 +16,6 @@ from model import (
     NoneTrack,
     Playlist
 )
-
-from cache import UriCache
 
 
 logger = common.logging.getLogger(__name__)
@@ -73,6 +73,16 @@ def uri_cache(func):
     return wrapper
 
 
+def async(func):
+    """Execute the function asynchronously"""
+
+    @common.catch_exceptions
+    def wrapper(*args, **kwargs):
+        Thread(target=func, args=args, kwargs=kwargs).start()
+
+    return wrapper
+
+
 class SpotifyApi(object):
     """Interface to make API calls."""
 
@@ -102,15 +112,13 @@ class SpotifyApi(object):
         """
         return self.username
 
+    @async
     def play(self, track_uri=None, context_uri=None, device=None):
         """Play a Spotify track.
 
         Args:
             track_uri (str): The track uri.
             context_uri (str): The context uri.
-
-        Returns:
-            Reponse: The reponse if successful, otherwise None.
         """
         params = {}
         if context_uri:
@@ -137,8 +145,7 @@ class SpotifyApi(object):
         else:
             query_params = ""
 
-        return self.put_api_v1("me/player/play" + query_params, params)
-
+    @async
     def transfer_playback(self, device):
         """Transfer playback to a different Device.
 
@@ -149,65 +156,50 @@ class SpotifyApi(object):
                   "play": True}
         self.put_api_v1("me/player", params)
 
+    @async
     def pause(self):
-        """Pause the player.
+        """Pause the player."""
+        self.put_api_v1("me/player/pause")
 
-        Returns:
-            Reponse: The reponse if successful, otherwise None.
-        """
-        return self.put_api_v1("me/player/pause")
-
+    @async
     def next(self):
-        """Play the next song.
+        """Play the next song."""
+        self.post_api_v1("me/player/next")
 
-        Returns:
-            Reponse: The reponse if successful, otherwise None.
-        """
-        return self.post_api_v1("me/player/next")
-
+    @async
     def previous(self):
-        """Play the previous song.
+        """Play the previous song."""
+        self.post_api_v1("me/player/previous")
 
-        Returns:
-            Reponse: The reponse if successful, otherwise None.
-        """
-        return self.post_api_v1("me/player/previous")
-
+    @async
     def shuffle(self, shuffle):
         """Set the player to shuffle.
 
         Args:
             shuffle (bool): Whether to shuffle or not.
-
-        Returns:
-            Reponse: The reponse if successful, otherwise None.
         """
         q = urllib.urlencode({"state": shuffle})
-        return self.put_api_v1("me/player/shuffle?" + q)
+        self.put_api_v1("me/player/shuffle?" + q)
 
+    @async
     def repeat(self, repeat):
         """Set the player to repeat.
 
         Args:
             repeat (bool): Whether to repeat or not.
-
-        Returns:
-            Reponse: The reponse if successful, otherwise None.
         """
         q = urllib.urlencode({"state": repeat})
-        return self.put_api_v1("me/player/repeat?" + q)
+        self.put_api_v1("me/player/repeat?" + q)
 
+    @async
     def volume(self, volume):
         """Set the player volume.
 
         Args:
             volume (int): Volume level. 0 - 100 (inclusive).
-
-        Returns:
-            Reponse: The reponse if successful, otherwise None.
         """
         q = urllib.urlencode({"volume_percent": volume})
-        return self.put_api_v1("me/player/volume?" + q)
+        self.put_api_v1("me/player/volume?" + q)
 
     def get_player_state(self):
         """Returns the player state.

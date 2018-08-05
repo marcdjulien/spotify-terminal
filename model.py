@@ -323,6 +323,10 @@ class SpotifyState(object):
         self.command_query = []
         """The command being typed."""
 
+        self.command_history = []
+        self.command_history_i = 0
+        """History of commands."""
+
         self.searching = False
         """Whether we are in the search menu or not."""
 
@@ -440,219 +444,6 @@ class SpotifyState(object):
 
     def process_key(self, key):
         self._process_key(key)
-        self._clamp_values()
-
-    def _process_key(self, key):
-        # Left Key
-        if key in [uc.KEY_LEFT, 391]:
-            # Typing in a command -> move cursor left
-            if self.is_creating_command():
-                self.command_cursor_i -= 1
-            else:
-                if self.in_main_menu():
-                    # In the Player section -> move selection left
-                    if self.main_menu.get_current_list().name == "player":
-                        # At the first entry -> so move to previous section
-                        if self.main_menu["player"].get_index() == 0:
-                            self.main_menu.decrement_list()
-                        else:
-                            self.main_menu.get_current_list().decrement_index()
-                    # In another section -> move to previous section
-                    else:
-                        self.main_menu.decrement_list()
-
-        # Right Key
-        elif key in [uc.KEY_RIGHT, 400]:
-            if self.in_main_menu():
-                # Same as Left Key but in the other direction
-                if self.is_creating_command():
-                    self.command_cursor_i += 1
-                else:
-                    if self.in_main_menu():
-                        if self.main_menu.get_current_list().name == "player":
-                            self.main_menu.get_current_list().increment_index()
-                        else:
-                            self.main_menu.increment_list()
-            elif self.in_search_menu():
-                entry = self.search_menu.get_current_list_entry()
-                if isinstance(entry, Album):
-                    self.searching = False
-                    self.set_album(entry)
-                elif isinstance(entry, Artist):
-                    albums = self.api.get_albums_from_artist(entry)
-                    if albums:
-                        self.search_menu['results'].update_list(albums)
-
-        # Up Key
-        elif key in [uc.KEY_UP, 547]:
-            if self.in_main_menu():
-                # In the Player section -> move to previous section
-                if self.main_menu.get_current_list().name == "player":
-                    self.main_menu.decrement_list()
-                # In another section -> Move selection up
-                else:
-                    self.main_menu.get_current_list().decrement_index(
-                        10 if key == 547 else 1
-                    )
-            else:
-                self.current_menu.get_current_list().decrement_index()
-
-        # Down Key
-        elif key in [uc.KEY_DOWN, 548]:
-            if self.in_main_menu():
-                # Same as Up but in other sirection
-                if self.main_menu.get_current_list().name == "player":
-                    self.main_menu.increment_list()
-                elif self.main_menu.get_current_list().name == "tracks":
-                    # Last selection in Track section -> Move to next section
-                    if self.main_menu["tracks"].i == len(self.main_menu.get_list("tracks")) - 1:
-                        self.main_menu.increment_list()
-                    # Not last selection -> Move selection down
-                    else:
-                        self.main_menu.get_current_list().increment_index(
-                            10 if key == 548 else 1
-                        )
-                else:
-                    self.main_menu.get_current_list().increment_index(
-                        10 if key == 548 else 1
-                    )
-            else:
-                self.current_menu.get_current_list().increment_index()
-
-        # Backspace
-        elif key in [uc.KEY_BACKSPACE, 8]:
-            # Creating a command -> Treat as a normal backspace
-            if self.is_creating_command():
-                if self.command_cursor_i > 0:
-                    self.get_command_query().pop(self.command_cursor_i - 1)
-                    self.command_cursor_i -= 1
-                # No text to delete -> Stop creating command
-                else:
-                    self.creating_command = False
-            elif self.in_main_menu():
-                if self.previous_tracks:
-                    header, tracks = self.previous_tracks.pop()
-                    self.set_tracks(tracks)
-                    self.main_menu.get_list('tracks').header = header
-            elif self.in_search_menu():
-                self.searching = False
-            elif self.in_select_player_menu():
-                self.selecting_player = False
-
-        # ASCII character pressed
-        elif 0 <= key <= 256:
-            # Escape
-            if key == 27:
-                if self.in_search_menu():
-                    self.searching = False
-                elif self.in_select_player_menu():
-                    self.selecting_player = False
-                elif self.is_creating_command():
-                    self.creating_command = False
-
-            # Convert to character
-            char = chr(key)
-
-            # Creating a command -> Construct text
-            if self.is_creating_command():
-                if 32 <= key and key <= 126:
-                    self.get_command_query().insert(self.command_cursor_i, char)
-                    self.command_cursor_i += 1
-                    return
-
-            if char in ['/', ':', '#']:
-                # Start creating command
-                if not self.is_creating_command():
-                    self.set_command_query(char)
-                    self.command_cursor_i = 1
-                    self.creating_command = True
-                    return
-
-            if char == "n":
-                if self.prev_command[0] in ["find"]:
-                    i = int(self.prev_command[1])
-                    command = self.prev_command
-                    command[1] = str(i + 1)
-                    self._process_command(" ".join(command))
-
-            if char == "p":
-                if self.prev_command[0] in ["find"]:
-                    i = int(self.prev_command[1])
-                    command = self.prev_command
-                    command[1] = str(i - 1)
-                    self._process_command(" ".join(command))
-
-            if char == 'W':
-                self.selecting_player = True
-                devices = self.api.get_devices()
-                self.select_player_menu['players'].update_list(devices)
-
-            if char == 'R':
-                self.sync_player_state()
-
-            if char == 'D':
-                entry = self.current_menu.get_current_list_entry()
-                if isinstance(entry, Track):
-                    artist = entry['artists'][0]
-                    self.set_artist(artist)
-
-            if char == 'S':
-                entry = self.current_menu.get_current_list_entry()
-                if isinstance(entry, Track):
-                    album = entry['album']
-                    self.set_album(album)
-                elif isinstance(entry, Album):
-                    self.set_album(entry)
-
-            # Hit enter.
-            if key in [13, 10]:
-                if self.is_creating_command():
-                    self._process_command(self.get_command_query())
-                elif self.in_search_menu():
-                    entry = self.search_menu.get_current_list_entry()
-                    if isinstance(entry, Artist):
-                        self.set_artist(entry)
-                    elif isinstance(entry, Album):
-                        self.set_album(entry)
-                    elif isinstance(entry, Track):
-                        self.play(entry['uri'], context_uri=None)
-                    # Always quit search menu after hitting Enter.
-                    self.searching = False
-                elif self.in_main_menu():
-                    # Playlist was selected.
-                    if self.main_menu.get_current_list().name == "playlists":
-                        # Playlist selected
-                        playlist = self.main_menu.get_current_list_entry()
-                        if playlist:
-                            self.set_playlist(playlist)
-
-                    # Track/Artist was selected
-                    elif self.main_menu.get_current_list().name == "tracks":
-                        # Track selected
-                        entry = self.main_menu.get_current_list_entry()
-                        if isinstance(entry, Artist):
-                            self.play(None, context_uri=entry['uri'])
-                        elif isinstance(entry, Album):
-                            self.set_album(entry)
-                            self.play(None, context_uri=entry['uri'])
-                        elif isinstance(entry, Track):
-                            self.play(entry['uri'], context_uri=self.current_context)
-
-                    # PlayerAction was selected
-                    elif self.main_menu.get_current_list().name == "player":
-                        self.main_menu.get_current_list_entry().action()
-                elif self.in_select_player_menu():
-                    current_device = self.select_player_menu.get_current_list_entry()
-                    if current_device:
-                        self.current_device = current_device
-                        self.api.transfer_playback(self.current_device)
-                        self.selecting_player = False
-
-            # Hit space -> Toggle play
-            if char == " ":
-                self.toggle_play()
-        else:
-            logger.debug("Unregistered key: %d", key)
 
         if self.is_searching():
             self.current_menu = self.search_menu
@@ -661,10 +452,208 @@ class SpotifyState(object):
         else:
             self.current_menu = self.main_menu
 
+        self._clamp_values()
+
+    def _process_key(self, key):
+        if key == uc.KEY_LEFT:
+            if self.is_creating_command():
+                self.command_cursor_i -= 1
+            else:
+                if self.in_main_menu():
+                    if self.main_menu.get_current_list().name == "player":
+                        if self.main_menu.get_current_list().get_index() == 0:
+                            self.main_menu.decrement_list()
+                        else:
+                            self.main_menu.get_current_list().decrement_index()
+                    else:
+                        self.main_menu.decrement_list()
+
+        elif key == uc.KEY_RIGHT:
+            if self.is_creating_command():
+                self.command_cursor_i += 1
+            else:
+                if self.in_main_menu():
+                    if self.main_menu.get_current_list().name == "player":
+                        self.main_menu.get_current_list().increment_index()
+                    else:
+                        self.main_menu.increment_list()
+                elif self.in_search_menu():
+                    entry = self.search_menu.get_current_list_entry()
+                    if isinstance(entry, Album):
+                        self.searching = False
+                        self.set_album(entry)
+                    elif isinstance(entry, Artist):
+                        albums = self.api.get_albums_from_artist(entry)
+                        if albums:
+                            self.search_menu['results'].update_list(albums)
+
+        elif key == uc.KEY_UP:
+            # TODO: Add history
+            if self.is_creating_command():
+                self.command_history_i = common.clamp(self.command_history_i-1,
+                                                      0,
+                                                      len(self.command_history)-1)
+                self.set_command_query(self.command_history[self.command_history_i])
+            elif self.in_main_menu():
+                if self.main_menu.get_current_list().name == "player":
+                    self.main_menu.decrement_list()
+                else:
+                    self.main_menu.get_current_list().decrement_index()
+            elif self.in_search_menu() or self.in_select_player_menu():
+                self.current_menu.get_current_list().decrement_index()
+
+        elif key == uc.KEY_DOWN:
+            if self.is_creating_command():
+                self.command_history_i = common.clamp(self.command_history_i+1,
+                                                      0,
+                                                      len(self.command_history)-1)
+                self.set_command_query(self.command_history[self.command_history_i])
+            elif self.in_main_menu():
+                if self.main_menu.get_current_list().name == "player":
+                    self.main_menu.increment_list()
+                elif self.main_menu.get_current_list().name == "tracks":
+                    if self.main_menu["tracks"].i == len(self.main_menu.get_list("tracks")) - 1:
+                        self.main_menu.increment_list()
+                    else:
+                        self.main_menu.get_current_list().increment_index()
+                else:
+                    self.main_menu.get_current_list().increment_index()
+            elif self.in_search_menu() or self.in_select_player_menu():
+                self.current_menu.get_current_list().increment_index()
+
+        elif key == uc.KEY_BACKSPACE:
+            if self.is_creating_command():
+                if self.command_cursor_i > 0:
+                    self.get_command_query().pop(self.command_cursor_i - 1)
+                    self.command_cursor_i -= 1
+                else:
+                    self.creating_command = False
+            elif self.in_main_menu():
+                if self.previous_tracks:
+                    header, tracks = self.previous_tracks.pop()
+                    self.set_tracks(tracks, save_list=False)
+                    self.main_menu.get_list('tracks').header = header
+            elif self.in_search_menu():
+                self.searching = False
+            elif self.in_select_player_menu():
+                self.selecting_player = False
+
+        # ASCII character pressed
+        elif 0 <= key <= 256:
+            char = chr(key)
+
+            if self.is_creating_command():
+                if 32 <= key and key <= 126:
+                    self.get_command_query().insert(self.command_cursor_i, char)
+                    self.command_cursor_i += 1
+                elif key in [uc.KEY_ENTER, 10, 13]:
+                    self._process_command(self.get_command_query())
+                return
+
+            logger.debug("Key: %d", key)
+
+            if key == uc.KEY_EXIT:
+                if self.in_search_menu():
+                    self.searching = False
+                elif self.in_select_player_menu():
+                    self.selecting_player = False
+                elif self.is_creating_command():
+                    self.creating_command = False
+
+            elif char in ['/', ':', '#']:
+                # Start creating command
+                if not self.is_creating_command():
+                    self.set_command_query(char)
+                    self.command_cursor_i = 1
+                    self.creating_command = True
+                    return
+
+            elif char == "n":
+                if self.prev_command[0] in ["find"]:
+                    i = int(self.prev_command[1])
+                    command = self.prev_command
+                    command[1] = str(i + 1)
+                    self._process_command(" ".join(command))
+
+            elif char == "p":
+                if self.prev_command[0] in ["find"]:
+                    i = int(self.prev_command[1])
+                    command = self.prev_command
+                    command[1] = str(i - 1)
+                    self._process_command(" ".join(command))
+
+            elif char == 'W':
+                self.selecting_player = True
+                devices = self.api.get_devices()
+                self.select_player_menu['players'].update_list(devices)
+
+            elif char == 'R':
+                self.sync_player_state()
+
+            elif char == 'D':
+                entry = self.current_menu.get_current_list_entry()
+                if isinstance(entry, Track):
+                    artist = entry['artists'][0]
+                    self.set_artist(artist)
+
+            elif char == 'S':
+                entry = self.current_menu.get_current_list_entry()
+                if isinstance(entry, Track):
+                    album = entry['album']
+                    self.set_album(album)
+                elif isinstance(entry, Album):
+                    self.set_album(entry)
+
+            elif char == " ":
+                self.toggle_play()
+
+            elif char == ">":
+                self.api.next()
+
+            elif char == "<":
+                self.api.previous()
+
+            elif key in [uc.KEY_ENTER, 10, 13]:
+                if self.in_search_menu():
+                    entry = self.search_menu.get_current_list_entry()
+                    if isinstance(entry, Artist):
+                        self.set_artist(entry)
+                    elif isinstance(entry, Album):
+                        self.set_album(entry)
+                    elif isinstance(entry, Track):
+                        self.play(entry['uri'], context_uri=None)
+                    self.searching = False
+
+                elif self.in_main_menu():
+                    if self.main_menu.get_current_list().name == "playlists":
+                        playlist = self.main_menu.get_current_list_entry()
+                        self.set_playlist(playlist)
+                    elif self.main_menu.get_current_list().name == "tracks":
+                        entry = self.main_menu.get_current_list_entry()
+                        if isinstance(entry, Artist):
+                            self.play(None, context_uri=entry['uri'])
+                        elif isinstance(entry, Album):
+                            self.set_album(entry)
+                            self.play(None, context_uri=entry['uri'])
+                        elif isinstance(entry, Track):
+                            self.play(entry['uri'], context_uri=self.current_context)
+                    elif self.main_menu.get_current_list().name == "player":
+                        self.main_menu.get_current_list_entry().action()
+
+                elif self.in_select_player_menu():
+                    current_device = self.select_player_menu.get_current_list_entry()
+                    if current_device:
+                        self.current_device = current_device
+                        self.api.transfer_playback(self.current_device)
+                        self.selecting_player = False
+
+        else:
+            logger.debug("Unregistered key: %d", key)
+
     def _clamp_values(self):
-        # Clamp values.
         self.command_cursor_i = common.clamp(self.command_cursor_i,
-                                             0, len(self.get_command_query()))
+                                             0,
+                                             len(self.get_command_query()))
 
     def _process_command(self, command_input):
         logger.debug("Processing command: %s", command_input)
@@ -678,19 +667,21 @@ class SpotifyState(object):
             if command_input == ":":
                 return
             elif command_input.lower() == ":q":
-                command_input = "exit"
+                command_string = "exit"
             else:
-                command_input = command_input[1::]
+                command_string = command_input[1::]
         elif command_input[0] == "#":
             if command_input == "#":
                 return
             else:
-                command_input = "search {}".format(command_input[1::])
+                command_string = "search {}".format(command_input[1::])
         elif command_input[0] == "/":
-            command_input = "find 0 {}".format(command_input[1::])
+            command_string = "find 0 {}".format(command_input[1::])
+        else:
+            command_string = command_input
 
         # Get tokens
-        toks = command_input.split()
+        toks = command_string.split()
 
         # Get the command.
         command = toks[0]
@@ -708,6 +699,9 @@ class SpotifyState(object):
 
             # Execute the appropriate command.
             self.commands[command](*command_args)
+
+        self.command_history.append(command_input)
+        self.command_history_i = len(self.command_history)
 
         self.creating_command = False
 
@@ -842,16 +836,14 @@ class SpotifyState(object):
             self.set_tracks(tracks)
             self.main_menu.get_list('tracks').header = album['name']
 
-    def set_tracks(self, tracks):
+    def set_tracks(self, tracks, save_list=True):
         self.main_menu.set_current_list('tracks')
         self.main_menu.get_list('tracks').set_index(0)
 
-        # Save the current Track list to history.
-        if self.main_menu.get_list('tracks').list:
+        if save_list and self.main_menu.get_list('tracks').list:
             self.previous_tracks.append((self.main_menu.get_list('tracks').header,
                                          self.main_menu.get_list('tracks').list))
 
-        # Update the current Track list to the new set of Tracks.
         self.main_menu.get_list('tracks').update_list(tracks)
 
     def set_command_query(self, text):
