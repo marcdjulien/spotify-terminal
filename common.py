@@ -119,6 +119,18 @@ def get_app_dir():
     return dirname
 
 
+def get_app_file_path(*args):
+    """Return the path from the applications directory.
+
+    Args:
+        args (tuple): The file paths.
+
+    Returns:
+        str: The full path to the file.
+    """
+    return os.path.join(get_app_dir(), *args)
+
+
 def get_cache(username):
     """Return the directory of the user's cache.
 
@@ -128,7 +140,7 @@ def get_cache(username):
     Returns:
         str: The path to the user's cache.
     """
-    return os.path.join(CACHE_DIR, username)
+    return get_app_file_path(".cache", username)
 
 
 def clear_cache(username):
@@ -153,12 +165,35 @@ def create_cache(username):
     Args:
         username (str): The user name.
     """
-    if not os.path.isdir(CACHE_DIR):
-        os.mkdir(CACHE_DIR)
+    if not get_app_file_path(".cache"):
+        os.mkdir(get_app_file_path(".cache"))
 
     user_cache = get_cache(username)
     if not os.path.isdir(user_cache):
         os.mkdir(user_cache)
+
+
+def extract_version(stream):
+    version = None
+    for line in stream:
+        if "." in line:
+            version = line
+    version = tuple(int(n.strip()) for n in version.split("."))
+    return version
+
+
+def get_version():
+    version_file = os.path.join(
+        os.path.dirname(os.path.abspath(__file__)),
+        ".version"
+    )
+    with open(version_file, "r") as f:
+        return extract_version(f)
+
+
+def get_master_version():
+    resp = requests.get("https://raw.githubusercontent.com/marcdjulien/spotifyterminal/master/.version")
+    return extract_version(resp.text)
 
 
 # Set TEMP_DIR
@@ -166,17 +201,15 @@ APP_DIR = get_app_dir()
 
 
 # Authentication filename
-AUTH_FILENAME = os.path.join(APP_DIR, "auth")
+AUTH_FILENAME = get_app_file_path("auth")
 
-# Cache dir
-CACHE_DIR = os.path.join(APP_DIR, ".cache")
 
 # Configuration filename
-CONFIG_FILENAME = os.path.join(APP_DIR, "spotifyrc")
+CONFIG_FILENAME = get_app_file_path("spotifyrc")
 
 
 # Log filename
-LOGGER_FILENAME = os.path.join(APP_DIR, "log")
+LOGGER_FILENAME = get_app_file_path("log")
 
 
 TITLE = """
@@ -194,8 +227,8 @@ TITLE = """
      /_/  \___/_/  /_/ /_/ /_/_/_/ /_/\__,_/_/
 
 
-   [marcdjulien] v0.8
-"""
+   [marcdjulien] v{}.{}.{}
+""".format(*get_version())
 
 
 logging.basicConfig(filename=LOGGER_FILENAME,
