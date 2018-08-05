@@ -488,7 +488,6 @@ class SpotifyState(object):
                             self.search_menu['results'].update_list(albums)
 
         elif key == uc.KEY_UP:
-            # TODO: Add history
             if self.is_creating_command():
                 self.command_history_i = common.clamp(self.command_history_i-1,
                                                       0,
@@ -552,7 +551,7 @@ class SpotifyState(object):
 
             logger.debug("Key: %d", key)
 
-            if key == uc.KEY_EXIT:
+            if key in [uc.KEY_EXIT, 27]:
                 if self.in_search_menu():
                     self.searching = False
                 elif self.in_select_player_menu():
@@ -649,6 +648,8 @@ class SpotifyState(object):
 
         else:
             logger.debug("Unregistered key: %d", key)
+
+        logger.debug("Key processed)")
 
     def _clamp_values(self):
         self.command_cursor_i = common.clamp(self.command_cursor_i,

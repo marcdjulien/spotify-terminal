@@ -145,6 +145,8 @@ class SpotifyApi(object):
         else:
             query_params = ""
 
+        self.put_api_v1("me/player/play" + query_params, params)
+
     @async
     def transfer_playback(self, device):
         """Transfer playback to a different Device.
