@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 
 import argparse
+import time
 import unicurses as uc
 
 import common
@@ -29,7 +30,11 @@ if __name__ == '__main__':
     my_version = common.get_version()
     latest_version = common.get_master_version()
     if my_version and latest_version and (my_version < latest_version):
-        print "Version {} is now available".format(latest_version)
+        print "Version {}.{}.{} is now available".format(*latest_version)
+        time.sleep(2)
+    else:
+        logger.info("Current version: %s", my_version)
+        logger.info("Latest version: %s", latest_version)
 
     # Reset the cache.
     if args.clear_cache:

@@ -178,23 +178,32 @@ def extract_version(stream):
     version = None
     for line in stream:
         if "." in line:
-            version = line
+            version = line.strip()
+            break
     version = tuple(int(n.strip()) for n in version.split("."))
     return version
 
 
 def get_version():
-    version_file = os.path.join(
-        os.path.dirname(os.path.abspath(__file__)),
-        ".version"
-    )
-    with open(version_file, "r") as f:
-        return extract_version(f)
+    try:
+        version_file = os.path.join(
+            os.path.dirname(os.path.abspath(__file__)),
+            ".version"
+        )
+        with open(version_file, "r") as f:
+            return extract_version(f)
+    except BaseException as e:
+        logger.info("Could not get current version %s", e)
+        return None
 
 
 def get_master_version():
-    resp = requests.get("https://raw.githubusercontent.com/marcdjulien/spotifyterminal/master/.version")
-    return extract_version(resp.text)
+    try:
+        resp = requests.get("https://raw.githubusercontent.com/marcdjulien/spotifyterminal/master/.version")
+        return extract_version(resp)
+    except BaseException as e:
+        logger.info("Could not get latest version %s", e)
+        return None
 
 
 # Set TEMP_DIR
