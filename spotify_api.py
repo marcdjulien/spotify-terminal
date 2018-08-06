@@ -26,6 +26,11 @@ def needs_authentication(func):
 
     Re-authenticate if the API call fails.
     """
+    def is_auth_message(msg):
+        keywords = ["Unauthorized",
+                    "Expired"]
+        return any([k in msg for k in keywords])
+
     @common.catch_exceptions
     def wrapper(self, *args, **kwargs):
         """Call then function and wrapper on authentication failure."""
@@ -34,7 +39,7 @@ def needs_authentication(func):
         except requests.HTTPError as e:
             msg = str(e)
             logger.debug("Exception hit in needs_authentication: %s", msg)
-            if "Unauthorized" in msg or "Expired" in msg:
+            if is_auth_message(msg):
                 logger.warning("Failed to make request. Re-authenticating.")
                 self.auth_from_web()
                 try:

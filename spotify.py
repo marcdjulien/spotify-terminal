@@ -41,14 +41,14 @@ if __name__ == '__main__':
         logger.debug("Clearing the cache")
         common.clear_cache(args.username)
 
-    # Initialize the curses screen.
-    stdscr = uc.initscr()
-
     # Create Spotify state.
     api = SpotifyApi(args.username)
     sp_state = SpotifyState(api)
 
-    # Create the display!
+    # Initialize the curses screen.
+    stdscr = uc.initscr()
+
+    # Create the display
     display = CursesDisplay(stdscr, sp_state)
 
     # Start the display and clear the screen before

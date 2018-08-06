@@ -1,5 +1,6 @@
 import copy
 import unicurses as uc
+from threading import Lock, Thread
 
 import common
 
@@ -258,6 +259,17 @@ class ListCollection(object):
         return self.lists[key]
 
 
+def async(func):
+    """Execute the function asynchronously."""
+
+    @common.catch_exceptions
+    def wrapper(*args, **kwargs):
+        with args[0].lock:
+            Thread(target=func, args=args, kwargs=kwargs).start()
+
+    return wrapper
+
+
 class SpotifyState(object):
     """Represents the programs internal state of Spotify.
 
@@ -267,6 +279,9 @@ class SpotifyState(object):
     REPEAT_OFF, REPEAT_CONTEXT, REPEAT_TRACK = range(3)
 
     def __init__(self, api):
+        self.lock = Lock()
+        """Lock for the class."""
+
         self.api = api
         """SpotifyApi object to make Spotify API calls."""
 
@@ -277,12 +292,12 @@ class SpotifyState(object):
         """Shorcuts."""
 
         self.main_menu = ListCollection("main",
-                                        [List("playlists"),
+                                        [List("user"),
                                          List("tracks"),
                                          List("player")])
 
         self.search_menu = ListCollection("search",
-                                          [List("results")])
+                                          [List("search_results")])
 
         self.select_player_menu = ListCollection("select_player",
                                                  [List("players")])
@@ -380,10 +395,10 @@ class SpotifyState(object):
                           "id": "",
                           "owner_id": self.get_username()})
         playlists.insert(0, saved)
-        self.main_menu['playlists'].update_list(tuple(playlists))
+        self.main_menu['user'].update_list(tuple(playlists))
 
         # Initialize track list to first playlist.
-        self.set_playlist(self.main_menu['playlists'][0])
+        self.set_playlist(self.main_menu['user'][0])
 
         # Initialize PlayerActions.
         self.main_menu['player'].update_list([
@@ -425,6 +440,7 @@ class SpotifyState(object):
                     exit()
                 self.shortcuts[toks[0]] = toks[1]
 
+    @async
     def sync_player_state(self):
         player_state = self.api.get_player_state()
         if player_state:
@@ -437,6 +453,7 @@ class SpotifyState(object):
 
             self.set_repeat(player_state['repeat_state'])
             self.set_shuffle(player_state['shuffle_state'])
+
             self.player_state_synced = True
         else:
             self.currently_playing_track = NoneTrack
@@ -489,10 +506,11 @@ class SpotifyState(object):
 
         elif key == uc.KEY_UP:
             if self.is_creating_command():
-                self.command_history_i = common.clamp(self.command_history_i-1,
-                                                      0,
-                                                      len(self.command_history)-1)
-                self.set_command_query(self.command_history[self.command_history_i])
+                if self.command_history:
+                    self.command_history_i = common.clamp(self.command_history_i-1,
+                                                          0,
+                                                          len(self.command_history)-1)
+                    self.set_command_query(self.command_history[self.command_history_i])
             elif self.in_main_menu():
                 if self.main_menu.get_current_list().name == "player":
                     self.main_menu.decrement_list()
@@ -503,10 +521,11 @@ class SpotifyState(object):
 
         elif key == uc.KEY_DOWN:
             if self.is_creating_command():
-                self.command_history_i = common.clamp(self.command_history_i+1,
-                                                      0,
-                                                      len(self.command_history)-1)
-                self.set_command_query(self.command_history[self.command_history_i])
+                if self.command_history:
+                    self.command_history_i = common.clamp(self.command_history_i+1,
+                                                          0,
+                                                          len(self.command_history)-1)
+                    self.set_command_query(self.command_history[self.command_history_i])
             elif self.in_main_menu():
                 if self.main_menu.get_current_list().name == "player":
                     self.main_menu.increment_list()
@@ -624,7 +643,7 @@ class SpotifyState(object):
                     self.searching = False
 
                 elif self.in_main_menu():
-                    if self.main_menu.get_current_list().name == "playlists":
+                    if self.main_menu.get_current_list().name == "user":
                         playlist = self.main_menu.get_current_list_entry()
                         self.set_playlist(playlist)
                     elif self.main_menu.get_current_list().name == "tracks":
@@ -649,13 +668,12 @@ class SpotifyState(object):
         else:
             logger.debug("Unregistered key: %d", key)
 
-        logger.debug("Key processed)")
-
     def _clamp_values(self):
         self.command_cursor_i = common.clamp(self.command_cursor_i,
                                              0,
                                              len(self.get_command_query()))
 
+    @async
     def _process_command(self, command_input):
         logger.debug("Processing command: %s", command_input)
 
@@ -711,7 +729,7 @@ class SpotifyState(object):
         logger.debug("search %s", query)
         results = self.api.search(("artist", "album", "track"), query)
         if results:
-            self.search_menu["results"].update_list(results)
+            self.search_menu["search_results"].update_list(results)
             self.searching = True
 
     def _execute_find(self, i, *query):

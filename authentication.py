@@ -9,7 +9,7 @@ to obtain the authentication information.
 import os
 import urllib
 import webbrowser
-from BaseHTTPServer import *
+from BaseHTTPServer import BaseHTTPRequestHandler, HTTPServer
 from threading import Thread
 
 import common
@@ -74,18 +74,16 @@ class AuthenticationHandler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         global data
-        logger.info(self.path)
+
         if "access_token" in self.path:
             data = self.parse_path(self.path[1::])
             self.send_response(200)
             self.end_headers()
             self.wfile.write(HTML2)
-            return
         else:
             self.send_response(200)
             self.end_headers()
             self.wfile.write(HTML)
-            return
 
     def parse_path(self, path):
         data = {}
@@ -93,6 +91,7 @@ class AuthenticationHandler(BaseHTTPRequestHandler):
         for thing in items:
             toks = thing.split("=")
             data[toks[0]] = toks[1]
+
         return data
 
     def log_message(self, format, *args):
@@ -106,18 +105,19 @@ def start_server():
 
 
 def write_auth_file(data):
-    if not os.path.isdir(common.APP_DIR):
-        os.mkdir(common.APP_DIR)
-    auth_file = open(common.AUTH_FILENAME, "w")
-    for k, v in data.items():
-        auth_file.write("%s=%s\n" % (k, v))
-    auth_file.close()
-    logger.debug("%s created", common.AUTH_FILENAME)
+    if not os.path.isdir(common.get_app_dir()):
+        os.mkdir(common.get_app_dir())
+
+    with open(common.AUTH_FILENAME, "w") as auth_file:
+        for k, v in data.items():
+            auth_file.write("%s=%s\n" % (k, v))
+        logger.debug("%s created", common.AUTH_FILENAME)
 
 
 def authenticate():
     """Execute the authentication process."""
     global data
+
     # Start running the server
     web_thread = Thread(target=start_server)
     web_thread.start()
@@ -127,7 +127,7 @@ def authenticate():
     # as a hash fragment.
     webbrowser.open_new_tab(URL)
 
-    # Wait for the server to make the 2 expected http request
+    # Wait for the server to make the 2 expected HTTP requests
     web_thread.join()
 
     # Save the new authentication information to disk

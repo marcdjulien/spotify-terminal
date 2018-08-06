@@ -104,6 +104,11 @@ Type ```/``` is a shortcut to the find command. You can also type ```n``` or ```
 
 ```Shift + R``` to re-sync the player.
 
+```Shift + .``` to play the next song.
+
+```Shift + ,``` to play the previous song.
+
+```Shift + W``` to see list of players.
 
 # Notes
 This has only been tested on Linux and Windows.

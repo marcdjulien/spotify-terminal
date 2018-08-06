@@ -52,11 +52,11 @@ class CursesDisplay(object):
         search = (self._rows*8/10, self._cols*8/10, self._rows/10, self._cols/10)
         select_player = (self._rows*6/10, self._cols*6/10, self._rows*2/10, self._cols*2/10)
 
-        self._register_window(user, "user")
-        self._register_window(tracks, "tracks")
-        self._register_window(player, "player")
-        self._register_window(search, "search")
-        self._register_window(select_player, "select_player")
+        self._register_window("search_results", search)
+        self._register_window("select_player", select_player)
+        self._register_window("user", user)
+        self._register_window("tracks", tracks)
+        self._register_window("player", player)
 
         self._next_update_time = time.time()
         self._last_render_time = time.time()
@@ -65,7 +65,7 @@ class CursesDisplay(object):
         # Initialize the display.
         self._init_curses()
 
-    def _register_window(self, size, name):
+    def _register_window(self, name, size):
         """Register a window
 
         Args:
@@ -75,6 +75,16 @@ class CursesDisplay(object):
         self._windows[name] = Window(name, uc.newwin(*size))
         self._panels[name] = uc.new_panel(self._windows[name].window)
         self._ordered_windows.append(self._windows[name])
+
+    def _resize_window(self, name, size):
+        """Register a window
+
+        Args:
+            size (tuple): The size of the window.
+            name (str): The name of the window.
+        """
+        uc.wresize(self._windows[name].window, size[0], size[1])
+        uc.wmove(self._windows[name].window, size[2], size[3])
 
     def _init_curses(self):
         """Initialize the curses environment and windows."""
@@ -161,10 +171,16 @@ class CursesDisplay(object):
             self.sync_player()
 
     def render(self):
+        # Clear the screem before rendering anything.
         uc.erase()
 
+        # Set the panel order based on what action is going on.
         self.set_panel_order()
 
+        # Update the panel size incase the terminal size changed.
+        self.update_panel_size()
+
+        # Draw all of the panels.
         self.render_user_panel()
         self.render_track_panel()
         self.render_player_panel()
@@ -177,14 +193,27 @@ class CursesDisplay(object):
         uc.doupdate()
 
     def set_panel_order(self):
-        if self.is_active_window("search"):
-            uc.top_panel(self._panels["search"])
+        if self.is_active_window("search_results"):
+            uc.top_panel(self._panels["search_results"])
         elif self.is_active_window("select_player"):
             uc.top_panel(self._panels["select_player"])
         else:
             for panel_name, panel in self._panels.items():
-                if panel_name not in ["search", "select_player"]:
+                if panel_name not in ["search_results", "select_player"]:
                     uc.top_panel(panel)
+
+    def update_panel_size(self):
+        user = (self._rows-2, self._cols/4, 0, 0)
+        tracks = (self._rows*2/3, (self._cols - 1 - (user[1])), 0, user[1]+user[3])
+        player = (self._rows*1/3-2, tracks[1], self._rows*2/3, tracks[3])
+        search = (self._rows*8/10, self._cols*8/10, self._rows/10, self._cols/10)
+        select_player = (self._rows*6/10, self._cols*6/10, self._rows*2/10, self._cols*2/10)
+
+        self._resize_window("search_results", search)
+        self._resize_window("select_player", select_player)
+        self._resize_window("user", user)
+        self._resize_window("tracks", tracks)
+        self._resize_window("player", player)
 
     def _init_render_window(self, window_name):
         win = self._windows[window_name].window
@@ -206,8 +235,8 @@ class CursesDisplay(object):
                       uc.A_BOLD)
 
         # Show the playlists.
-        playlists = [str(playlist) for playlist in self.state.main_menu.get_list('playlists')]
-        selected_i = self.state.main_menu["playlists"].i
+        playlists = [str(playlist) for playlist in self.state.main_menu.get_list('user')]
+        selected_i = self.state.main_menu["user"].i
         playlist_start_line = username_start_line + 2
         self._render_list(win, playlists, playlist_start_line, rows-4,
                           2, cols-3, selected_i, self.is_active_window("user"))
@@ -262,7 +291,7 @@ class CursesDisplay(object):
             uc.mvwaddstr(self.stdscr, self._rows-1, 3, text, uc.A_BOLD)
 
     def render_search_panel(self):
-        win, rows, cols = self._init_render_window("search")
+        win, rows, cols = self._init_render_window("search_results")
         uc.box(win)
 
         # Show the title of the context.
@@ -271,7 +300,7 @@ class CursesDisplay(object):
                       "Search Results", cols-3, uc.A_BOLD)
 
         selected_i = self.state.search_menu.get_current_list().i
-        self._render_list(win, self.state.search_menu["results"], 3, rows-4, 2, cols-3, selected_i, self.is_active_window("search"))
+        self._render_list(win, self.state.search_menu["search_results"], 3, rows-4, 2, cols-3, selected_i, self.is_active_window("search_results"))
 
     def render_select_player_panel(self):
         win, rows, cols = self._init_render_window("select_player")
@@ -307,16 +336,11 @@ class CursesDisplay(object):
 
     def is_active_window(self, window_name):
         if self.state.is_searching():
-            return window_name == "search"
+            return window_name == "search_results"
         elif self.state.is_selecting_player():
             return window_name == "select_player"
         else:
-            return self.state.main_menu.list_i == self.get_window_position(window_name)
-
-    def get_window_position(self, window_name):
-        for i, window in enumerate(self._ordered_windows):
-            if window.name == window_name:
-                return i
+            return self.state.main_menu.get_current_list().name == window_name
 
     def get_cur_window(self):
         return self._ordered_windows[self.state.main_menu.list_i]

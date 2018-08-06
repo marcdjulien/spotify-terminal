@@ -194,7 +194,6 @@ def get_version():
             return extract_version(f)
     except BaseException as e:
         logger.info("Could not get current version %s", e)
-        return None
 
 
 def get_master_version():
@@ -203,11 +202,6 @@ def get_master_version():
         return extract_version(resp)
     except BaseException as e:
         logger.info("Could not get latest version %s", e)
-        return None
-
-
-# Set TEMP_DIR
-APP_DIR = get_app_dir()
 
 
 # Authentication filename
@@ -216,10 +210,6 @@ AUTH_FILENAME = get_app_file_path("auth")
 
 # Configuration filename
 CONFIG_FILENAME = get_app_file_path("spotifyrc")
-
-
-# Log filename
-LOGGER_FILENAME = get_app_file_path("log")
 
 
 TITLE = """
@@ -241,13 +231,14 @@ TITLE = """
 """.format(*get_version())
 
 
-logging.basicConfig(filename=LOGGER_FILENAME,
+logging.basicConfig(filename=get_app_file_path("log"),
                     filemode='w',
                     format='[%(asctime)s][%(levelname)s][%(name)s] %(message)s',
                     level=logging.DEBUG)
 
 
 logger = logging.getLogger(__name__)
+logger.info("\n\n\n")
 
 
 class ContextDuration(object):
