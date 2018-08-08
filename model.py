@@ -278,6 +278,8 @@ class SpotifyState(object):
 
     REPEAT_OFF, REPEAT_CONTEXT, REPEAT_TRACK = range(3)
 
+    SAVED_TRACKS_QUEUE = 50
+
     def __init__(self, api):
         self.lock = Lock()
         """Lock for the class."""
@@ -391,7 +393,7 @@ class SpotifyState(object):
 
         # Add the Saved tracks playlist.
         saved = Playlist({"name": "Saved",
-                          "uri": None,
+                          "uri": "spotify:saved_tracks:0",
                           "id": "",
                           "owner_id": self.get_username()})
         playlists.insert(0, saved)
@@ -548,7 +550,8 @@ class SpotifyState(object):
                     self.creating_command = False
             elif self.in_main_menu():
                 if self.previous_tracks:
-                    header, tracks = self.previous_tracks.pop()
+                    header, tracks, context = self.previous_tracks.pop()
+                    self.current_context = context
                     self.set_tracks(tracks, save_list=False)
                     self.main_menu.get_list('tracks').header = header
             elif self.in_search_menu():
@@ -774,8 +777,23 @@ class SpotifyState(object):
     def _execute_exit(self):
         self.running = False
 
-    def play(self, track_uri, context_uri):
-        self.api.play(track_uri, context_uri, self.current_device)
+    def play(self, track, context_uri, uris=None):
+        # The Saved Tracks playlist in Spotify doesn't have a Context.
+        # So we have to give the API a list of Tracks to play
+        # to mimic a context.
+        if context_uri == "spotify:saved_tracks:0":
+            uris = [t['uri'] for t in
+                    self.api.get_tracks_from_playlist(self.main_menu['user'][0])]
+            current_index = self.main_menu['tracks'].i
+            min_index = common.clamp(current_index-self.SAVED_TRACKS_QUEUE, 0, len(uris)-1)
+            max_index = common.clamp(min_index+self.SAVED_TRACKS_QUEUE+1, 0, len(uris))
+            assert min_index <= max_index
+
+            # Slice the tracks we want and start playing form the beginning.
+            uris = uris[min_index:max_index]
+            track = current_index - min_index
+
+        self.api.play(track, context_uri, uris, self.current_device)
 
     def toggle_play(self):
         if self.paused:
@@ -832,15 +850,13 @@ class SpotifyState(object):
         return self.command_cursor_i
 
     def set_playlist(self, playlist):
-        self.current_context = playlist['uri']
         tracks = self.api.get_tracks_from_playlist(playlist)
         if tracks:
-            self.set_tracks(tracks)
+            self.set_tracks(tracks, playlist['uri'])
             self.main_menu.get_list('tracks').header = playlist['name']
 
     def set_artist(self, artist):
         self.searching = False
-        self.current_context = None
         selections = self.api.get_top_tracks_from_artist(artist)
         selections += self.api.get_albums_from_artist(artist)
         if selections:
@@ -849,20 +865,21 @@ class SpotifyState(object):
 
     def set_album(self, album):
         self.searching = False
-        self.current_context = album['uri']
         tracks = self.api.get_tracks_from_album(album)
         if tracks:
-            self.set_tracks(tracks)
+            self.set_tracks(tracks, album['uri'])
             self.main_menu.get_list('tracks').header = album['name']
 
-    def set_tracks(self, tracks, save_list=True):
+    def set_tracks(self, tracks, context=None, save_list=True):
         self.main_menu.set_current_list('tracks')
         self.main_menu.get_list('tracks').set_index(0)
 
         if save_list and self.main_menu.get_list('tracks').list:
             self.previous_tracks.append((self.main_menu.get_list('tracks').header,
-                                         self.main_menu.get_list('tracks').list))
+                                         self.main_menu.get_list('tracks').list,
+                                         self.current_context))
 
+        self.current_context = context
         self.main_menu.get_list('tracks').update_list(tracks)
 
     def set_command_query(self, text):

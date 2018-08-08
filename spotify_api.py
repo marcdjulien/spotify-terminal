@@ -35,6 +35,7 @@ def needs_authentication(func):
     def wrapper(self, *args, **kwargs):
         """Call then function and wrapper on authentication failure."""
         try:
+            logger.debug("Executing: %s\n\t %s %s", func.__name__, args, kwargs)
             return func(self, *args, **kwargs)
         except requests.HTTPError as e:
             msg = str(e)
@@ -43,16 +44,12 @@ def needs_authentication(func):
                 logger.warning("Failed to make request. Re-authenticating.")
                 self.auth_from_web()
                 try:
-                    return func(*args, **kwargs)
+                    return func(self, *args, **kwargs)
                 except Exception as e2:
                     logger.warning("Failed again after re-authenticating. "
-                                   "Giving up on the following:")
-                    logger.warning("\t%s %s", args, kwargs)
-                    logger.warning("\t %s", e2)
+                                   "Giving up.")
             else:
-                logger.warning("Failed to make API call:")
-                logger.warning("\t%s %s", args, kwargs)
-                logger.warning("\t %s", e)
+                logger.warning("Failed to make API call")
         except requests.ConnectionError as e:
             logger.warning("Connection Error: %s", str(e))
 
@@ -118,32 +115,42 @@ class SpotifyApi(object):
         return self.username
 
     @async
-    def play(self, track_uri=None, context_uri=None, device=None):
+    def play(self, track=None, context_uri=None, uris=None, device=None):
         """Play a Spotify track.
 
         Args:
-            track_uri (str): The track uri.
+            track (str, int): The track uri or position.
             context_uri (str): The context uri.
+            uris (iter): Collection of uris to play.
+            device (Device): A device to play.
         """
         params = {}
-        if context_uri:
+
+        # Special case when playing the Saved Tracks Playlist.
+        if context_uri and (context_uri == "spotify:saved_tracks:0") and uris:
+            params['uris'] = uris
+            params["offset"] = {"position": track}
+        elif context_uri:
+            # Set the context that we are playing in.
             params = {"context_uri": context_uri}
+
+            # Artists context can play on its own.
             if context_uri.startswith("spotify:artist"):
                 pass
-            elif track_uri is None:
-                # No track given, play the first one.
+            # Playlist or Album context should start at the beginning
+            # unless a specific track is specified.
+            elif track is None:
                 params["offset"] = {"position": 0}
             else:
-                # Play the requested track within the context.
-                if common.is_int(track_uri):
-                    params["offset"] = {"position": track_uri}
+                if common.is_int(track):
+                    params["offset"] = {"position": track}
                 else:
-                    params["offset"] = {"uri": track_uri}
+                    params["offset"] = {"uri": track}
 
         # No context given, just play the track.
-        if track_uri and not context_uri:
-            if track_uri.startswith("spotify:track"):
-                params['uris'] = [track_uri]
+        elif track is not None and not context_uri:
+            if isinstance(track, basestring) and track.startswith("spotify:track"):
+                params['uris'] = [track]
 
         if device and device['id']:
             query_params = "?" + urllib.urlencode({"device_id": device['id']})
@@ -370,8 +377,8 @@ class SpotifyApi(object):
             tuple: The Tracks.
         """
         # Special case for the "Saved" Playlist
-        if playlist['uri'] is None:
-            return self.get_saved_tracks()
+        if playlist['uri'] == "spotify:saved_tracks:0":
+            return self._get_saved_tracks()
         else:
             url = "users/{}/playlists/{}/tracks".format(playlist['owner']['id'],
                                                         playlist['id'])
@@ -380,7 +387,7 @@ class SpotifyApi(object):
 
         return tuple(result)
 
-    def get_saved_tracks(self):
+    def _get_saved_tracks(self):
         """Get the Tracks from the "Saved" songs.
 
         Returns:
