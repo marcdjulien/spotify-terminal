@@ -55,9 +55,12 @@ if __name__ == '__main__':
     # raising any Exceptions.
     try:
         display.start()
+    except KeyboardInterrupt:
+        pass
     except BaseException:
         common.clear()
         raise
+
 
     # Clear the screen to leave a clean terminal.
     common.clear()
