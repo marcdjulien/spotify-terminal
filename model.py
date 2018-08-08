@@ -784,14 +784,7 @@ class SpotifyState(object):
         if context_uri == "spotify:saved_tracks:0":
             uris = [t['uri'] for t in
                     self.api.get_tracks_from_playlist(self.main_menu['user'][0])]
-            current_index = self.main_menu['tracks'].i
-            min_index = common.clamp(current_index-self.SAVED_TRACKS_QUEUE, 0, len(uris)-1)
-            max_index = common.clamp(min_index+self.SAVED_TRACKS_QUEUE+1, 0, len(uris))
-            assert min_index <= max_index
-
-            # Slice the tracks we want and start playing form the beginning.
-            uris = uris[min_index:max_index]
-            track = current_index - min_index
+            track = self.main_menu['tracks'].i
 
         self.api.play(track, context_uri, uris, self.current_device)
 
