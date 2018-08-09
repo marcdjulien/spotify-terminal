@@ -31,7 +31,8 @@ if __name__ == '__main__':
     latest_version = common.get_master_version()
     if my_version and latest_version and (my_version < latest_version):
         print "Version {}.{}.{} is now available".format(*latest_version)
-        time.sleep(2)
+        print "Run with -c after upgrading to clear your cache!".format(*latest_version)
+        time.sleep(3)
     else:
         logger.info("Current version: %s", my_version)
         logger.info("Latest version: %s", latest_version)

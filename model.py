@@ -48,11 +48,14 @@ class Track(SpotifyObject):
         return "%s on %s by %s" % self.track_tuple
 
     def str(self, cols):
-        nchrs = cols - 3
-        fmt = "%{0}s%{0}s%{0}s".format(nchrs / 3)
-        return fmt % (self.track_tuple[0][0:(nchrs / 3) - 2],
-                      self.track_tuple[1][0:(nchrs / 3) - 2],
-                      self.track_tuple[2][0:(nchrs / 3) - 2])
+        nchrs = cols - 5
+        ar_chrs = nchrs/3
+        al_chrs = nchrs/3
+        tr_chrs = nchrs - al_chrs - ar_chrs
+        fmt = "%{0}.{0}s  %{1}.{1}s  %{2}.{2}s".format(tr_chrs, al_chrs, ar_chrs)
+        return fmt % (self.track_tuple[0],
+                      self.track_tuple[1],
+                      self.track_tuple[2])
 
 
 NoneTrack = Track({"name": "---",
@@ -88,7 +91,7 @@ class Album(SpotifyObject):
         if year:
             info.append(year)
 
-        self.extra_info = ", ".join(info)
+        self.extra_info = "[{}]".format(", ".join(info))
 
     def __str__(self):
         return "%s [%s] by %s" % (self['name'],
@@ -96,7 +99,12 @@ class Album(SpotifyObject):
                                   self.artists)
 
     def str(self, cols):
-        return "%{}s".format(cols-5) % str(self)
+        nchrs = cols - 2
+        tr_chrs = 2*nchrs/4
+        ty_chrs = nchrs/4
+        ar_chrs = nchrs - tr_chrs - ty_chrs
+        fmt = "%{0}.{0}s  %{1}.{1}s %{2}.{2}s".format(tr_chrs, ty_chrs, ar_chrs)
+        return fmt % (self['name'], self.extra_info, self.artists)
 
 
 class Device(SpotifyObject):
@@ -278,8 +286,6 @@ class SpotifyState(object):
 
     REPEAT_OFF, REPEAT_CONTEXT, REPEAT_TRACK = range(3)
 
-    SAVED_TRACKS_QUEUE = 50
-
     def __init__(self, api):
         self.lock = Lock()
         """Lock for the class."""
@@ -393,7 +399,7 @@ class SpotifyState(object):
 
         # Add the Saved tracks playlist.
         saved = Playlist({"name": "Saved",
-                          "uri": "spotify:saved_tracks:0",
+                          "uri": common.SAVED_TRACKS_CONTEXT_URI,
                           "id": "",
                           "owner_id": self.get_username()})
         playlists.insert(0, saved)
@@ -498,10 +504,10 @@ class SpotifyState(object):
                         self.main_menu.increment_list()
                 elif self.in_search_menu():
                     entry = self.search_menu.get_current_list_entry()
-                    if isinstance(entry, Album):
+                    if entry['type']== 'album':
                         self.searching = False
                         self.set_album(entry)
-                    elif isinstance(entry, Artist):
+                    elif entry['type'] == 'artist':
                         albums = self.api.get_albums_from_artist(entry)
                         if albums:
                             self.search_menu['results'].update_list(albums)
@@ -613,16 +619,16 @@ class SpotifyState(object):
 
             elif char == 'D':
                 entry = self.current_menu.get_current_list_entry()
-                if isinstance(entry, Track):
+                if entry['type'] == 'track':
                     artist = entry['artists'][0]
                     self.set_artist(artist)
 
             elif char == 'S':
                 entry = self.current_menu.get_current_list_entry()
-                if isinstance(entry, Track):
+                if entry['type'] == 'track':
                     album = entry['album']
                     self.set_album(album)
-                elif isinstance(entry, Album):
+                elif entry['type']== 'album':
                     self.set_album(entry)
 
             elif char == " ":
@@ -634,15 +640,28 @@ class SpotifyState(object):
             elif char == "<":
                 self.api.previous()
 
+            elif char in ["~", "!", "@", "#", "$", "%", "^", "&", "*", "(", ")"]:
+                volume = {
+                    "~": 0, "!": 10, "@": 20, "#": 30, "$": 40, "%": 50, "^": 60, "&": 70,
+                    "*": 80, "(": 90, ")": 100
+                }[char]
+                self._process_command("volume {}".format(volume))
+
+            elif char == "_":
+                self._process_command("volume {}".format(self.volume - 1))
+
+            elif char == "+":
+                self._process_command("volume {}".format(self.volume + 1))
+
             elif key in [uc.KEY_ENTER, 10, 13]:
                 if self.in_search_menu():
                     entry = self.search_menu.get_current_list_entry()
-                    if isinstance(entry, Artist):
+                    if entry['type'] == 'artist':
                         self.set_artist(entry)
-                    elif isinstance(entry, Album):
+                    elif entry['type']== 'album':
                         self.set_album(entry)
-                    elif isinstance(entry, Track):
-                        self.play(entry['uri'], context_uri=None)
+                    elif entry['type'] == 'track':
+                        self.play(entry['uri'], context=None)
                     self.searching = False
 
                 elif self.in_main_menu():
@@ -651,13 +670,12 @@ class SpotifyState(object):
                         self.set_playlist(playlist)
                     elif self.main_menu.get_current_list().name == "tracks":
                         entry = self.main_menu.get_current_list_entry()
-                        if isinstance(entry, Artist):
-                            self.play(None, context_uri=entry['uri'])
-                        elif isinstance(entry, Album):
+                        if entry['type'] == 'artist':
+                            self.set_artist(entry)
+                        elif entry['type']== 'album':
                             self.set_album(entry)
-                            self.play(None, context_uri=entry['uri'])
-                        elif isinstance(entry, Track):
-                            self.play(entry['uri'], context_uri=self.current_context)
+                        elif entry['type'] == 'track':
+                            self.play(entry['uri'], context=self.current_context)
                     elif self.main_menu.get_current_list().name == "player":
                         self.main_menu.get_current_list_entry().action()
 
@@ -676,7 +694,6 @@ class SpotifyState(object):
                                              0,
                                              len(self.get_command_query()))
 
-    @async
     def _process_command(self, command_input):
         logger.debug("Processing command: %s", command_input)
 
@@ -735,6 +752,7 @@ class SpotifyState(object):
             self.search_menu["search_results"].update_list(results)
             self.searching = True
 
+    @async
     def _execute_find(self, i, *query):
         query = " ".join(query)
         logger.debug("find:%s", query)
@@ -748,28 +766,33 @@ class SpotifyState(object):
         if found:
             self.current_menu.get_current_list().set_index(found[int(i) % len(found)])
 
+    @async
     def _execute_shuffle(self, state):
         state = state.lower().strip()
         state = True if state == "true" else False
         self.set_shuffle(state)
         self.api.shuffle(state)
 
+    @async
     def _execute_repeat(self, state):
         state = state.lower().strip()
         if state in ["off", "context", "track"]:
             self.set_repeat(state)
             self.api.repeat(state)
 
+    @async
     def _execute_volume(self, volume):
         volume = common.clamp(int(volume), 0, 100)
         if 0 <= volume and volume <= 100:
             self.volume = volume
             self.api.volume(self.volume)
 
+    @async
     def _execute_play(self):
         self.paused = False
         self.play(None, None)
 
+    @async
     def _execute_pause(self):
         self.paused = True
         self.api.pause()
@@ -777,14 +800,26 @@ class SpotifyState(object):
     def _execute_exit(self):
         self.running = False
 
-    def play(self, track, context_uri, uris=None):
+    def play(self, track, context):
+        context_uri = None
+        uris = None
+
         # The Saved Tracks playlist in Spotify doesn't have a Context.
         # So we have to give the API a list of Tracks to play
         # to mimic a context.
-        if context_uri == "spotify:saved_tracks:0":
-            uris = [t['uri'] for t in
-                    self.api.get_tracks_from_playlist(self.main_menu['user'][0])]
-            track = self.main_menu['tracks'].i
+        if context:
+            if context['uri'] == common.SAVED_TRACKS_CONTEXT_URI:
+                uris = [t['uri'] for t in
+                        self.api.get_tracks_from_playlist(self.main_menu['user'][0])]
+                track = self.main_menu['tracks'].i
+
+            elif context['type'] == 'artist':
+                uris = [s['uri'] for s in
+                        self.api.get_selections_from_artist(self.current_context)
+                        if s['type'] == 'track']
+                index = self.main_menu['tracks'].i
+            else:
+                context_uri = context['uri']
 
         self.api.play(track, context_uri, uris, self.current_device)
 
@@ -845,22 +880,21 @@ class SpotifyState(object):
     def set_playlist(self, playlist):
         tracks = self.api.get_tracks_from_playlist(playlist)
         if tracks:
-            self.set_tracks(tracks, playlist['uri'])
+            self.set_tracks(tracks, playlist)
             self.main_menu.get_list('tracks').header = playlist['name']
 
     def set_artist(self, artist):
         self.searching = False
-        selections = self.api.get_top_tracks_from_artist(artist)
-        selections += self.api.get_albums_from_artist(artist)
+        selections = self.api.get_selections_from_artist(artist)
         if selections:
-            self.set_tracks(selections)
+            self.set_tracks(selections, artist)
             self.main_menu.get_list('tracks').header = artist['name']
 
     def set_album(self, album):
         self.searching = False
         tracks = self.api.get_tracks_from_album(album)
         if tracks:
-            self.set_tracks(tracks, album['uri'])
+            self.set_tracks(tracks, album)
             self.main_menu.get_list('tracks').header = album['name']
 
     def set_tracks(self, tracks, context=None, save_list=True):
