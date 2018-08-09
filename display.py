@@ -45,18 +45,11 @@ class CursesDisplay(object):
         self._ordered_windows = []
         """Windows in an odered list."""
 
-        # Add the windows.
-        user = (self._rows-2, self._cols/4, 0, 0)
-        tracks = (self._rows*2/3, (self._cols - 1 - (user[1])), 0, user[1]+user[3])
-        player = (self._rows*1/3-2, tracks[1], tracks[0], tracks[3])
-        search = (self._rows*8/10, self._cols*8/10, self._rows/10, self._cols/10)
-        select_player = (self._rows*6/10, self._cols*6/10, self._rows*2/10, self._cols*2/10)
-
-        self._register_window("search_results", search)
-        self._register_window("select_player", select_player)
-        self._register_window("user", user)
-        self._register_window("tracks", tracks)
-        self._register_window("player", player)
+        self._register_window("search_results", self._window_sizes["search"])
+        self._register_window("select_player", self._window_sizes["select_player"])
+        self._register_window("user", self._window_sizes["user"])
+        self._register_window("tracks", self._window_sizes["tracks"])
+        self._register_window("player", self._window_sizes["player"])
 
         self._next_update_time = time.time()
         self._last_render_time = time.time()
@@ -203,17 +196,11 @@ class CursesDisplay(object):
                     uc.top_panel(panel)
 
     def update_panel_size(self):
-        user = (self._rows-2, self._cols/4, 0, 0)
-        tracks = (self._rows*2/3, (self._cols - 1 - (user[1])), 0, user[1]+user[3])
-        player = (self._rows*1/3-2, tracks[1], self._rows*2/3, tracks[3])
-        search = (self._rows*8/10, self._cols*8/10, self._rows/10, self._cols/10)
-        select_player = (self._rows*6/10, self._cols*6/10, self._rows*2/10, self._cols*2/10)
-
-        self._resize_window("search_results", search)
-        self._resize_window("select_player", select_player)
-        self._resize_window("user", user)
-        self._resize_window("tracks", tracks)
-        self._resize_window("player", player)
+        self._resize_window("search_results", self._window_sizes["search"])
+        self._resize_window("select_player", self._window_sizes["select_player"])
+        self._resize_window("user", self._window_sizes["user"])
+        self._resize_window("tracks", self._window_sizes["tracks"])
+        self._resize_window("player", self._window_sizes["player"])
 
     def _init_render_window(self, window_name):
         win = self._windows[window_name].window
@@ -279,7 +266,7 @@ class CursesDisplay(object):
 
     def render_footer(self):
         if self.state.is_creating_command():
-            start_col = 2
+            start_col = 1
             text = "".join(self.state.get_command_query()) + " "
             uc.mvwaddstr(self.stdscr, self._rows-1, start_col, text)
             uc.mvwaddstr(self.stdscr,
@@ -287,8 +274,8 @@ class CursesDisplay(object):
                          text[self.state.get_cursor_i()],
                          uc.A_STANDOUT)
         else:
-            text = self.state.main_menu.get_current_list_entry().str(self._cols-1)
-            uc.mvwaddstr(self.stdscr, self._rows-1, 3, text, uc.A_BOLD)
+            text = self.state.main_menu.get_current_list_entry().str(self._cols)
+            uc.mvwaddstr(self.stdscr, self._rows-1, 0, text, uc.A_BOLD)
 
     def render_search_panel(self):
         win, rows, cols = self._init_render_window("search_results")
@@ -358,3 +345,34 @@ class CursesDisplay(object):
     @property
     def _cols(self):
         return uc.getmaxyx(self.stdscr)[1]
+
+    @property
+    def _window_sizes(self):
+        user = (self._rows-2,
+                self._cols/4,
+                0,
+                0)
+        tracks = (self._rows*2/3,
+                  self._cols-(user[1])-1,
+                  0,
+                  user[1]+user[3])
+        player = (self._rows-tracks[0]-2,
+                  tracks[1],
+                  tracks[0],
+                  tracks[3])
+        search = (self._rows*8/10,
+                  self._cols*8/10,
+                  self._rows/10,
+                  self._cols/10)
+        select_player = (self._rows*6/10,
+                         self._cols*6/10,
+                         self._rows*2/10,
+                         self._cols*2/10)
+
+        return {
+            "user": user,
+            "tracks": tracks,
+            "player": player,
+            "search": search,
+            "select_player": select_player
+        }

@@ -58,9 +58,9 @@ def is_int(n):
         bool: True if it is an integet.
     """
     try:
-        n = int(n)
+        int(n)
         return True
-    except ValueError:
+    except (ValueError, TypeError):
         return False
 
 
@@ -230,6 +230,12 @@ TITLE = """
    [marcdjulien] v{}.{}.{}
 """.format(*get_version())
 
+
+SAVED_TRACKS_CONTEXT_URI = "spotify_terminal:saved_tracks:context"
+
+ARTIST_PAGE_CONTEXT_URI = "spotify_terminal:artist:context"
+
+ARTIST_PAGE_CONTEXT = {'uri': ARTIST_PAGE_CONTEXT_URI}
 
 logging.basicConfig(filename=get_app_file_path("log"),
                     filemode='w',

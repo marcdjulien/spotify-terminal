@@ -126,26 +126,19 @@ class SpotifyApi(object):
         """
         params = {}
 
-        # Special case when playing the Saved Tracks Playlist.
-        if context_uri and (context_uri == "spotify:saved_tracks:0") and uris:
+        # Special case when playing a set of uris.
+        if  uris:
             params['uris'] = uris
-            params["offset"] = {"position": track}
+            if common.is_int(track):
+                params["offset"] = {"position": track}
         elif context_uri:
             # Set the context that we are playing in.
             params = {"context_uri": context_uri}
 
-            # Artists context can play on its own.
-            if context_uri.startswith("spotify:artist"):
-                pass
-            # Playlist or Album context should start at the beginning
-            # unless a specific track is specified.
-            elif track is None:
-                params["offset"] = {"position": 0}
-            else:
-                if common.is_int(track):
-                    params["offset"] = {"position": track}
-                else:
-                    params["offset"] = {"uri": track}
+            if common.is_int(track):
+                params["offset"] = {"position": track}
+            elif isinstance(track, basestring):
+                params["offset"] = {"uri": track}
 
         # No context given, just play the track.
         elif track is not None and not context_uri:
@@ -326,6 +319,42 @@ class SpotifyApi(object):
         return tuple(Album(album) for album in albums)
 
     @uri_cache
+    def get_top_tracks_from_artist(self, artist, market=common.get_default_market()):
+        """Get top tracks from a certain Artist.
+
+        This also returns a pseudo-track to play the Artist context.
+
+        Args:
+            artist (Artist): The Artist to get Tracks from.
+
+        Returns:
+            tuple: The Tracks.
+        """
+        q = urllib.urlencode({"country": market})
+        result = self.get_api_v1("artists/{}/top-tracks?".format(artist['id'])
+                                 + q)
+
+        if result:
+            return tuple(Track(t) for t in result["tracks"])
+        else:
+            return []
+
+    @uri_cache
+    def get_selections_from_artist(self, artist):
+        """Return the selection form an Artist.
+
+        This includes the top tracks and albums from the artist.
+
+        Args:
+            artist (Artist): The Artist.
+
+        Returns:
+            iter: The selection. Tracks and Albums.
+        """
+        return (self.get_top_tracks_from_artist(artist)
+                + self.get_albums_from_artist(artist))
+
+    @uri_cache
     def get_tracks_from_album(self, album):
         """Get Tracks from a certain Album.
 
@@ -343,30 +372,6 @@ class SpotifyApi(object):
         return tuple(tracks)
 
     @uri_cache
-    def get_top_tracks_from_artist(self, artist, market=common.get_default_market()):
-        """Get top tracks from a certain Artist.
-
-        This also returns a pseudo-track to play the Artist context.
-
-        Args:
-            artist (Artist): The Artist to get Tracks from.
-
-        Returns:
-            tuple: The Tracks.
-        """
-        q = urllib.urlencode({"country": market})
-        result = self.get_api_v1("artists/{}/top-tracks?".format(artist['id']) +
-                                 q)
-
-        play_artist = Artist(artist)
-        play_artist['name'] = "Play {}".format(artist['name'])
-
-        if result:
-            return tuple([play_artist] + list(Track(t) for t in result["tracks"]))
-        else:
-            return []
-
-    @uri_cache
     def get_tracks_from_playlist(self, playlist):
         """Get Tracks from a certain Playlist.
 
@@ -377,7 +382,7 @@ class SpotifyApi(object):
             tuple: The Tracks.
         """
         # Special case for the "Saved" Playlist
-        if playlist['uri'] == "spotify:saved_tracks:0":
+        if playlist['uri'] == common.SAVED_TRACKS_CONTEXT_URI:
             return self._get_saved_tracks()
         else:
             url = "users/{}/playlists/{}/tracks".format(playlist['owner']['id'],
