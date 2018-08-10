@@ -587,7 +587,7 @@ class SpotifyState(object):
                 elif self.is_creating_command():
                     self.creating_command = False
 
-            elif char in ['/', ':', '#']:
+            elif char in ['/', ':', '"']:
                 # Start creating command
                 if not self.is_creating_command():
                     self.set_command_query(char)
@@ -709,11 +709,13 @@ class SpotifyState(object):
                 command_string = "exit"
             else:
                 command_string = command_input[1::]
-        elif command_input[0] == "#":
-            if command_input == "#":
+        elif command_input[0] == '"':
+            if command_input == '"':
                 return
             else:
                 command_string = "search {}".format(command_input[1::])
+                if command_string[-1] == '"':
+                    command_string = command_string[:-1]
         elif command_input[0] == "/":
             command_string = "find 0 {}".format(command_input[1::])
         else:
