@@ -69,8 +69,8 @@ Execute the following command to run the program:
 ```
 Where ```username``` is your Spotify username.
 
-# \# Search
-By typing ```#``` you can begin a search.
+# " Search
+By typing ```"``` you can begin a search. You may optionally the search with an end ".
 
 # : Commands
 By typing ```:``` you can enter commands. The following is a list of all commands:
@@ -109,6 +109,11 @@ Type ```/``` is a shortcut to the find command. You can also type ```n``` or ```
 ```Shift + ,``` to play the previous song.
 
 ```Shift + W``` to see list of players.
+
+```Shift + 0-9``` to set to set the volume. 1...0 for volume 10...100.
+
+```Shift + ` ``` to mute.
+
 
 # Notes
 This has only been tested on Linux and Windows.
