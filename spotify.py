@@ -7,7 +7,7 @@ import unicurses as uc
 import common
 from display import CursesDisplay
 from spotify_api import SpotifyApi
-from model import SpotifyState
+from state import SpotifyState
 
 
 logger = common.logging.getLogger(__name__)
@@ -61,7 +61,6 @@ if __name__ == '__main__':
     except BaseException:
         common.clear()
         raise
-
 
     # Clear the screen to leave a clean terminal.
     common.clear()

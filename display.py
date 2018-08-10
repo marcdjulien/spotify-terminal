@@ -322,9 +322,9 @@ class CursesDisplay(object):
         self._next_update_time = time.time() + self.UPDATE_PERIOD
 
     def is_active_window(self, window_name):
-        if self.state.is_searching():
+        if self.state.in_search_menu():
             return window_name == "search_results"
-        elif self.state.is_selecting_player():
+        elif self.state.in_select_player_menu():
             return window_name == "select_player"
         else:
             return self.state.main_menu.get_current_list().name == window_name

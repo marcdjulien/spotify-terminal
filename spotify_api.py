@@ -45,7 +45,7 @@ def needs_authentication(func):
                 self.auth_from_web()
                 try:
                     return func(self, *args, **kwargs)
-                except Exception as e2:
+                except Exception:
                     logger.warning("Failed again after re-authenticating. "
                                    "Giving up.")
             else:
@@ -127,7 +127,7 @@ class SpotifyApi(object):
         params = {}
 
         # Special case when playing a set of uris.
-        if  uris:
+        if uris:
             params['uris'] = uris
             if common.is_int(track):
                 params["offset"] = {"position": track}
@@ -462,7 +462,7 @@ class SpotifyApi(object):
         """
         headers = {"Authorization": "%s %s" % (self.api_token_type, self.api_access_token)}
         api_url = "https://api.spotify.com/v1/{}".format(endpoint)
-        data =  self.get_json(api_url, headers=headers, params=params)
+        data = self.get_json(api_url, headers=headers, params=params)
         if not data:
             logger.info("GET return no data")
         return data
