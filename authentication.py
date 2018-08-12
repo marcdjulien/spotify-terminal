@@ -17,9 +17,6 @@ import common
 
 logger = common.logging.getLogger(__name__)
 
-
-CLIENT_ID = "bd392941710943429ba45210c9b2c640"
-
 PORT = 12345
 
 REDIRECT_URI = "http://localhost:{}/".format(PORT)
@@ -33,13 +30,11 @@ SCOPE = " ".join([
     "user-library-read"
 ])
 
-RESPONSE_TYPE = "token"
-
 PARAMS = {
-    "client_id": CLIENT_ID,
+    "client_id": "bd392941710943429ba45210c9b2c640",
     "redirect_uri": REDIRECT_URI,
     "scope": SCOPE,
-    "response_type": RESPONSE_TYPE
+    "response_type": "token"
 }
 
 URL = "https://accounts.spotify.com/authorize" + "?" + urllib.urlencode(PARAMS)

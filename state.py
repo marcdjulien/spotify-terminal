@@ -11,6 +11,7 @@ from model import (
 )
 import common
 
+
 logger = common.logging.getLogger(__name__)
 
 
@@ -22,7 +23,7 @@ class List(object):
     """
 
     def __init__(self, name=None):
-        self.i = -1
+        self.i = 0
         """Currently selected index."""
 
         self.list = tuple()
@@ -41,7 +42,7 @@ class List(object):
             l (iter): The list ot update to.
         """
         self.list = tuple(l)
-        self.i = 0 if self.list else -1
+        self.i = 0
 
     def current_entry(self):
         """Return the currently selected entry.
@@ -68,7 +69,11 @@ class List(object):
         return self.i
 
     def update_index(self, delta):
+        """Set the index to the current index + delta.
 
+        Args:
+            delta (int): The delta.
+        """
         self.set_index(self.i + delta)
 
     def increment_index(self, amount=None):
@@ -94,7 +99,7 @@ class List(object):
 
 
 class ListCollection(object):
-    """A Collection of Lists."""
+    """A collection of Lists."""
 
     def __init__(self, name, lists):
         self.name = name
@@ -161,7 +166,7 @@ def async(func):
 
 
 class SpotifyState(object):
-    """Represents the programs internal state of Spotify.
+    """Represents the programs internal state of Spotify and menus.
 
     User input will alter this state.
     """
@@ -172,7 +177,7 @@ class SpotifyState(object):
 
     SEARCH_MENU_STATE = "search_menu_state"
 
-    DEVICE_MENU_STATE = "device_menu_state"
+    PLAYER_MENU_STATE = "player_menu_state"
 
     EXIT_STATE = "exit_state"
 
@@ -182,12 +187,6 @@ class SpotifyState(object):
 
         self.api = api
         """SpotifyApi object to make Spotify API calls."""
-
-        self.env_info = {}
-        """Environment information."""
-
-        self.shortcuts = {}
-        """Shorcuts."""
 
         self.main_menu = ListCollection("main",
                                         [List("user"),
@@ -265,11 +264,6 @@ class SpotifyState(object):
         self.init()
 
     def init(self):
-        # Configure from stermrc file.
-        # TODO: Right not this does nothing since there's nothing
-        #       to set in the rc file.
-        self.read_rc_file()
-
         # Get the User info.
         self.user = self.api.get_user(self.get_username())
 
@@ -293,23 +287,23 @@ class SpotifyState(object):
         self.main_menu['user'].update_list(tuple(playlists))
 
         # Initialize track list to first playlist.
-        self.set_playlist(self.main_menu['user'][0])
+        self._set_playlist(self.main_menu['user'][0])
 
         # Initialize PlayerActions.
         self.main_menu['player'].update_list([
-            PlayerAction("(S)", self.toggle_shuffle),
+            PlayerAction("(S)", self._toggle_shuffle),
             PlayerAction("<< ", self.api.previous),
-            PlayerAction("(P)", self.toggle_play),
+            PlayerAction("(P)", self._toggle_play),
             PlayerAction(" >>", self.api.next),
-            PlayerAction("(R)", self.toggle_repeat),
-            PlayerAction(" --", self.decrease_volume),
-            PlayerAction(" ++", self.increase_volume),
+            PlayerAction("(R)", self._toggle_repeat),
+            PlayerAction(" --", self._decrease_volume),
+            PlayerAction(" ++", self._increase_volume),
         ])
 
         # Get current player state.
         self.sync_player_state()
 
-    def read_rc_file(self):
+    def _read_rc_file(self):
         """Initializes the users settings based on the stermrc file"""
         try:
             rc_file = open(common.CONFIG_FILENAME, "r")
@@ -321,19 +315,6 @@ class SpotifyState(object):
             # Strip whitespace and comments.
             line = line.strip()
             line = line.split("#")[0]
-            if "<-" in line:
-                toks = line.split("<-")
-                if len(toks) != 2:
-                    logger.error("Error in line: %s" % (line))
-                    exit()
-                self.env_info[toks[0]] = toks[1]
-                continue
-            elif "=" in line:
-                toks = line.split("=")
-                if len(toks) != 2:
-                    logger.error("Error in line: %s" % (line))
-                    exit()
-                self.shortcuts[toks[0]] = toks[1]
 
     @async
     def sync_player_state(self):
@@ -346,8 +327,8 @@ class SpotifyState(object):
             self.current_device = Device(player_state['device'])
             self.volume = self.current_device['volume_percent']
 
-            self.set_repeat(player_state['repeat_state'])
-            self.set_shuffle(player_state['shuffle_state'])
+            self._set_repeat(player_state['repeat_state'])
+            self._set_shuffle(player_state['shuffle_state'])
 
             self.player_state_synced = True
         else:
@@ -391,7 +372,7 @@ class SpotifyState(object):
                 entry = self.search_menu.get_current_list_entry()
                 if entry['type'] == 'album':
                     self.current_state = self.MAIN_MENU_STATE
-                    self.set_album(entry)
+                    self._set_album(entry)
                 elif entry['type'] == 'artist':
                     albums = self.api.get_albums_from_artist(entry)
                     if albums:
@@ -403,7 +384,7 @@ class SpotifyState(object):
                     self.command_history_i = common.clamp(self.command_history_i-1,
                                                           0,
                                                           len(self.command_history)-1)
-                    self.set_command_query(self.command_history[self.command_history_i])
+                    self._set_command_query(self.command_history[self.command_history_i])
             elif self.in_main_menu():
                 if self.main_menu.get_current_list().name == "player":
                     self.main_menu.decrement_list()
@@ -418,7 +399,7 @@ class SpotifyState(object):
                     self.command_history_i = common.clamp(self.command_history_i+1,
                                                           0,
                                                           len(self.command_history)-1)
-                    self.set_command_query(self.command_history[self.command_history_i])
+                    self._set_command_query(self.command_history[self.command_history_i])
             elif self.in_main_menu():
                 if self.main_menu.get_current_list().name == "player":
                     self.main_menu.increment_list()
@@ -443,7 +424,7 @@ class SpotifyState(object):
                 if self.previous_tracks:
                     header, tracks, context = self.previous_tracks.pop()
                     self.current_context = context
-                    self.set_tracks(tracks, save_list=False)
+                    self._set_tracks(tracks, save_list=False)
                     self.main_menu.get_list('tracks').header = header
             elif self.in_search_menu():
                 self.current_state = self.MAIN_MENU_STATE
@@ -475,10 +456,13 @@ class SpotifyState(object):
             elif char in ['/', ':', '"']:
                 # Start creating command
                 if not self.is_creating_command():
-                    self.set_command_query(char)
-                    self.command_cursor_i = 1
+                    if char == '"':
+                        self._set_command_query("\"\"")
+                        self.command_cursor_i = 1
+                    else:
+                        self._set_command_query(char)
+                        self.command_cursor_i = 1
                     self.creating_command = True
-                    return
 
             elif char == "n":
                 if self.prev_command[0] in ["find"]:
@@ -495,7 +479,7 @@ class SpotifyState(object):
                     self._process_command(" ".join(command))
 
             elif char == 'W':
-                self.current_state = self.DEVICE_MENU_STATE
+                self.current_state = self.PLAYER_MENU_STATE
                 devices = self.api.get_devices()
                 self.select_player_menu['players'].update_list(devices)
 
@@ -506,18 +490,18 @@ class SpotifyState(object):
                 entry = self.current_menu.get_current_list_entry()
                 if entry['type'] == 'track':
                     artist = entry['artists'][0]
-                    self.set_artist(artist)
+                    self._set_artist(artist)
 
             elif char == 'S':
                 entry = self.current_menu.get_current_list_entry()
                 if entry['type'] == 'track':
                     album = entry['album']
-                    self.set_album(album)
+                    self._set_album(album)
                 elif entry['type'] == 'album':
-                    self.set_album(entry)
+                    self._set_album(entry)
 
             elif char == " ":
-                self.toggle_play()
+                self._toggle_play()
 
             elif char == ">":
                 self.api.next()
@@ -541,26 +525,29 @@ class SpotifyState(object):
             elif key in [uc.KEY_ENTER, 10, 13]:
                 if self.in_search_menu():
                     entry = self.search_menu.get_current_list_entry()
-                    if entry['type'] == 'artist':
-                        self.set_artist(entry)
-                    elif entry['type'] == 'album':
-                        self.set_album(entry)
-                    elif entry['type'] == 'track':
-                        self.play(entry['uri'], context=None)
+                    if entry:
+                        if entry['type'] == 'artist':
+                            self._set_artist(entry)
+                        elif entry['type'] == 'album':
+                            self._set_album(entry)
+                        elif entry['type'] == 'track':
+                            self._play(entry['uri'], context=None)
                     self.current_state = self.MAIN_MENU_STATE
 
                 elif self.in_main_menu():
                     if self.main_menu.get_current_list().name == "user":
                         playlist = self.main_menu.get_current_list_entry()
-                        self.set_playlist(playlist)
+                        if playlist:
+                            self._set_playlist(playlist)
                     elif self.main_menu.get_current_list().name == "tracks":
                         entry = self.main_menu.get_current_list_entry()
-                        if entry['type'] == 'artist':
-                            self.set_artist(entry)
-                        elif entry['type'] == 'album':
-                            self.set_album(entry)
-                        elif entry['type'] == 'track':
-                            self.play(entry['uri'], context=self.current_context)
+                        if entry:
+                            if entry['type'] == 'artist':
+                                self._set_artist(entry)
+                            elif entry['type'] == 'album':
+                                self._set_album(entry)
+                            elif entry['type'] == 'track':
+                                self._play(entry['uri'], context=self.current_context)
                     elif self.main_menu.get_current_list().name == "player":
                         self.main_menu.get_current_list_entry().action()
 
@@ -586,16 +573,22 @@ class SpotifyState(object):
         if not isinstance(command_input, basestring):
             command_input = "".join(command_input).strip()
 
+        if not command_input:
+            self.creating_command = False
+            return
+
         # Convert special commands.
         if command_input[0] == ":":
             if command_input == ":":
+                self.creating_command = False
                 return
             elif command_input.lower() == ":q":
                 command_string = "exit"
             else:
                 command_string = command_input[1::]
         elif command_input[0] == '"':
-            if command_input == '"':
+            if command_input == '"' or command_input == '""':
+                self.creating_command = False
                 return
             else:
                 command_string = "search {}".format(command_input[1::])
@@ -628,7 +621,6 @@ class SpotifyState(object):
 
         self.command_history.append(command_input)
         self.command_history_i = len(self.command_history)
-
         self.creating_command = False
 
     def _execute_search(self, *query):
@@ -637,7 +629,12 @@ class SpotifyState(object):
         results = self.api.search(("artist", "album", "track"), query)
         if results:
             self.search_menu["search_results"].update_list(results)
-            self.current_state = self.SEARCH_MENU_STATE
+            self.search_menu["search_results"].header = "Search results for \"{}\"".format(query)
+        else:
+            self.search_menu["search_results"].update_list([])
+            self.search_menu["search_results"].header = "No results found for \"{}\"".format(query)
+
+        self.current_state = self.SEARCH_MENU_STATE
 
     @async
     def _execute_find(self, i, *query):
@@ -657,14 +654,14 @@ class SpotifyState(object):
     def _execute_shuffle(self, state):
         state = state.lower().strip()
         state = True if state == "true" else False
-        self.set_shuffle(state)
+        self._set_shuffle(state)
         self.api.shuffle(state)
 
     @async
     def _execute_repeat(self, state):
         state = state.lower().strip()
         if state in ["off", "context", "track"]:
-            self.set_repeat(state)
+            self._set_repeat(state)
             self.api.repeat(state)
 
     @async
@@ -677,7 +674,7 @@ class SpotifyState(object):
     @async
     def _execute_play(self):
         self.paused = False
-        self.play(None, None)
+        self._play(None, None)
 
     @async
     def _execute_pause(self):
@@ -687,7 +684,7 @@ class SpotifyState(object):
     def _execute_exit(self):
         self.current_state = self.EXIT_STATE
 
-    def play(self, track, context):
+    def _play(self, track, context):
         context_uri = None
         uris = None
 
@@ -710,69 +707,52 @@ class SpotifyState(object):
 
         self.api.play(track, context_uri, uris, self.current_device)
 
-    def toggle_play(self):
+    def _toggle_play(self):
         if self.paused:
             self._process_command("play")
         else:
             self._process_command("pause")
 
-    def toggle_shuffle(self):
+    def _toggle_shuffle(self):
         self._process_command("shuffle {}".format(not self.shuffle))
 
-    def toggle_repeat(self):
+    def _toggle_repeat(self):
         self._process_command("repeat {}".format(
             ['off', 'context', 'track'][(self.repeat + 1) % 3]
         ))
 
-    def decrease_volume(self):
+    def _decrease_volume(self):
         self._process_command("volume {}".format(self.volume - 5))
 
-    def increase_volume(self):
+    def _increase_volume(self):
         self._process_command("volume {}".format(self.volume + 5))
 
-    def get_username(self):
-        return self.api.get_username()
-
-    def get_command_query(self):
-        return self.command_query
-
-    def get_currently_playing_track(self):
-        return self.currently_playing_track
-
-    def get_repeat_enum(self, repeat):
+    def _get_repeat_enum(self, repeat):
         return {"off": self.REPEAT_OFF,
                 "track": self.REPEAT_TRACK,
                 "context": self.REPEAT_CONTEXT}[repeat]
 
-    def poll_currently_playing_track(self):
-        track = self.api.get_currently_playing()
-        if track != NoneTrack:
-            self.currently_playing_track = track
-
-    def get_cursor_i(self):
-        return self.command_cursor_i
-
-    def set_playlist(self, playlist):
+    def _set_playlist(self, playlist):
         tracks = self.api.get_tracks_from_playlist(playlist)
         if tracks:
-            self.set_tracks(tracks, playlist)
+            self._set_tracks(tracks, playlist)
             self.main_menu.get_list('tracks').header = playlist['name']
 
-    def set_artist(self, artist):
+    def _set_artist(self, artist):
         self.current_state = self.MAIN_MENU_STATE
         selections = self.api.get_selections_from_artist(artist)
         if selections:
-            self.set_tracks(selections, artist)
+            self._set_tracks(selections, artist)
             self.main_menu.get_list('tracks').header = artist['name']
 
-    def set_album(self, album):
+    def _set_album(self, album):
         self.current_state = self.MAIN_MENU_STATE
         tracks = self.api.get_tracks_from_album(album)
         if tracks:
-            self.set_tracks(tracks, album)
+            self._set_tracks(tracks, album)
             self.main_menu.get_list('tracks').header = album['name']
 
-    def set_tracks(self, tracks, context=None, save_list=True):
+    def _set_tracks(self, tracks, context=None, save_list=True):
         self.main_menu.set_current_list('tracks')
         self.main_menu.get_list('tracks').set_index(0)
 
@@ -784,14 +764,14 @@ class SpotifyState(object):
         self.current_context = context
         self.main_menu.get_list('tracks').update_list(tracks)
 
-    def set_command_query(self, text):
+    def _set_command_query(self, text):
         self.command_query = list(text)
 
-    def set_repeat(self, state):
-        self.repeat = self.get_repeat_enum(state)
+    def _set_repeat(self, state):
+        self.repeat = self._get_repeat_enum(state)
         self.main_menu.get_list('player')[4].title = "({})".format(['x', 'o', '1'][self.repeat])
 
-    def set_shuffle(self, state):
+    def _set_shuffle(self, state):
         self.shuffle = state
         self.main_menu.get_list('player')[0].title = "({})".format(
             {True: "S", False: "s"}[self.shuffle]
@@ -807,7 +787,24 @@ class SpotifyState(object):
         return self.current_state == self.MAIN_MENU_STATE
 
     def in_select_player_menu(self):
-        return self.current_state == self.DEVICE_MENU_STATE
+        return self.current_state == self.PLAYER_MENU_STATE
 
     def is_running(self):
         return self.current_state != self.EXIT_STATE
+
+    def poll_currently_playing_track(self):
+        track = self.api.get_currently_playing()
+        if track != NoneTrack:
+            self.currently_playing_track = track
+
+    def get_cursor_i(self):
+        return self.command_cursor_i
+
+    def get_username(self):
+        return self.api.get_username()
+
+    def get_command_query(self):
+        return self.command_query
+
+    def get_currently_playing_track(self):
+        return self.currently_playing_track

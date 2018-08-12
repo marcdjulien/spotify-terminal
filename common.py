@@ -8,19 +8,6 @@ import traceback
 import unicodedata
 
 
-def catch_exceptions(func):
-    """Catch an exception and print it."""
-    def wrapper(*args, **kwargs):
-        try:
-            return func(*args, **kwargs)
-        except BaseException:
-            clear()
-            traceback.print_exc()
-            os._exit(1)
-
-    return wrapper
-
-
 def get_default_market():
     """Return the default market.
 
@@ -245,6 +232,19 @@ logging.basicConfig(filename=get_app_file_path("log"),
 
 logger = logging.getLogger(__name__)
 logger.info("\n\n\n")
+
+
+def catch_exceptions(func):
+    """Catch an exception and print it."""
+    def wrapper(*args, **kwargs):
+        try:
+            return func(*args, **kwargs)
+        except BaseException:
+            clear()
+            traceback.print_exc()
+            os._exit(1)
+
+    return wrapper
 
 
 class ContextDuration(object):

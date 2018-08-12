@@ -16,7 +16,7 @@ logger = common.logging.getLogger(__name__)
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description="Terminal remote Spotify player.")
     parser.add_argument("username", help="spotify username")
-    parser.add_argument("-c",
+    parser.add_argument("-c --clear_cache",
                         action="store_true",
                         default=False,
                         dest="clear_cache",
