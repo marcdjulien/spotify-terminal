@@ -274,20 +274,30 @@ class CursesDisplay(object):
                          text[self.state.get_cursor_i()],
                          uc.A_STANDOUT)
         else:
-            text = self.state.main_menu.get_current_list_entry().str(self._cols)
+            text = self.state.current_menu.get_current_list_entry().str(self._cols)
             uc.mvwaddstr(self.stdscr, self._rows-1, 0, text, uc.A_BOLD)
 
     def render_search_panel(self):
         win, rows, cols = self._init_render_window("search_results")
         uc.box(win)
+        n_display_cols = cols - 4
 
         # Show the title of the context.
         title_start_line = 1
-        uc.mvwaddnstr(win, title_start_line, 2,
-                      "Search Results", cols-3, uc.A_BOLD)
+        uc.mvwaddnstr(win,
+                      title_start_line, 2,
+                      self.state.search_menu["search_results"].header,
+                      n_display_cols, uc.A_BOLD)
 
+        # Show the results.
+        results = [r.str(n_display_cols) for r in self.state.search_menu["search_results"]]
         selected_i = self.state.search_menu.get_current_list().i
-        self._render_list(win, self.state.search_menu["search_results"], 3, rows-4, 2, cols-3, selected_i, self.is_active_window("search_results"))
+        self._render_list(win,
+                          results,
+                          3, rows-4,
+                          2, n_display_cols,
+                          selected_i,
+                          self.is_active_window("search_results"))
 
     def render_select_player_panel(self):
         win, rows, cols = self._init_render_window("select_player")
@@ -322,9 +332,9 @@ class CursesDisplay(object):
         self._next_update_time = time.time() + self.UPDATE_PERIOD
 
     def is_active_window(self, window_name):
-        if self.state.is_searching():
+        if self.state.in_search_menu():
             return window_name == "search_results"
-        elif self.state.is_selecting_player():
+        elif self.state.in_select_player_menu():
             return window_name == "select_player"
         else:
             return self.state.main_menu.get_current_list().name == window_name
