@@ -532,13 +532,19 @@ class SpotifyApi(object):
         Returns:
             bool: True on success.
         """
+        required_keys = {"access_token", "token_type", "expires_in"}
+        found_keys = set()
+
         if os.path.isfile(common.AUTH_FILENAME):
             auth_file = open(common.AUTH_FILENAME)
             for line in auth_file:
                 line = line.strip()
                 toks = line.split("=")
-                setattr(self, "api_{}".format(toks[0]), toks[1])
-            return True
+                if toks[0] in required_keys:
+                    logger.info("Found %s in auth file", toks[0])
+                    setattr(self, "api_{}".format(toks[0]), toks[1])
+                    found_keys.add(toks[0])
+            return len(required_keys.symmetric_difference(found_keys)) == 0
         else:
             return False
 
