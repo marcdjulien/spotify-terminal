@@ -443,9 +443,7 @@ class SpotifyState(object):
                     self._process_command(self.get_command_query())
                 return
 
-            logger.debug("Key: %d", key)
-
-            if key in [uc.KEY_EXIT, 27]:
+            elif key in [uc.KEY_EXIT, 27]:
                 if self.in_search_menu():
                     self.current_state = self.MAIN_MENU_STATE
                 elif self.in_select_player_menu():
@@ -561,6 +559,7 @@ class SpotifyState(object):
         else:
             logger.debug("Unregistered key: %d", key)
 
+        logger.debug("Key: %d", key)
     def _clamp_values(self):
         self.command_cursor_i = common.clamp(self.command_cursor_i,
                                              0,
