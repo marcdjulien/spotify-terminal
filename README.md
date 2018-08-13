@@ -92,6 +92,8 @@ By typing ```:``` you can enter commands. The following is a list of all command
 ```exit``` | Exit the application.
 
 # Other Tips and Tricks
+```TAB``` while on an Artist's page to toggle between their main page and a list of all of their tracks.
+
 Type ```/``` is a shortcut to the find command. You can also type ```n``` or ```p``` to find a next or previous entry (similar to vim).
 
 ```:q``` to exit.
@@ -113,6 +115,7 @@ Type ```/``` is a shortcut to the find command. You can also type ```n``` or ```
 ```Shift + 0-9``` to set to set the volume. 1...0 for volume 10...100.
 
 ```Shift + ` ``` to mute.
+
 
 
 # Notes

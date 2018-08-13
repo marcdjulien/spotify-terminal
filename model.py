@@ -17,6 +17,9 @@ class SpotifyObject(object):
     def __setitem__(self, key, value):
         self.info[key] = value
 
+    def get(self, key, default=None):
+        return self.info.get(key, default)
+
     def str(self, cols):
         return str(self)
 

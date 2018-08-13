@@ -109,8 +109,11 @@ def write_auth_file(data):
                 auth_file.write("%s=%s\n" % (k, v))
             logger.debug("%s created", common.AUTH_FILENAME)
     else:
-        os.rm(common.AUTH_FILENAME)
-        logger.debug("%s deleted", common.AUTH_FILENAME)
+        try:
+            os.remove(common.AUTH_FILENAME)
+            logger.debug("%s deleted", common.AUTH_FILENAME)
+        except OSError:
+            pass
 
 
 def authenticate():

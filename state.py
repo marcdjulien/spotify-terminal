@@ -423,13 +423,19 @@ class SpotifyState(object):
             elif self.in_main_menu():
                 if self.previous_tracks:
                     header, tracks, context = self.previous_tracks.pop()
-                    self.current_context = context
-                    self._set_tracks(tracks, save_list=False)
-                    self.main_menu.get_list('tracks').header = header
+                    self._set_tracks(tracks, context=context, save_list=False, header=header)
             elif self.in_search_menu():
                 self.current_state = self.MAIN_MENU_STATE
             elif self.in_select_player_menu():
                 self.current_state = self.MAIN_MENU_STATE
+
+        elif key == uc.KEY_NPAGE:
+            if not self.is_creating_command():
+                self.current_menu.get_current_list().increment_index(15)
+
+        elif key == uc.KEY_PPAGE:
+            if not self.is_creating_command():
+                self.current_menu.get_current_list().decrement_index(15)
 
         # ASCII character pressed
         elif 0 <= key <= 256:
@@ -498,6 +504,14 @@ class SpotifyState(object):
                 elif entry['type'] == 'album':
                     self._set_album(entry)
 
+            elif char == '\t':
+                if self.current_context and self.current_menu.get_current_list().name == "tracks":
+                    if common.is_all_tracks_context(self.current_context):
+                        artist = self.current_context['artist']
+                        self._set_artist(artist)
+                    elif self.current_context.get("type") == "artist":
+                        self._set_artist_all_tracks(self.current_context)
+
             elif char == " ":
                 self._toggle_play()
 
@@ -560,6 +574,7 @@ class SpotifyState(object):
             logger.debug("Unregistered key: %d", key)
 
         logger.debug("Key: %d", key)
+
     def _clamp_values(self):
         self.command_cursor_i = common.clamp(self.command_cursor_i,
                                              0,
@@ -695,11 +710,13 @@ class SpotifyState(object):
                 uris = [t['uri'] for t in
                         self.api.get_tracks_from_playlist(self.main_menu['user'][0])]
                 track = self.main_menu['tracks'].i
-
-            elif context['type'] == 'artist':
-                uris = [s['uri'] for s in
-                        self.api.get_selections_from_artist(self.current_context)
+            elif context.get('type') == 'artist':
+                uris = [s['uri']
+                        for s in self.api.get_selections_from_artist(self.current_context)
                         if s['type'] == 'track']
+                track = self.main_menu['tracks'].i
+            elif common.is_all_tracks_context(context):
+                uris = [t['uri'] for t in self.main_menu['tracks'].list]
                 track = self.main_menu['tracks'].i
             else:
                 context_uri = context['uri']
@@ -734,24 +751,29 @@ class SpotifyState(object):
     def _set_playlist(self, playlist):
         tracks = self.api.get_tracks_from_playlist(playlist)
         if tracks:
-            self._set_tracks(tracks, playlist)
-            self.main_menu.get_list('tracks').header = playlist['name']
+            self._set_tracks(tracks, playlist, header=playlist['name'])
 
     def _set_artist(self, artist):
         self.current_state = self.MAIN_MENU_STATE
         selections = self.api.get_selections_from_artist(artist)
         if selections:
-            self._set_tracks(selections, artist)
-            self.main_menu.get_list('tracks').header = artist['name']
+            self._set_tracks(selections, artist, header=artist['name'])
+
+    def _set_artist_all_tracks(self, artist):
+        self.current_state = self.MAIN_MENU_STATE
+        tracks = self.api.get_all_tracks_from_artist(artist)
+        if tracks:
+            self._set_tracks(tracks,
+                             common.get_all_tracks_context(artist),
+                             header="All tracks from " + artist['name'])
 
     def _set_album(self, album):
         self.current_state = self.MAIN_MENU_STATE
         tracks = self.api.get_tracks_from_album(album)
         if tracks:
-            self._set_tracks(tracks, album)
-            self.main_menu.get_list('tracks').header = album['name']
+            self._set_tracks(tracks, album, header=album['name'])
 
-    def _set_tracks(self, tracks, context=None, save_list=True):
+    def _set_tracks(self, tracks, context=None, save_list=True, header=""):
         self.main_menu.set_current_list('tracks')
         self.main_menu.get_list('tracks').set_index(0)
 
@@ -762,6 +784,7 @@ class SpotifyState(object):
 
         self.current_context = context
         self.main_menu.get_list('tracks').update_list(tracks)
+        self.main_menu.get_list('tracks').header = header
 
     def _set_command_query(self, text):
         self.command_query = list(text)
