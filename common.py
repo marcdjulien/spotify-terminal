@@ -220,9 +220,19 @@ TITLE = """
 
 SAVED_TRACKS_CONTEXT_URI = "spotify_terminal:saved_tracks:context"
 
-ARTIST_PAGE_CONTEXT_URI = "spotify_terminal:artist:context"
+ARTIST_ALL_TRACKS_CONTEXT_URI = "spotify_terminal:artist:all_tracks_context"
 
-ARTIST_PAGE_CONTEXT = {'uri': ARTIST_PAGE_CONTEXT_URI}
+ARTIST_ALL_TRACKS_CONTEXT = {'uri': ARTIST_ALL_TRACKS_CONTEXT_URI}
+
+
+def get_all_tracks_context(artist):
+    return {'uri': ARTIST_ALL_TRACKS_CONTEXT_URI,
+            'artist': artist}
+
+
+def is_all_tracks_context(context):
+    return context['uri'] == ARTIST_ALL_TRACKS_CONTEXT_URI
+
 
 logging.basicConfig(filename=get_app_file_path("log"),
                     filemode='w',
