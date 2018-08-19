@@ -124,33 +124,32 @@ class SpotifyApi(object):
             uris (iter): Collection of uris to play.
             device (Device): A device to play.
         """
-        params = {}
+        data = {}
 
         # Special case when playing a set of uris.
         if uris:
-            params['uris'] = uris
+            data['uris'] = uris
             if common.is_int(track):
-                params["offset"] = {"position": track}
+                data["offset"] = {"position": track}
         elif context_uri:
             # Set the context that we are playing in.
-            params = {"context_uri": context_uri}
+            data["context_uri"] = context_uri
 
             if common.is_int(track):
-                params["offset"] = {"position": track}
+                data["offset"] = {"position": track}
             elif isinstance(track, basestring):
-                params["offset"] = {"uri": track}
+                data["offset"] = {"uri": track}
 
         # No context given, just play the track.
         elif track is not None and not context_uri:
             if isinstance(track, basestring) and track.startswith("spotify:track"):
-                params['uris'] = [track]
+                data['uris'] = [track]
 
+        params = {}
         if device and device['id']:
-            query_params = "?" + urllib.urlencode({"device_id": device['id']})
-        else:
-            query_params = ""
+            params["device_id"] = device['id']
 
-        self.put_api_v1("me/player/play" + query_params, params)
+        self.put_api_v1("me/player/play", params, data)
 
     @async
     def transfer_playback(self, device):
@@ -186,7 +185,8 @@ class SpotifyApi(object):
             shuffle (bool): Whether to shuffle or not.
         """
         q = urllib.urlencode({"state": shuffle})
-        self.put_api_v1("me/player/shuffle?" + q)
+        url = "me/player/shuffle"
+        self.put_api_v1(url, q)
 
     @async
     def repeat(self, repeat):
@@ -196,7 +196,8 @@ class SpotifyApi(object):
             repeat (bool): Whether to repeat or not.
         """
         q = urllib.urlencode({"state": repeat})
-        self.put_api_v1("me/player/repeat?" + q)
+        url = "me/player/repeat"
+        self.put_api_v1(url, q)
 
     @async
     def volume(self, volume):
@@ -206,7 +207,8 @@ class SpotifyApi(object):
             volume (int): Volume level. 0 - 100 (inclusive).
         """
         q = urllib.urlencode({"volume_percent": volume})
-        self.put_api_v1("me/player/volume?" + q)
+        url = "me/player/volume"
+        self.put_api_v1(url, q)
 
     def get_player_state(self):
         """Returns the player state.
@@ -311,9 +313,11 @@ class SpotifyApi(object):
         Returns:
             tuple: The Albums.
         """
-        params = {"include_groups": ",".join(type),
-                  "market": market}
-        page = self.get_api_v1("artists/{}/albums".format(artist['id']), params)
+        q = {"include_groups": ",".join(type),
+             "market": market,
+             "limit": 50}
+        url = "artists/{}/albums".format(artist['id'])
+        page = self.get_api_v1(url, q)
         albums = self.extract_page(page)
 
         return tuple(Album(album) for album in albums)
@@ -330,9 +334,9 @@ class SpotifyApi(object):
         Returns:
             tuple: The Tracks.
         """
-        q = urllib.urlencode({"country": market})
-        result = self.get_api_v1("artists/{}/top-tracks?".format(artist['id']) +
-                                 q)
+        q = {"country": market}
+        url = "artists/{}/top-tracks".format(artist['id'])
+        result = self.get_api_v1(url, q)
 
         if result:
             return tuple(Track(t) for t in result["tracks"])
@@ -384,7 +388,9 @@ class SpotifyApi(object):
         Returns:
             tuple: The Tracks.
         """
-        page = self.get_api_v1("albums/{}/tracks".format(album['id']))
+        q = {"limit": 50}
+        url = "albums/{}/tracks".format(album['id'])
+        page = self.get_api_v1(url, q)
         tracks = []
         for track in self.extract_page(page):
             track['album'] = album
@@ -405,9 +411,10 @@ class SpotifyApi(object):
         if playlist['uri'] == common.SAVED_TRACKS_CONTEXT_URI:
             return self._get_saved_tracks()
         else:
+            q = {"limit": 50}
             url = "users/{}/playlists/{}/tracks".format(playlist['owner']['id'],
-                                                        playlist['id'])
-            page = self.get_api_v1(url)
+                                                         playlist['id'])
+            page = self.get_api_v1(url, q)
             result = [Track(track["track"]) for track in self.extract_page(page)]
 
         return tuple(result)
@@ -418,7 +425,9 @@ class SpotifyApi(object):
         Returns:
             tuple: The Tracks.
         """
-        page = self.get_api_v1("me/tracks")
+        q = {"limit": 50}
+        url = "me/tracks"
+        page = self.get_api_v1(url, q)
         return tuple(Track(saved["track"]) for saved in self.extract_page(page))
 
     def get_user(self, user_id):
@@ -446,8 +455,9 @@ class SpotifyApi(object):
         Return:
             tuple: The Playlists.
         """
+        q = {"limit": 50}
         url = "users/{}/playlists".format(user['id'])
-        page = self.get_api_v1(url)
+        page = self.get_api_v1(url, q)
         return tuple([Playlist(p) for p in self.extract_page(page)])
 
     def extract_page(self, page):
@@ -481,15 +491,38 @@ class SpotifyApi(object):
             dict: The JSON information.
         """
         headers = {"Authorization": "%s %s" % (self.api_token_type, self.api_access_token)}
-        api_url = "https://api.spotify.com/v1/{}".format(endpoint)
-        data = self.get_json(api_url, headers=headers, params=params)
+        url = "https://api.spotify.com/v1/{}".format(endpoint)
+        resp = requests.get(url, params=params, headers=headers)
+        self.check_response(resp)
+
+        data = json.loads(common.ascii(resp.text)) if resp.text else {}
         if not data:
             logger.info("GET return no data")
+
         return data
 
     @needs_authentication
-    def put_api_v1(self, endpoint, params=None):
+    def put_api_v1(self, endpoint, params=None, data=None):
         """Spotify v1 PUT request.
+
+        Args:
+            endpoint (str): The API endpoint.
+            params (dict): Query parameters (Default is None).
+            data (dict): Body data(Default is None).
+
+        Returns:
+            Reponse: The HTTP Reponse.
+        """
+        headers = {"Authorization": "%s %s" % (self.api_token_type, self.api_access_token),
+                   "Content-Type": "application/json"}
+        api_url = "https://api.spotify.com/v1/{}".format(endpoint)
+        resp = requests.put(api_url, headers=headers, params=params, json=data)
+        self.check_response(resp)
+        return resp
+
+    @needs_authentication
+    def post_api_v1(self, endpoint, params=None):
+        """Spotify v1 POST request.
 
         Args:
             endpoint (str): The API endpoint.
@@ -501,42 +534,9 @@ class SpotifyApi(object):
         headers = {"Authorization": "%s %s" % (self.api_token_type, self.api_access_token),
                    "Content-Type": "application/json"}
         api_url = "https://api.spotify.com/v1/{}".format(endpoint)
-        resp = requests.put(api_url, headers=headers, json=params)
-        self.check_response(resp)
-        return resp
-
-    @needs_authentication
-    def post_api_v1(self, endpoint, params=None):
-        """Spotify v1 POST request.
-
-        Args:
-            endpoint (str): The API endpoint.
-            params (dict): Data parameters (Default is None).
-
-        Returns:
-            Reponse: The HTTP Reponse.
-        """
-        headers = {"Authorization": "%s %s" % (self.api_token_type, self.api_access_token),
-                   "Content-Type": "application/json"}
-        api_url = "https://api.spotify.com/v1/{}".format(endpoint)
-        resp = requests.post(api_url, headers=headers, json=params)
+        resp = requests.post(api_url, headers=headers, params=params)
         self.check_response(resp)
         return common.ascii(resp.text)
-
-    def get_json(self, url, params={}, headers={}):
-        """Return a JSON from a GET request.
-
-        Args:
-            url (str): The URL.
-            params (dict): Query parameters.
-            headers (dict): HTTP headers.
-
-        Returns:
-            dict: The resulting JSON.
-        """
-        resp = requests.get(url, params=params, headers=headers)
-        self.check_response(resp)
-        return json.loads(common.ascii(resp.text)) if resp.text else {}
 
     def check_response(self, resp):
         """Check a HTTP Reponse.
