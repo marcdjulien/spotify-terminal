@@ -23,7 +23,7 @@ class CursesDisplay(object):
     SYNC_PERIOD = 30
 
     # How often to run the program loop.
-    PRORAM_PERIOD = 0.05
+    PROGRAM_PERIOD = 0.05
 
     def __init__(self, stdscr, sp_state):
         self.state = sp_state
@@ -276,8 +276,10 @@ class CursesDisplay(object):
                          text[self.state.get_cursor_i()],
                          uc.A_STANDOUT)
         else:
-            text = self.state.current_menu.get_current_list_entry().str(self._cols)
-            uc.mvwaddstr(self.stdscr, self._rows-1, 0, text, uc.A_BOLD)
+            entry = self.state.current_menu.get_current_list_entry()
+            if entry:
+                text = entry.str(self._cols)
+                uc.mvwaddstr(self.stdscr, self._rows-1, 0, text, uc.A_BOLD)
 
     def render_search_panel(self):
         win, rows, cols = self._init_render_window("search_results")
