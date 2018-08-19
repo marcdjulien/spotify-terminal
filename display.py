@@ -16,14 +16,16 @@ class Window(object):
 
 class CursesDisplay(object):
 
+    # How often to re-render.
     RENDER_PERIOD = 1
 
-    UPDATE_PERIOD = 30
+    # How often to up.
+    SYNC_PERIOD = 30
+
+    # How often to run the program loop.
+    PRORAM_PERIOD = 0.05
 
     def __init__(self, stdscr, sp_state):
-        self.period = 0.05
-        """The period to run the loop."""
-
         self.state = sp_state
         """The SpotifyState object."""
 
@@ -51,7 +53,7 @@ class CursesDisplay(object):
         self._register_window("tracks", self._window_sizes["tracks"])
         self._register_window("player", self._window_sizes["player"])
 
-        self._next_update_time = time.time()
+        self._next_sync_time = time.time()
         self._last_render_time = time.time()
         self._last_key_pressed_time = time.time()
 
@@ -119,7 +121,7 @@ class CursesDisplay(object):
                     self._last_render_time = time.time()
 
             # Sleep for an amount of time.
-            sleep_time = self.period - t.duration
+            sleep_time = self.PROGRAM_PERIOD - t.duration
             if sleep_time > 0:
                 time.sleep(sleep_time)
             else:
@@ -151,7 +153,7 @@ class CursesDisplay(object):
             if key in [13, 10]:
                 # We probably just selected a Track, let's plan to update the
                 # currently playing track in 1 second.
-                self._next_update_time = time.time() + 1
+                self._next_sync_time = time.time() + 1
 
             self.state.process_key(key)
 
@@ -159,8 +161,8 @@ class CursesDisplay(object):
 
     def render_calcs(self):
         """Perform any calculations related to rendering."""
-        if time.time() > self._next_update_time and \
-           (time.time() - self._last_key_pressed_time) < 10:
+        cur_time = time.time()
+        if cur_time >= self._next_sync_time:
             self.sync_player()
 
     def render(self):
@@ -329,7 +331,7 @@ class CursesDisplay(object):
 
     def sync_player(self):
         self.state.sync_player_state()
-        self._next_update_time = time.time() + self.UPDATE_PERIOD
+        self._next_sync_time = time.time() + self.SYNC_PERIOD
 
     def is_active_window(self, window_name):
         if self.state.in_search_menu():
