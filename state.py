@@ -170,6 +170,12 @@ class SpotifyState(object):
 
     User input will alter this state.
     """
+    PICKLE_ATTRS = [
+        "command_history",
+        "previous_tracks",
+        "current_context",
+        "current_device"
+    ]
 
     REPEAT_OFF, REPEAT_CONTEXT, REPEAT_TRACK = range(3)
 
@@ -260,9 +266,6 @@ class SpotifyState(object):
         self.creating_command = False
         """Whether we're typing a command or not."""
 
-        # Initialize the state.
-        self.init()
-
     def init(self):
         # Get the User info.
         self.user = self.api.get_user(self.get_username())
@@ -274,7 +277,7 @@ class SpotifyState(object):
         # Get the users playlists.
         playlists = self.api.get_user_playlists(self.user)
         if not playlists:
-            print("Could not load playlists. Try again later.")
+            print("Could not load playlists. Try again.")
             exit(1)
         playlists = list(playlists)
 
@@ -286,8 +289,9 @@ class SpotifyState(object):
         playlists.insert(0, saved)
         self.main_menu['user'].update_list(tuple(playlists))
 
-        # Initialize track list to first playlist.
-        self._set_playlist(self.main_menu['user'][0])
+        # Initialize track list.
+        if not self.restore_previous_tracks(0):
+            self._set_playlist(self.main_menu['user'][0])
 
         # Initialize PlayerActions.
         self.main_menu['player'].update_list([
@@ -404,10 +408,7 @@ class SpotifyState(object):
                 if self.main_menu.get_current_list().name == "player":
                     self.main_menu.increment_list()
                 elif self.main_menu.get_current_list().name == "tracks":
-                    if self.main_menu["tracks"].i == len(self.main_menu.get_list("tracks")) - 1:
-                        self.main_menu.increment_list()
-                    else:
-                        self.main_menu.get_current_list().increment_index()
+                    self.main_menu.get_current_list().increment_index()
                 else:
                     self.main_menu.get_current_list().increment_index()
             elif self.in_search_menu() or self.in_select_player_menu():
@@ -420,10 +421,9 @@ class SpotifyState(object):
                     self.command_cursor_i -= 1
                 else:
                     self.current_state = self.MAIN_MENU_STATE
+                    self.creating_command = False
             elif self.in_main_menu():
-                if self.previous_tracks:
-                    header, tracks, context = self.previous_tracks.pop()
-                    self._set_tracks(tracks, context=context, save_list=False, header=header)
+                self.restore_previous_tracks()
             elif self.in_search_menu():
                 self.current_state = self.MAIN_MENU_STATE
             elif self.in_select_player_menu():
@@ -773,14 +773,11 @@ class SpotifyState(object):
         if tracks:
             self._set_tracks(tracks, album, header=album['name'])
 
-    def _set_tracks(self, tracks, context=None, save_list=True, header=""):
+    def _set_tracks(self, tracks, context=None, header=""):
         self.main_menu.set_current_list('tracks')
         self.main_menu.get_list('tracks').set_index(0)
 
-        if save_list and self.main_menu.get_list('tracks').list:
-            self.previous_tracks.append((self.main_menu.get_list('tracks').header,
-                                         self.main_menu.get_list('tracks').list,
-                                         self.current_context))
+        self.previous_tracks.append((tracks, context, header))
 
         self.current_context = context
         self.main_menu.get_list('tracks').update_list(tracks)
@@ -798,6 +795,17 @@ class SpotifyState(object):
         self.main_menu.get_list('player')[0].title = "({})".format(
             {True: "S", False: "s"}[self.shuffle]
         )
+
+    def restore_previous_tracks(self, i=1):
+        if len(self.previous_tracks) > i:
+            last = None
+            for _ in range(i+1):
+                last = self.previous_tracks.pop()
+
+            self._set_tracks(*last)
+            return True
+        else:
+            return False
 
     def is_creating_command(self):
         return self.creating_command

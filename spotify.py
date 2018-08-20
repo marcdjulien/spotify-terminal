@@ -21,6 +21,11 @@ if __name__ == '__main__':
                         default=False,
                         dest="clear_cache",
                         help="clear the cache")
+    parser.add_argument("-l --load_state",
+                        action="store_true",
+                        default=False,
+                        dest="load_state",
+                        help="start the program from the last state it was in")
     args = parser.parse_args()
 
     # Clear the console then print the title screen.
@@ -42,9 +47,14 @@ if __name__ == '__main__':
         logger.debug("Clearing the cache")
         common.clear_cache(args.username)
 
-    # Create Spotify state.
+    # API interface.
     api = SpotifyApi(args.username)
+
+    # Create Spotify state.
     sp_state = SpotifyState(api)
+    if args.load_state:
+        state = common.load_state(args.username, sp_state)
+    sp_state.init()
 
     # Initialize the curses screen.
     stdscr = uc.initscr()
@@ -61,6 +71,9 @@ if __name__ == '__main__':
     except BaseException:
         common.clear()
         raise
+
+    # Save the state.
+    common.save_state(args.username, sp_state)
 
     # Clear the screen to leave a clean terminal.
     common.clear()
