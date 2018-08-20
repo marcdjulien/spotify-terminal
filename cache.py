@@ -61,5 +61,5 @@ class UriCache(object):
         Returns:
             str: The path of the cached file.
         """
-        return os.path.join(common.get_cache(self.username),
-                            key.replace(":", "_"))
+        return common.get_file_from_cache(self.username,
+                                          key.replace(":", "_"))

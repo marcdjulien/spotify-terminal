@@ -25,6 +25,9 @@ class CursesDisplay(object):
     # How often to run the program loop.
     PROGRAM_PERIOD = 0.05
 
+    # How often to clear the screen.
+    CLEAR_PERIOD = 60
+
     def __init__(self, stdscr, sp_state):
         self.state = sp_state
         """The SpotifyState object."""
@@ -56,6 +59,7 @@ class CursesDisplay(object):
         self._next_sync_time = time.time()
         self._last_render_time = time.time()
         self._last_key_pressed_time = time.time()
+        self._last_clear_time = time.time()
 
         # Initialize the display.
         self._init_curses()
@@ -166,8 +170,8 @@ class CursesDisplay(object):
             self.sync_player()
 
     def render(self):
-        # Clear the screem before rendering anything.
-        uc.erase()
+        # Clear the screen before rendering anything.
+        self.clear()
 
         # Set the panel order based on what action is going on.
         self.set_panel_order()
@@ -186,6 +190,15 @@ class CursesDisplay(object):
         # Required.
         uc.update_panels()
         uc.doupdate()
+
+    def clear(self):
+        uc.erase()
+
+        if (time.time() - self._last_clear_time) > self.CLEAR_PERIOD:
+            uc.move(0, 0)
+            uc.clrtobot()
+            uc.refresh()
+            self._last_clear_time = time.time()
 
     def set_panel_order(self):
         if self.is_active_window("search_results"):
