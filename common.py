@@ -263,9 +263,30 @@ TITLE = """
      /_/  \___/_/  /_/ /_/ /_/_/_/ /_/\__,_/_/
 
 
+   Loading...
+
    [marcdjulien] v{}.{}.{}
 """.format(*get_version())
 
+
+PEACE = """
+                         |    \      |    |
+                         \     \     | . .|
+                          \ . ' \    |    |
+                           \     \   | . .|
+                            \ . ' \  |    |
+                           __\     \_| . .|
+                          /   \ . '       |
+                          \   _\_______   |
+                         __\ (         \  |
+                        /   \ \_____.   \ |
+                        \   \`---'  \    \|
+                         \   \      /     |
+                          `---'    /      |
+                            \      |      /
+                         pjb \___________/
+                           http://ascii.co.uk
+"""
 
 SAVED_TRACKS_CONTEXT_URI = "spotify_terminal:saved_tracks:context"
 
