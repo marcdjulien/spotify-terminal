@@ -1,4 +1,5 @@
 import os
+import pickle
 from threading import Lock, Thread, Event
 
 import unicurses as uc
@@ -269,6 +270,9 @@ class SpotifyState(object):
         self.creating_command = False
         """Whether we're typing a command or not."""
 
+        self.futures = []
+        """List of futures to execute."""
+
     def save_state(self):
         """Save the state to disk."""
         ps = {
@@ -299,6 +303,20 @@ class SpotifyState(object):
             print("Could not load user {}".format(self.get_username()))
             exit(1)
 
+        # Initialize PlayerActions.
+        self.main_menu['player'].update_list([
+            PlayerAction("(S)", self._toggle_shuffle),
+            PlayerAction("<< ", self.api.previous),
+            PlayerAction("(P)", self._toggle_play),
+            PlayerAction(" >>", self.api.next),
+            PlayerAction("(R)", self._toggle_repeat),
+            PlayerAction(" --", self._decrease_volume),
+            PlayerAction(" ++", self._increase_volume),
+        ])
+
+        # Get current player state.
+        self.sync_player_state()
+
         # Get the users playlists.
         playlists = self.api.get_user_playlists(self.user)
         if not playlists:
@@ -316,21 +334,8 @@ class SpotifyState(object):
 
         # Initialize track list.
         if not self.restore_previous_tracks(0):
+            logger.debug("Loading the last track list")
             self._set_playlist(self.main_menu['user'][0])
-
-        # Initialize PlayerActions.
-        self.main_menu['player'].update_list([
-            PlayerAction("(S)", self._toggle_shuffle),
-            PlayerAction("<< ", self.api.previous),
-            PlayerAction("(P)", self._toggle_play),
-            PlayerAction(" >>", self.api.next),
-            PlayerAction("(R)", self._toggle_repeat),
-            PlayerAction(" --", self._decrease_volume),
-            PlayerAction(" ++", self._increase_volume),
-        ])
-
-        # Get current player state.
-        self.sync_player_state()
 
     def _read_rc_file(self):
         """Initializes the users settings based on the stermrc file"""
@@ -366,22 +371,31 @@ class SpotifyState(object):
 
     def process_key(self, key):
         if self.is_loading():
-            if self.future.is_done():
-                self.current_state = self.future.get_end_state()
-                self.future = None
+            # Get the current Future.
+            future = self.futures[0]
+
+            # If it's done, leave the LOAD_STATE.
+            # But if there are more Futures to execute, run them.
+            if future.is_done():
+                self.futures.pop(0)
+                if not self.futures:
+                    self.current_state = future.get_end_state()
+                else:
+                    self.futures[0].run()
             else:
                 return
 
-        self._update_state(key)
+        if key:
+            self._update_state(key)
 
-        if self.in_search_menu():
-            self.current_menu = self.search_menu
-        elif self.in_select_player_menu():
-            self.current_menu = self.select_player_menu
-        else:
-            self.current_menu = self.main_menu
+            if self.in_search_menu():
+                self.current_menu = self.search_menu
+            elif self.in_select_player_menu():
+                self.current_menu = self.select_player_menu
+            else:
+                self.current_menu = self.main_menu
 
-        self._clamp_values()
+            self._clamp_values()
 
     def _update_state(self, key):
         if key == uc.KEY_LEFT:
@@ -781,31 +795,31 @@ class SpotifyState(object):
                 "context": self.REPEAT_CONTEXT}[repeat]
 
     def _set_playlist(self, playlist):
-        tracks = self.api.get_tracks_from_playlist(playlist)
-        if tracks:
-            self._set_tracks(tracks, playlist, header=playlist['name'])
+        future = Future(target=(self.api.get_tracks_from_playlist, playlist),
+                        result=(self._set_tracks, (playlist, playlist['name'])),
+                        end_state=self.MAIN_MENU_STATE)
+        self.execute_future(future)
 
     def _set_artist(self, artist):
-        self.current_state = self.MAIN_MENU_STATE
-        selections = self.api.get_selections_from_artist(artist)
-        if selections:
-            self._set_tracks(selections, artist, header=artist['name'])
+        future = Future(target=(self.api.get_selections_from_artist, artist),
+                        result=(self._set_tracks, (artist, artist['name'])),
+                        end_state=self.MAIN_MENU_STATE)
+        self.execute_future(future)
 
     def _set_artist_all_tracks(self, artist):
-        future = Future(target=(self.api.get_all_tracks_from_artist, (artist,)),
-                        result=(self._set_tracks,
-                                (common.get_all_tracks_context(artist),),
-                                {"header": "All tracks from " + artist['name']}),
+        future = Future(target=(self.api.get_all_tracks_from_artist, artist),
+                        result=(self._set_tracks, (common.get_all_tracks_context(artist),
+                                                   "All tracks from " + artist['name'])),
                         end_state=self.MAIN_MENU_STATE)
         self.execute_future(future)
 
     def _set_album(self, album):
-        self.current_state = self.MAIN_MENU_STATE
-        tracks = self.api.get_tracks_from_album(album)
-        if tracks:
-            self._set_tracks(tracks, album, header=album['name'])
+        future = Future(target=(self.api.get_tracks_from_album, album),
+                        result=(self._set_tracks, (album, album['name'])),
+                        end_state=self.MAIN_MENU_STATE)
+        self.execute_future(future)
 
-    def _set_tracks(self, tracks, context=None, header=""):
+    def _set_tracks(self, tracks, context, header):
         self.main_menu.set_current_list('tracks')
         self.main_menu.get_list('tracks').set_index(0)
 
@@ -875,8 +889,17 @@ class SpotifyState(object):
         return self.currently_playing_track
 
     def execute_future(self, future):
-        self.current_state = self.LOAD_STATE
-        future.run()
+        # If we're not already executing one, run it.
+        # Otherwise, it will be added to the queue and executed later.
+        logger.debug("Adding Future: %s", future)
+        self.futures.append(future)
+        if not self.is_loading():
+            self.current_state = self.LOAD_STATE
+            future.run()
+
+    def get_loading_progress(self):
+        if self.futures:
+            return self.futures[0].get_progress()
 
 
 class Future(object):
@@ -885,29 +908,39 @@ class Future(object):
     Also has information about the progress of the call.
     """
 
-    def __init__(self, target, result, end_state):
+    def __init__(self, target, result=(), end_state=None):
         """Constructor.
 
         Args:
-            target (tuple): Contains the target function, args, and kwargs.
-                The target function must accept a keyword argument that is a Progress
-                object.
+            target (func, tuple): Contains the target function, args, and kwargs.
+                The target function must accept a keyword argument 'progress'
+                that is a Progress object.
             result (tuple): Contains the result function, args and kwargs.
             end_state (int): The end state to return to after completing the call.
         """
+        def to_iter(obj):
+            if isinstance(obj, (tuple, list)):
+                return obj
+            else:
+                return (obj,)
+
+        target = to_iter(target)
+
+        result = to_iter(result)
+
         self.target_func = target[0]
         """The target fucntion."""
 
-        self.target_args = list(target[1]) if len(target) > 1 else []
+        self.target_args = list(to_iter(target[1])) if len(target) > 1 else []
         """The target args."""
 
         self.target_kwargs = target[2] if len(target) > 2 else {}
         """The target kwargs."""
 
-        self.result_func = result[0]
+        self.result_func = result[0] if result else None
         """The result fucntion."""
 
-        self.result_args = result[1] if len(result) > 1 else []
+        self.result_args = list(to_iter(result[1])) if len(result) > 1 else []
         """The result args."""
 
         self.result_kwargs = result[2] if len(result) > 2 else {}
@@ -922,17 +955,27 @@ class Future(object):
         self.progress = Progress()
         """Percent done."""
 
-        self.target_kwargs['percent'] = self.progress
+        self.target_kwargs['progress'] = self.progress
 
     def run(self):
         Thread(target=self.execute).start()
 
+    @common.catch_exceptions
     def execute(self):
         # Make the main call.
+        logger.debug(
+            "Executing Future Target: %s",
+            str((self.target_func.__name__, self.target_args, self.target_kwargs))
+        )
         result = self.target_func(*self.target_args, **self.target_kwargs)
 
         # Execute the call back with the results.
-        self.result_func(result, *self.result_args, **self.result_kwargs)\
+        if self.result_func:
+            logger.debug(
+                "Executing Future Callback: %s",
+                str((self.result_func.__name__, self.result_args, self.result_kwargs))
+            )
+            self.result_func(result, *self.result_args, **self.result_kwargs)\
 
         # Notify that we're done.
         self.event.set()
@@ -942,6 +985,16 @@ class Future(object):
 
     def get_end_state(self):
         return self.end_state
+
+    def get_progress(self):
+        return self.progress.get_percent()
+
+    def is_done(self):
+        return self.event.is_set()
+
+    def __str__(self):
+        return str((self.target_func.__name__, self.target_args, self.target_kwargs)) + \
+            str((self.result_func.__name__, self.result_args, self.result_kwargs))
 
 
 class Progress(object):

@@ -344,19 +344,29 @@ class SpotifyApi(object):
             return []
 
     @uri_cache
-    def get_selections_from_artist(self, artist):
+    def get_selections_from_artist(self, artist, progress=None):
         """Return the selection from an Artist.
 
         This includes the top tracks and albums from the artist.
 
         Args:
             artist (Artist): The Artist.
+            progress (Progress): Progress associated with this call.
 
         Returns:
             iter: The Tracks and Albums.
         """
-        return (self.get_top_tracks_from_artist(artist) +
-                self.get_albums_from_artist(artist))
+        selections = []
+
+        selections.extend(self.get_top_tracks_from_artist(artist))
+        if selections:
+            progress.set_percent(0.5)
+
+        selections.extend(self.get_albums_from_artist(artist))
+        if progress:
+            progress.set_percent(1)
+
+        return selections
 
     @uri_cache
     def get_all_tracks_from_artist(self, artist, progress=None):
@@ -373,17 +383,18 @@ class SpotifyApi(object):
         """
         albums = self.get_albums_from_artist(artist)
         if albums:
+            n = len(albums)
             tracks = []
-            n_albums = len(albums)
             for i, a in enumerate(albums):
                 for t in self.get_tracks_from_album(a):
                     tracks.append(Track(t))
-                progress.set_progress(float(i)/n_albums)
+                if progress:
+                    progress.set_percent(float(i)/n)
             tracks = (t for t in tracks if artist['name'] in str(t))
             return tuple(tracks)
 
     @uri_cache
-    def get_tracks_from_album(self, album):
+    def get_tracks_from_album(self, album, progress=None):
         """Get Tracks from a certain Album.
 
         Args:
@@ -396,35 +407,39 @@ class SpotifyApi(object):
         url = "albums/{}/tracks".format(album['id'])
         page = self.get_api_v1(url, q)
         tracks = []
-        for track in self.extract_page(page):
+        for track in self.extract_page(page, progress):
             track['album'] = album
             tracks.append(Track(track))
         return tuple(tracks)
 
     @uri_cache
-    def get_tracks_from_playlist(self, playlist):
+    def get_tracks_from_playlist(self, playlist, progress=None):
         """Get Tracks from a certain Playlist.
 
         Args:
             playlist (Playlist): The Playlist to get Tracks from.
+            progress (Progress): Progress associated with this call.
 
         Returns:
             tuple: The Tracks.
         """
         # Special case for the "Saved" Playlist
         if playlist['uri'] == common.SAVED_TRACKS_CONTEXT_URI:
-            return self._get_saved_tracks()
+            return self._get_saved_tracks(progress)
         else:
             q = {"limit": 50}
             url = "users/{}/playlists/{}/tracks".format(playlist['owner']['id'],
                                                          playlist['id'])
             page = self.get_api_v1(url, q)
-            result = [Track(track["track"]) for track in self.extract_page(page)]
+            result = [Track(track["track"]) for track in self.extract_page(page, progress)]
 
         return tuple(result)
 
-    def _get_saved_tracks(self):
+    def _get_saved_tracks(self, progress=None):
         """Get the Tracks from the "Saved" songs.
+
+        Args:
+            progress (Progress): Progress associated with this call.
 
         Returns:
             tuple: The Tracks.
@@ -432,7 +447,7 @@ class SpotifyApi(object):
         q = {"limit": 50}
         url = "me/tracks"
         page = self.get_api_v1(url, q)
-        return tuple(Track(saved["track"]) for saved in self.extract_page(page))
+        return tuple(Track(saved["track"]) for saved in self.extract_page(page, progress))
 
     def get_user(self, user_id):
         """Return a User from an id.
@@ -450,11 +465,12 @@ class SpotifyApi(object):
             return {}
 
     @uri_cache
-    def get_user_playlists(self, user):
+    def get_user_playlists(self, user, progress=None):
         """Get the Playlists from the current user.
 
         Args:
             user (User): The User.
+            progress (Progress): Progress associated with this call.
 
         Return:
             tuple: The Playlists.
@@ -462,23 +478,28 @@ class SpotifyApi(object):
         q = {"limit": 50}
         url = "users/{}/playlists".format(user['id'])
         page = self.get_api_v1(url, q)
-        return tuple([Playlist(p) for p in self.extract_page(page)])
+        return tuple([Playlist(p) for p in self.extract_page(page, progress)])
 
-    def extract_page(self, page):
+    def extract_page(self, page, progress=None):
         """Extract all items from a page.
 
         Args:
             page (dict): The page object.
+            progress (Progress): Progress associated with this call.
 
         Returns:
             list: All of the items.
         """
+
         if page and "items" in page:
+            i, n = 0, page['total']
             lists = []
             lists.extend(page['items'])
             while page['next'] is not None:
                 page = self.get_api_v1(page['next'].split('/v1/')[-1])
                 lists.extend(page['items'])
+                if progress:
+                    progress.set_percent(float(len(lists))/n)
             return lists
         else:
             return {}

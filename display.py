@@ -161,6 +161,10 @@ class CursesDisplay(object):
 
             self.state.process_key(key)
 
+        # If we didn't press a key, kick the state anyway.
+        if not key_pressed:
+            self.state.process_key(None)
+
         return key_pressed
 
     def render_calcs(self):
@@ -281,8 +285,8 @@ class CursesDisplay(object):
 
     def render_footer(self):
         if self.state.is_loading():
-            percent = self.state.future.get_progress()
-            tesx = " " * int(self._cols * percent)
+            percent = self.state.get_loading_progress()
+            text = " " * int(self._cols * percent)
             uc.mvwaddstr(self.stdscr, self._rows-1, 0, text, uc.A_STANDOUT)
 
         elif self.state.is_creating_command():

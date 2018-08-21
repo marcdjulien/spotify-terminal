@@ -228,7 +228,7 @@ TITLE = """
      /_/  \___/_/  /_/ /_/ /_/_/_/ /_/\__,_/_/
 
 
-   Loading...
+   Loading Playlists...
 
    [marcdjulien] v{}.{}.{}
 """.format(*get_version())
