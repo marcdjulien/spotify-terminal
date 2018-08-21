@@ -91,41 +91,6 @@ def clamp(value, low, high):
     return max(low, min(value, high))
 
 
-def save_state(username, state):
-    """Save the state of the program.
-
-    Args:
-        username (str): The username to save as.
-        state (SpotifyState): The state to save.
-    """
-    ps = {
-        attr_name: getattr(state, attr_name)
-        for attr_name in state.PICKLE_ATTRS
-    }
-    state_filename = get_file_from_cache(username, "state")
-    with open(state_filename, "wb") as file:
-        logger.debug("Saving %s state", username)
-        pickle.dump(ps, file)
-
-
-def load_state(username, state):
-    """Load the state of the program.
-
-    Args:
-        username (str): The username to save as.
-
-    Returns:
-        SpotifyState: The saved state.
-    """
-    state_filename = get_file_from_cache(username, "state")
-    if os.path.isfile(state_filename):
-        with open(state_filename, "rb") as file:
-            logger.debug("Loading %s state", username)
-            ps = pickle.load(file)
-
-        for attr in state.PICKLE_ATTRS:
-            setattr(state, attr, ps[attr])
-
 def get_app_dir():
     """Return the application's directory.
 

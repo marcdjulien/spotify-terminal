@@ -280,7 +280,12 @@ class CursesDisplay(object):
             uc.mvwaddstr(win, 5, 2 + i*4, action.title, style)
 
     def render_footer(self):
-        if self.state.is_creating_command():
+        if self.state.is_loading():
+            percent = self.state.future.get_progress()
+            tesx = " " * int(self._cols * percent)
+            uc.mvwaddstr(self.stdscr, self._rows-1, 0, text, uc.A_STANDOUT)
+
+        elif self.state.is_creating_command():
             start_col = 1
             text = "".join(self.state.get_command_query()) + " "
             uc.mvwaddstr(self.stdscr, self._rows-1, start_col, text)

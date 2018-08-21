@@ -1,6 +1,7 @@
-from threading import Lock, Thread
-import unicurses as uc
+import os
+from threading import Lock, Thread, Event
 
+import unicurses as uc
 from model import (
     UnableToFindDevice,
     NoneTrack,
@@ -185,6 +186,8 @@ class SpotifyState(object):
 
     PLAYER_MENU_STATE = "player_menu_state"
 
+    LOAD_STATE = "load_state"
+
     EXIT_STATE = "exit_state"
 
     def __init__(self, api):
@@ -266,6 +269,28 @@ class SpotifyState(object):
         self.creating_command = False
         """Whether we're typing a command or not."""
 
+    def save_state(self):
+        """Save the state to disk."""
+        ps = {
+            attr_name: getattr(self, attr_name)
+            for attr_name in self.PICKLE_ATTRS
+        }
+        state_filename = common.get_file_from_cache(self.get_username(), "state")
+        with open(state_filename, "wb") as file:
+            logger.debug("Saving %s state", self.get_username())
+            pickle.dump(ps, file)
+
+    def load_state(self):
+        """Load part of the state from disk."""
+        state_filename = common.get_file_from_cache(self.get_username(), "state")
+        if os.path.isfile(state_filename):
+            with open(state_filename, "rb") as file:
+                logger.debug("Loading %s state", self.get_username())
+                ps = pickle.load(file)
+
+            for attr in self.PICKLE_ATTRS:
+                setattr(self, attr, ps[attr])
+
     def init(self):
         # Get the User info.
         self.user = self.api.get_user(self.get_username())
@@ -340,7 +365,14 @@ class SpotifyState(object):
             self.player_state_synced = False
 
     def process_key(self, key):
-        self._process_key(key)
+        if self.is_loading():
+            if self.future.is_done():
+                self.current_state = self.future.get_end_state()
+                self.future = None
+            else:
+                return
+
+        self._update_state(key)
 
         if self.in_search_menu():
             self.current_menu = self.search_menu
@@ -351,7 +383,7 @@ class SpotifyState(object):
 
         self._clamp_values()
 
-    def _process_key(self, key):
+    def _update_state(self, key):
         if key == uc.KEY_LEFT:
             if self.is_creating_command():
                 self.command_cursor_i -= 1
@@ -760,12 +792,12 @@ class SpotifyState(object):
             self._set_tracks(selections, artist, header=artist['name'])
 
     def _set_artist_all_tracks(self, artist):
-        self.current_state = self.MAIN_MENU_STATE
-        tracks = self.api.get_all_tracks_from_artist(artist)
-        if tracks:
-            self._set_tracks(tracks,
-                             common.get_all_tracks_context(artist),
-                             header="All tracks from " + artist['name'])
+        future = Future(target=(self.api.get_all_tracks_from_artist, (artist,)),
+                        result=(self._set_tracks,
+                                (common.get_all_tracks_context(artist),),
+                                {"header": "All tracks from " + artist['name']}),
+                        end_state=self.MAIN_MENU_STATE)
+        self.execute_future(future)
 
     def _set_album(self, album):
         self.current_state = self.MAIN_MENU_STATE
@@ -819,6 +851,9 @@ class SpotifyState(object):
     def in_select_player_menu(self):
         return self.current_state == self.PLAYER_MENU_STATE
 
+    def is_loading(self):
+        return self.current_state == self.LOAD_STATE
+
     def is_running(self):
         return self.current_state != self.EXIT_STATE
 
@@ -838,3 +873,92 @@ class SpotifyState(object):
 
     def get_currently_playing_track(self):
         return self.currently_playing_track
+
+    def execute_future(self, future):
+        self.current_state = self.LOAD_STATE
+        future.run()
+
+
+class Future(object):
+    """Execute a function asynchronously then execute the callback when done.
+
+    Also has information about the progress of the call.
+    """
+
+    def __init__(self, target, result, end_state):
+        """Constructor.
+
+        Args:
+            target (tuple): Contains the target function, args, and kwargs.
+                The target function must accept a keyword argument that is a Progress
+                object.
+            result (tuple): Contains the result function, args and kwargs.
+            end_state (int): The end state to return to after completing the call.
+        """
+        self.target_func = target[0]
+        """The target fucntion."""
+
+        self.target_args = list(target[1]) if len(target) > 1 else []
+        """The target args."""
+
+        self.target_kwargs = target[2] if len(target) > 2 else {}
+        """The target kwargs."""
+
+        self.result_func = result[0]
+        """The result fucntion."""
+
+        self.result_args = result[1] if len(result) > 1 else []
+        """The result args."""
+
+        self.result_kwargs = result[2] if len(result) > 2 else {}
+        """The target kwargs."""
+
+        self.end_state = end_state
+        """The end state."""
+
+        self.event = Event()
+        """An Event for the Future to signal when it's done."""
+
+        self.progress = Progress()
+        """Percent done."""
+
+        self.target_kwargs['percent'] = self.progress
+
+    def run(self):
+        Thread(target=self.execute).start()
+
+    def execute(self):
+        # Make the main call.
+        result = self.target_func(*self.target_args, **self.target_kwargs)
+
+        # Execute the call back with the results.
+        self.result_func(result, *self.result_args, **self.result_kwargs)\
+
+        # Notify that we're done.
+        self.event.set()
+
+    def wait(self):
+        self.event.wait()
+
+    def get_end_state(self):
+        return self.end_state
+
+
+class Progress(object):
+    """Represents the amount of work complete."""
+
+    def __init__(self):
+        """Constructor."""
+        self.percent_done = 0.0
+        """The amount done."""
+
+        self.lock = Lock()
+        """A lock for the object."""
+
+    def set_percent(self, percent):
+        with self.lock:
+            self.percent_done = percent
+
+    def get_percent(self):
+        with self.lock:
+            return self.percent_done

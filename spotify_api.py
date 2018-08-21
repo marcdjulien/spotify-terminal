@@ -359,22 +359,26 @@ class SpotifyApi(object):
                 self.get_albums_from_artist(artist))
 
     @uri_cache
-    def get_all_tracks_from_artist(self, artist):
+    def get_all_tracks_from_artist(self, artist, progress=None):
         """Return all tracks from an Artist.
 
         This includes the top tracks and albums from the artist.
 
         Args:
             artist (Artist): The Artist.
+            progress (Progress): Progress associated with this call.
 
         Returns:
             iter: The Tracks.
         """
         albums = self.get_albums_from_artist(artist)
         if albums:
-            tracks = (Track(t)
-                      for a in albums
-                      for t in self.get_tracks_from_album(a))
+            tracks = []
+            n_albums = len(albums)
+            for i, a in enumerate(albums):
+                for t in self.get_tracks_from_album(a):
+                    tracks.append(Track(t))
+                progress.set_progress(float(i)/n_albums)
             tracks = (t for t in tracks if artist['name'] in str(t))
             return tuple(tracks)
 
