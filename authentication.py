@@ -22,8 +22,10 @@ PORT = 12345
 REDIRECT_URI = "http://localhost:{}/".format(PORT)
 
 SCOPE = " ".join([
-    "playlist-read-private",
+    "playlist-modify-private",
+    "playlist-modify-public",
     "playlist-read-collaborative",
+    "playlist-read-private",
     "user-read-currently-playing",
     "user-read-playback-state",
     "user-modify-playback-state",

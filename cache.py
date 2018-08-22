@@ -1,7 +1,7 @@
 import os
 import common
 import pickle
-
+from threading import Thread
 
 logger = common.logging.getLogger(__name__)
 
@@ -42,15 +42,32 @@ class UriCache(object):
 
         logger.debug("Cache miss: %s", key)
 
+    def clear(self, key):
+        """Clear an entry from the cache."""
+        try:
+            logger.debug("Removing %s from memory cache", key)
+            del self._cache[key]
+        except:
+            pass
+
+        try:
+            logger.debug("Removing %s from disk cache", key)
+            os.remove(self.get_filename(key))
+        except:
+            pass
+
     def __setitem__(self, key, item):
         # Save to disk.
         cache_filename = self.get_filename(key)
-        with open(cache_filename, "wb") as file:
-            logger.debug("Saving %s to disk", key)
-            pickle.dump(item, file)
+        Thread(target=self.save, args=(cache_filename, item)).start()
 
         # Save to memory.
         self._cache[key] = item
+
+    def save(self, filename, item):
+        with open(filename, "wb") as file:
+            logger.debug("Saving %s to disk", filename)
+            pickle.dump(item, file)
 
     def get_filename(self, key):
         """Return the filename of the key.
