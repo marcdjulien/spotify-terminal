@@ -9,7 +9,8 @@ from model import (
     Playlist,
     PlayerAction,
     Track,
-    Device
+    Device,
+    Option
 )
 import common
 
@@ -191,6 +192,10 @@ class SpotifyState(object):
 
     EXIT_STATE = "exit_state"
 
+    ADD_TO_PLAYLIST_SELECT = "add_to_playlist_select"
+
+    ADD_TO_PLAYLIST_CONFIRM = "add_to_playlist_confirm"
+
     def __init__(self, api):
         self.lock = Lock()
         """Lock for the class."""
@@ -208,6 +213,8 @@ class SpotifyState(object):
 
         self.select_player_menu = ListCollection("select_player",
                                                  [List("players")])
+
+        self.confirm_menu = ListCollection("confirm", [List("confirm")])
 
         self.current_menu = self.main_menu
         """The current model that we are acting on."""
@@ -314,6 +321,9 @@ class SpotifyState(object):
             PlayerAction(" ++", self._increase_volume),
         ])
 
+        self.confirm_menu['confirm'].update_list([Option("Yes"),
+                                                  Option("No")])
+
         # Get current player state.
         self.sync_player_state()
 
@@ -386,16 +396,42 @@ class SpotifyState(object):
                 return
 
         if key:
-            self._update_state(key)
-
-            if self.in_search_menu():
-                self.current_menu = self.search_menu
-            elif self.in_select_player_menu():
-                self.current_menu = self.select_player_menu
+            if self.current_state == self.ADD_TO_PLAYLIST_SELECT:
+                if key == uc.KEY_UP:
+                    self.main_menu.get_list("user").decrement_index()
+                elif key == uc.KEY_DOWN:
+                    self.main_menu.get_list("user").increment_index()
+                elif key in [uc.KEY_EXIT, 27]:
+                    self.track_to_add = None
+                    self.current_state = self.MAIN_MENU_STATE
+                elif key in [uc.KEY_ENTER, 10, 13]:
+                    self.playlist_to_add = self.main_menu.get_current_list_entry()
+                    self.current_state = self.ADD_TO_PLAYLIST_CONFIRM
+            elif self.current_state == self.ADD_TO_PLAYLIST_CONFIRM:
+                if key == uc.KEY_LEFT:
+                    self.confirm_menu.get_list("confirm").decrement_index()
+                elif key == uc.KEY_RIGHT:
+                    self.confirm_menu.get_list("confirm").increment_index()
+                elif key in [uc.KEY_EXIT, 27]:
+                    self.track_to_add = None
+                    self.playlist_to_add = None
+                    self.current_state = self.MAIN_MENU_STATE
+                elif key in [uc.KEY_ENTER, 10, 13]:
+                    entry = self.confirm_menu.get_current_list_entry()
+                    if entry.get().lower() == "yes":
+                        self.api.add_track_to_playlist(self.track_to_add, self.playlist_to_add)
+                        self._set_playlist(self.playlist_to_add)
             else:
-                self.current_menu = self.main_menu
+                self._update_state(key)
 
-            self._clamp_values()
+                if self.in_search_menu():
+                    self.current_menu = self.search_menu
+                elif self.in_select_player_menu():
+                    self.current_menu = self.select_player_menu
+                else:
+                    self.current_menu = self.main_menu
+
+                self._clamp_values()
 
     def _update_state(self, key):
         if key == uc.KEY_LEFT:
@@ -527,6 +563,14 @@ class SpotifyState(object):
                     command = self.prev_command
                     command[1] = str(i - 1)
                     self._process_command(" ".join(command))
+
+            elif char == "P":
+                entry = self.current_menu.get_current_list_entry()
+                if entry['type'] == 'track':
+                    self.track_to_add = entry
+                    self.main_menu.set_current_list('user')
+                    self.main_menu.get_list('user').set_index(0)
+                    self.current_state = self.ADD_TO_PLAYLIST_SELECT
 
             elif char == 'W':
                 self.current_state = self.PLAYER_MENU_STATE
@@ -857,19 +901,22 @@ class SpotifyState(object):
         return self.creating_command
 
     def in_search_menu(self):
-        return self.current_state == self.SEARCH_MENU_STATE
+        return self.is_in_state(self.SEARCH_MENU_STATE)
 
     def in_main_menu(self):
-        return self.current_state == self.MAIN_MENU_STATE
+        return self.is_in_state(self.MAIN_MENU_STATE)
 
     def in_select_player_menu(self):
-        return self.current_state == self.PLAYER_MENU_STATE
+        return self.is_in_state(self.PLAYER_MENU_STATE)
 
     def is_loading(self):
-        return self.current_state == self.LOAD_STATE
+        return self.is_in_state(self.LOAD_STATE)
 
     def is_running(self):
-        return self.current_state != self.EXIT_STATE
+        return not self.is_in_state(self.EXIT_STATE)
+
+    def is_in_state(self, state):
+        return self.current_state == state
 
     def poll_currently_playing_track(self):
         track = self.api.get_currently_playing()

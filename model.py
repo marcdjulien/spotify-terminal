@@ -134,3 +134,14 @@ class PlayerAction(object):
 
     def str(self, cols):
         return self.__str__()
+
+
+class Option(object):
+    """A simple menu option."""
+
+    def __init__(self, text):
+        self.text = text
+
+    def get(self):
+        return self.text
+

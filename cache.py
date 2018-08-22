@@ -42,6 +42,20 @@ class UriCache(object):
 
         logger.debug("Cache miss: %s", key)
 
+    def clear(self, key):
+        """Clear an entry from the cache."""
+        try:
+            logger.debug("Removing %s from memory cache", key)
+            del self._cache[key]
+        except:
+            pass
+
+        try:
+            logger.debug("Removing %s from disk cache", key)
+            os.remove(self.get_filename(key))
+        except:
+            pass
+
     def __setitem__(self, key, item):
         # Save to disk.
         cache_filename = self.get_filename(key)

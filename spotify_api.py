@@ -63,6 +63,12 @@ def uri_cache(func):
     def wrapper(self, obj, *args, **kwargs):
         """Use the cache to fetch the URI."""
         key = func.__name__ + ":" + str(obj['uri'])
+
+        # Get a fresh copy and clear the cache.
+        if "force_clear" in kwargs:
+            kwargs.pop("force_clear")
+            self._uri_cache.clear(key)
+
         result = self._uri_cache.get(key)
         if result:
             return result
@@ -456,7 +462,7 @@ class SpotifyApi(object):
             user_id (str): The user id.
 
         Returns:
-            USer: The User.
+            User: The User.
         """
         result = self.get_api_v1("users/{}".format(user_id))
         if result:
@@ -479,6 +485,24 @@ class SpotifyApi(object):
         url = "users/{}/playlists".format(user['id'])
         page = self.get_api_v1(url, q)
         return tuple([Playlist(p) for p in self.extract_page(page, progress)])
+
+    def add_track_to_playlist(self, track, playlist):
+        """Add a Track to a Playlist.
+
+        Args:
+            track (Track): The Track to add.
+            playlist (Playlist): The Playlist to add the Track to.
+
+        Returns:
+            tuple: The new set of Tracks with the new Track added.
+        """
+        # Add the track.
+        q = {"uris": [track['uri']]}
+        url = "playlists/{}/tracks".format(playlist['id'])
+        self.post_api_v1(url, q)
+
+        # Clear out current Cache.
+        return self.get_tracks_from_playlist(playlist, force_clear=True)
 
     def extract_page(self, page, progress=None):
         """Extract all items from a page.

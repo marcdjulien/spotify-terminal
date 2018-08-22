@@ -50,6 +50,7 @@ class CursesDisplay(object):
         self._ordered_windows = []
         """Windows in an odered list."""
 
+        self._register_window("confirm", self._window_sizes["confirm"])
         self._register_window("search_results", self._window_sizes["search"])
         self._register_window("select_player", self._window_sizes["select_player"])
         self._register_window("user", self._window_sizes["user"])
@@ -190,6 +191,7 @@ class CursesDisplay(object):
         self.render_footer()
         self.render_search_panel()
         self.render_select_player_panel()
+        self.render_confirm_panel()
 
         # Required.
         uc.update_panels()
@@ -205,16 +207,19 @@ class CursesDisplay(object):
             self._last_clear_time = time.time()
 
     def set_panel_order(self):
-        if self.is_active_window("search_results"):
+        if self.is_active_window("confirm"):
+            uc.top_panel(self._panels["confirm"])
+        elif self.is_active_window("search_results"):
             uc.top_panel(self._panels["search_results"])
         elif self.is_active_window("select_player"):
             uc.top_panel(self._panels["select_player"])
         else:
             for panel_name, panel in self._panels.items():
-                if panel_name not in ["search_results", "select_player"]:
+                if panel_name not in ["search_results", "select_player", "confirm"]:
                     uc.top_panel(panel)
 
     def update_panel_size(self):
+        self._resize_window("confirm", self._window_sizes["confirm"])
         self._resize_window("search_results", self._window_sizes["search"])
         self._resize_window("select_player", self._window_sizes["select_player"])
         self._resize_window("user", self._window_sizes["user"])
@@ -289,6 +294,10 @@ class CursesDisplay(object):
             text = " " * int(self._cols * percent)
             uc.mvwaddstr(self.stdscr, self._rows-1, 0, text, uc.A_STANDOUT)
 
+        elif self.state.is_in_state(self.state.ADD_TO_PLAYLIST_SELECT):
+            text = "Select a playlist to add this track"
+            uc.mvwaddstr(self.stdscr, self._rows-1, 0, text, uc.A_BOLD)
+
         elif self.state.is_creating_command():
             start_col = 1
             text = "".join(self.state.get_command_query()) + " "
@@ -337,6 +346,35 @@ class CursesDisplay(object):
         selected_i = self.state.select_player_menu.get_current_list().i
         self._render_list(win, self.state.select_player_menu["players"], 3, rows-4, 2, cols-3, selected_i, self.is_active_window("select_player"))
 
+    def render_confirm_panel(self):
+        win, rows, cols = self._init_render_window("confirm")
+        uc.box(win)
+
+        # Show the title of the context.
+        prompt = "Are you sure?"
+        title_start_line = 2
+        uc.mvwaddnstr(win, title_start_line, (cols/2) - (len(prompt)/2) - 1,
+                      prompt, cols-3, uc.A_BOLD)
+
+        resp_1 = self.state.confirm_menu.get_current_list()[0].get()
+        resp_2 = self.state.confirm_menu.get_current_list()[1].get()
+        start_col = (cols/2) - ((len(resp_1)+len(resp_2))/2) - 1
+
+
+        selected_i = self.state.confirm_menu.get_current_list().i
+        response_row = title_start_line + 2
+        uc.mvwaddnstr(win,
+                      response_row, start_col,
+                      resp_1,
+                      cols-3,
+                      uc.A_BOLD if selected_i == 1 else uc.A_STANDOUT)
+
+        uc.mvwaddnstr(win,
+                      response_row, start_col + len(resp_1) + 1,
+                      resp_2,
+                      cols-3,
+                      uc.A_BOLD if selected_i == 0 else uc.A_STANDOUT)
+
 
     def _render_list(self, win, list, row_start, n_rows,
                      col_start, n_cols, selected_i, is_active):
@@ -362,6 +400,8 @@ class CursesDisplay(object):
             return window_name == "search_results"
         elif self.state.in_select_player_menu():
             return window_name == "select_player"
+        elif self.state.is_in_state(self.state.ADD_TO_PLAYLIST_CONFIRM):
+            return window_name == "confirm"
         else:
             return self.state.main_menu.get_current_list().name == window_name
 
@@ -405,10 +445,16 @@ class CursesDisplay(object):
                          self._rows*2/10,
                          self._cols*2/10)
 
+        confirm = (self._rows/4,
+                   self._cols/4,
+                   self._rows*3/8,
+                   self._cols*3/8)
+
         return {
             "user": user,
             "tracks": tracks,
             "player": player,
             "search": search,
-            "select_player": select_player
+            "select_player": select_player,
+            "confirm": confirm
         }
