@@ -116,7 +116,7 @@ Type ```/``` is a shortcut to the find command. You can also type ```n``` or ```
 
 ```Shift + ` ``` to mute.
 
-
+```Sift + P ``` to add a song to a playlist.
 
 # Notes
 This has only been tested on Linux and Windows.
