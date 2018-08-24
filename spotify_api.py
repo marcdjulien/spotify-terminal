@@ -441,6 +441,29 @@ class SpotifyApi(object):
 
         return tuple(result)
 
+    def add_track_to_playlist(self, track, playlist):
+        """Add a Track to a Playlist.
+
+        Args:
+            track (Track): The Track to add.
+            playlist (Playlist): The Playlist to add the Track to.
+
+        Returns:
+            tuple: The new set of Tracks with the new Track added.
+        """
+        # Add the track.
+        if playlist['uri'] == common.SAVED_TRACKS_CONTEXT_URI:
+            q = {"ids": [track['id']]}
+            url = "me/tracks"
+            self.put_api_v1(url, q)
+        else:
+            q = {"uris": [track['uri']]}
+            url = "playlists/{}/tracks".format(playlist['id'])
+            self.post_api_v1(url, q)
+
+        # Clear out current Cache.
+        return self.get_tracks_from_playlist(playlist, force_clear=True)
+
     def _get_saved_tracks(self, progress=None):
         """Get the Tracks from the "Saved" songs.
 
@@ -485,24 +508,6 @@ class SpotifyApi(object):
         url = "users/{}/playlists".format(user['id'])
         page = self.get_api_v1(url, q)
         return tuple([Playlist(p) for p in self.extract_page(page, progress)])
-
-    def add_track_to_playlist(self, track, playlist):
-        """Add a Track to a Playlist.
-
-        Args:
-            track (Track): The Track to add.
-            playlist (Playlist): The Playlist to add the Track to.
-
-        Returns:
-            tuple: The new set of Tracks with the new Track added.
-        """
-        # Add the track.
-        q = {"uris": [track['uri']]}
-        url = "playlists/{}/tracks".format(playlist['id'])
-        self.post_api_v1(url, q)
-
-        # Clear out current Cache.
-        return self.get_tracks_from_playlist(playlist, force_clear=True)
 
     def extract_page(self, page, progress=None):
         """Extract all items from a page.
