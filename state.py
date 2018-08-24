@@ -380,6 +380,7 @@ class SpotifyState(object):
             self.player_state_synced = False
 
     def process_key(self, key):
+        # First check loading state.
         if self.is_loading():
             # Get the current Future.
             future = self.futures[0]
@@ -419,9 +420,9 @@ class SpotifyState(object):
                 elif key in [uc.KEY_ENTER, 10, 13]:
                     entry = self.confirm_menu.get_current_list_entry()
                     if entry.get().lower() == "yes":
-                        self.api.add_track_to_playlist(self.track_to_add, self.playlist_to_add)
-                        self._set_playlist(self.playlist_to_add)
+                        self._add_track_to_playlist(self.track_to_add, self.playlist_to_add)
             else:
+                # Process keys.
                 self._update_state(key)
 
                 if self.in_search_menu():
@@ -838,6 +839,10 @@ class SpotifyState(object):
                 "track": self.REPEAT_TRACK,
                 "context": self.REPEAT_CONTEXT}[repeat]
 
+    def _add_track_to_playlist(self, track, playlist):
+        self.api.add_track_to_playlist(track, playlist)
+        self._set_playlist(playlist)
+
     def _set_playlist(self, playlist):
         future = Future(target=(self.api.get_tracks_from_playlist, playlist),
                         result=(self._set_tracks, (playlist, playlist['name'])),
@@ -864,14 +869,18 @@ class SpotifyState(object):
         self.execute_future(future)
 
     def _set_tracks(self, tracks, context, header):
-        self.main_menu.set_current_list('tracks')
-        self.main_menu.get_list('tracks').set_index(0)
+        with self.lock:
+            # Save the track listing.
+            self.previous_tracks.append((tracks, context, header))
 
-        self.previous_tracks.append((tracks, context, header))
+            # Set the new track listing.
+            self.current_context = context
+            self.main_menu.get_list('tracks').update_list(tracks)
+            self.main_menu.get_list('tracks').header = header
 
-        self.current_context = context
-        self.main_menu.get_list('tracks').update_list(tracks)
-        self.main_menu.get_list('tracks').header = header
+            # Go to the tracks pane.
+            self.main_menu.set_current_list('tracks')
+            self.main_menu.get_list('tracks').set_index(0)
 
     def _set_command_query(self, text):
         self.command_query = list(text)

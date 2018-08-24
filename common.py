@@ -280,15 +280,19 @@ logger.info("\n\n\n")
 
 
 def catch_exceptions(func):
-    """Catch an exception and print it."""
+    """Decorator to catch an exceptions and print it.
+
+    All threaded functions should be threaded with this,
+    otherwise exceptions will go uncaught.
+    """
     def wrapper(*args, **kwargs):
+        """Wrapper to catch and print exceptions."""
         try:
             return func(*args, **kwargs)
         except BaseException:
             clear()
             traceback.print_exc()
             os._exit(1)
-
     return wrapper
 
 
