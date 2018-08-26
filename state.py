@@ -256,9 +256,6 @@ class SpotifyState(object):
         self.running = True
         """Whether we're running or not."""
 
-        self.player_state_synced = False
-        """True if the Spotify player's state is synced to the application."""
-
         self.commands = {
             "search": self._execute_search,
             "find": self._execute_find,
@@ -373,11 +370,9 @@ class SpotifyState(object):
 
             self._set_repeat(player_state['repeat_state'])
             self._set_shuffle(player_state['shuffle_state'])
-
-            self.player_state_synced = True
         else:
             self.currently_playing_track = NoneTrack
-            self.player_state_synced = False
+            self.current_device = UnableToFindDevice
 
     def process_key(self, key):
         # First check loading state.
