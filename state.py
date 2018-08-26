@@ -157,17 +157,6 @@ class ListCollection(object):
         return self.lists[key]
 
 
-def async(func):
-    """Execute the function asynchronously."""
-
-    @common.catch_exceptions
-    def wrapper(*args, **kwargs):
-        with args[0].lock:
-            Thread(target=func, args=args, kwargs=kwargs).start()
-
-    return wrapper
-
-
 class SpotifyState(object):
     """Represents the programs internal state of Spotify and menus.
 
@@ -357,7 +346,6 @@ class SpotifyState(object):
             line = line.strip()
             line = line.split("#")[0]
 
-    @async
     def sync_player_state(self):
         player_state = self.api.get_player_state()
         if player_state:
@@ -736,7 +724,6 @@ class SpotifyState(object):
 
         self.current_state = self.SEARCH_MENU_STATE
 
-    @async
     def _execute_find(self, i, *query):
         query = " ".join(query)
         logger.debug("find:%s", query)
@@ -750,33 +737,28 @@ class SpotifyState(object):
         if found:
             self.current_menu.get_current_list().set_index(found[int(i) % len(found)])
 
-    @async
     def _execute_shuffle(self, state):
         state = state.lower().strip()
         state = True if state == "true" else False
         self._set_shuffle(state)
         self.api.shuffle(state)
 
-    @async
     def _execute_repeat(self, state):
         state = state.lower().strip()
         if state in ["off", "context", "track"]:
             self._set_repeat(state)
             self.api.repeat(state)
 
-    @async
     def _execute_volume(self, volume):
         volume = common.clamp(int(volume), 0, 100)
         if 0 <= volume and volume <= 100:
             self.volume = volume
             self.api.volume(self.volume)
 
-    @async
     def _execute_play(self):
         self.paused = False
         self._play(None, None)
 
-    @async
     def _execute_pause(self):
         self.paused = True
         self.api.pause()
