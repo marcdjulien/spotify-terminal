@@ -65,7 +65,8 @@ http://docs.python-requests.org/en/v2.9.1/user/install/
 # Usage
 Execute the following command to run the program:
 ```
-./spotify.py [username]
+Linux: ./spotify.py [username]
+Windows: spotify.py [username]
 ```
 Where ```username``` is your Spotify username.
 
