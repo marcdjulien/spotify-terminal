@@ -82,12 +82,11 @@ class Authenticator(object):
         # However, this program does not save any of your
         # personal information, so none of your data is compromised.
         filename = os.path.join(
-            os.path.dirname(os.path.abspath(__file__)),
-            ".spotifyterminal"
+            os.path.dirname(os.path.abspath(__file__)), ".st"
         )
         with open(filename, "rb") as f:
             line = "".join([
-                chr(i) for i in struct.unpack("64I", f.readline())
+                chr(i-1993) for i in struct.unpack("64I", f.readline())
             ])
             self.app_data.append(line[0:32])
             self.app_data.append(line[32::])
