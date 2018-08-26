@@ -38,6 +38,7 @@ def needs_authentication(func):
             return func(self, *args, **kwargs)
         except requests.HTTPError as e:
             msg = str(e)
+            logger.debug(msg)
             if is_auth_message(msg):
                 logger.warning("Failed to make request. Re-authenticating.")
                 self.auth.refresh()
@@ -554,7 +555,7 @@ class SpotifyApi(object):
         Args:
             endpoint (str): The API endpoint.
             params (dict): Query parameters (Default is None).
-            data (dict): Body data(Default is None).
+            data (dict): Body data (Default is None).
 
         Returns:
             Reponse: The HTTP Reponse.
