@@ -497,7 +497,7 @@ class SpotifyState(object):
             elif self.in_search_menu() or self.in_select_player_menu():
                 self.current_menu.get_current_list().increment_index()
 
-        elif key == uc.KEY_BACKSPACE:
+        elif key in [uc.KEY_BACKSPACE, 8]:
             if self.is_creating_command():
                 if self.command_cursor_i > 0:
                     self.get_command_query().pop(self.command_cursor_i - 1)
