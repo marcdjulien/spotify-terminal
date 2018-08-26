@@ -57,10 +57,14 @@ Terminal program to play/control music via Spotify.
 Unicurses and Requests for Python are required to run this program.
 
 https://pypi.org/project/UniCurses
-
+(A version of this already comes with the checkout)
 
 http://docs.python-requests.org/en/v2.9.1/user/install/
+```
+pip install requests
+```
 
+Then clone or download this repository to use the application.
 
 # Usage
 Execute the following command to run the program:
