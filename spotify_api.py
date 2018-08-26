@@ -1,11 +1,10 @@
 import urllib
 import json
-import os
 import requests
 from threading import Thread
 
 import common
-from authentication import authenticate
+from authentication import Authenticator
 from cache import UriCache
 from model import (
     Artist,
@@ -39,10 +38,9 @@ def needs_authentication(func):
             return func(self, *args, **kwargs)
         except requests.HTTPError as e:
             msg = str(e)
-            logger.debug("Exception hit in needs_authentication: %s", msg)
             if is_auth_message(msg):
                 logger.warning("Failed to make request. Re-authenticating.")
-                self.auth_from_web()
+                self.auth.refresh()
                 try:
                     return func(self, *args, **kwargs)
                 except Exception:
@@ -98,19 +96,13 @@ class SpotifyApi(object):
         self.username = username
         """The Spotify username."""
 
-        self.api_token_type = None
-        """API token type."""
-
-        self.api_access_token = None
-        """API access token."""
-
         self._uri_cache = UriCache(self.username)
         """Cache of Spotify URIs."""
 
-        # Try to use the saved access token.
-        # If that fails, re-authenticate from the web.
-        if not self.auth_from_file():
-            self.auth_from_web()
+        self.auth = Authenticator()
+        """Handles OAuth 2.0 authentication."""
+
+        self.auth.authenticate()
 
     def get_username(self):
         """Returns the current username.
@@ -164,9 +156,9 @@ class SpotifyApi(object):
         Args:
             device (Device): The Device to transfer playback to.
         """
-        params = {"device_ids": [device['id']],
-                  "play": True}
-        self.put_api_v1("me/player", params)
+        data = {"device_ids": [device['id']],
+                "play": True}
+        self.put_api_v1("me/player", data=data)
 
     @async
     def pause(self):
@@ -544,7 +536,7 @@ class SpotifyApi(object):
         Returns:
             dict: The JSON information.
         """
-        headers = {"Authorization": "%s %s" % (self.api_token_type, self.api_access_token)}
+        headers = {"Authorization": "%s %s" % (self.auth.token_type, self.auth.access_token)}
         url = "https://api.spotify.com/v1/{}".format(endpoint)
         resp = requests.get(url, params=params, headers=headers)
         self.check_response(resp)
@@ -567,7 +559,7 @@ class SpotifyApi(object):
         Returns:
             Reponse: The HTTP Reponse.
         """
-        headers = {"Authorization": "%s %s" % (self.api_token_type, self.api_access_token),
+        headers = {"Authorization": "%s %s" % (self.auth.token_type, self.auth.access_token),
                    "Content-Type": "application/json"}
         api_url = "https://api.spotify.com/v1/{}".format(endpoint)
         resp = requests.put(api_url, headers=headers, params=params, json=data)
@@ -585,7 +577,7 @@ class SpotifyApi(object):
         Returns:
             Reponse: The HTTP Reponse.
         """
-        headers = {"Authorization": "%s %s" % (self.api_token_type, self.api_access_token),
+        headers = {"Authorization": "%s %s" % (self.auth.token_type, self.auth.access_token),
                    "Content-Type": "application/json"}
         api_url = "https://api.spotify.com/v1/{}".format(endpoint)
         resp = requests.post(api_url, headers=headers, params=params)
@@ -600,38 +592,3 @@ class SpotifyApi(object):
         """
         resp.raise_for_status()
 
-    def auth_from_file(self):
-        """Authenticate from the saved file.
-
-        Returns:
-            bool: True on success.
-        """
-        required_keys = {"access_token", "token_type", "expires_in"}
-        found_keys = set()
-
-        if os.path.isfile(common.AUTH_FILENAME):
-            auth_file = open(common.AUTH_FILENAME)
-            for line in auth_file:
-                line = line.strip()
-                toks = line.split("=")
-                if toks[0] in required_keys:
-                    logger.info("Found %s in auth file", toks[0])
-                    setattr(self, "api_{}".format(toks[0]), toks[1])
-                    found_keys.add(toks[0])
-            return len(required_keys.symmetric_difference(found_keys)) == 0
-        else:
-            return False
-
-    def auth_from_web(self):
-        """Authenticate from the web.
-
-        Returns:
-            bool: True on success.
-        """
-        auth_data = authenticate()
-        if auth_data:
-            for k, v in auth_data.items():
-                setattr(self, "api_{}".format(k), v)
-            return True
-        else:
-            return False
