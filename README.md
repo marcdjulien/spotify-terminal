@@ -111,9 +111,9 @@ Type ```/``` is a shortcut to the find command. You can also type ```n``` or ```
 
 ```Shift + R``` to re-sync the player.
 
-```Shift + .``` to play the next song.
+```Shift + >``` to play the next song.
 
-```Shift + ,``` to play the previous song.
+```Shift + <``` to play the previous song.
 
 ```Shift + W``` to see list of players.
 
@@ -121,7 +121,7 @@ Type ```/``` is a shortcut to the find command. You can also type ```n``` or ```
 
 ```Shift + ` ``` to mute.
 
-```Sift + P ``` to add a song to a playlist.
+```Shift + P ``` to add a song to a playlist.
 
 # Notes
 This has only been tested on Linux and Windows.
