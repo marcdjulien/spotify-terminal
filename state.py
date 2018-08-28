@@ -380,6 +380,7 @@ class SpotifyState(object):
                 return
 
         if key:
+            # Adding to a playlist
             if self.current_state == self.ADD_TO_PLAYLIST_SELECT:
                 if key == uc.KEY_UP:
                     self.main_menu.get_list("user").decrement_index()
@@ -404,6 +405,11 @@ class SpotifyState(object):
                     entry = self.confirm_menu.get_current_list_entry()
                     if entry.get().lower() == "yes":
                         self._add_track_to_playlist(self.track_to_add, self.playlist_to_add)
+                    else:
+                        self.track_to_add = None
+                        self.playlist_to_add = None
+                        self.current_state = self.MAIN_MENU_STATE
+            # In another menu.
             else:
                 # Process keys.
                 self._update_state(key)
