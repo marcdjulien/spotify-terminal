@@ -124,4 +124,4 @@ By typing ```:``` you can enter commands. The following is a list of all command
 ```Shift + P ``` to add a song to a playlist.
 
 # Notes
-This has only been tested on Linux and Windows.
+This has only been tested on Linux and Windows with a Spotify Premium account.
