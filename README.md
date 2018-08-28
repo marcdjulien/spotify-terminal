@@ -97,17 +97,17 @@ By typing ```:``` you can enter commands. The following is a list of all command
 ```exit``` | Exit the application.
 
 # Other Tips and Tricks
-```TAB``` while on an Artist's page to toggle between their main page and a list of all of their tracks.
+```TAB``` while on an artist's page to toggle between their main page and a list of all of their tracks. This is useful if you want to listen to all tracks by an artist within the same context.
 
-Type ```/``` is a shortcut to the find command. You can also type ```n``` or ```p``` to find a next or previous entry (similar to vim).
+```/``` is a shortcut to the ```find``` command. You can also type ```n``` or ```p``` to find a next or previous entry (similar to vim).
 
 ```:q``` to exit.
 
-```Backspace``` to cycle through previous Track listings.
+```Backspace``` to cycle through previous track listings.
 
-```Shift + S``` on any entry to immediately go to the Album track list.
+```Shift + S``` on any track to immediately go to the album page.
 
-```Shift + D``` on any entry to immediately go to the Artist page.
+```Shift + D``` on any track to immediately go to the artist page.
 
 ```Shift + R``` to re-sync the player.
 
@@ -115,7 +115,7 @@ Type ```/``` is a shortcut to the find command. You can also type ```n``` or ```
 
 ```Shift + <``` to play the previous song.
 
-```Shift + W``` to see list of players.
+```Shift + W``` to see list of your devices.
 
 ```Shift + 0-9``` to set to set the volume. 1...0 for volume 10...100.
 
