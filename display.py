@@ -15,15 +15,16 @@ class Window(object):
 
 
 class CursesDisplay(object):
-
-    # How often to re-render.
-    RENDER_PERIOD = 1
-
-    # How often to up.
+    # How often to sync up the player state.
     SYNC_PERIOD = 30
 
     # How often to run the program loop.
     PROGRAM_PERIOD = 0.05
+
+    # How often to re-render.
+    # For now, this is the same as the program loop.
+    # Will need to investigate the performance impact of this.
+    RENDER_PERIOD = PROGRAM_PERIOD
 
     # How often to clear the screen.
     CLEAR_PERIOD = 60
@@ -40,9 +41,6 @@ class CursesDisplay(object):
 
         self._windows = {}
         """Windows."""
-
-        self._key_buf = []
-        """Buffer of keys that were pressed."""
 
         self._running = True
         """Whether to continue running."""
@@ -123,7 +121,6 @@ class CursesDisplay(object):
                 rerender = (time.time() - self._last_render_time) > self.RENDER_PERIOD
                 if pressed or rerender:
                     self.render()
-                    self._last_render_time = time.time()
 
             # Sleep for an amount of time.
             sleep_time = self.PROGRAM_PERIOD - t.duration
@@ -143,16 +140,18 @@ class CursesDisplay(object):
         Returns:
             bool: True if a key was pressed.
         """
+        key_buf = []
         for win in self.get_windows():
             key = uc.wgetch(win)
             if key != -1:
-                self._key_buf.append(key)
+                key_buf.append(key)
+        logger.info(key_buf)
 
         key_pressed = False
-        while self._key_buf:
+        while key_buf:
             self._last_key_pressed_time = time.time()
             key_pressed = True
-            key = self._key_buf.pop()
+            key = key_buf.pop()
 
             # Enter key
             if key in [13, 10]:
@@ -196,6 +195,8 @@ class CursesDisplay(object):
         # Required.
         uc.update_panels()
         uc.doupdate()
+
+        self._last_render_time = time.time()
 
     def clear(self):
         uc.erase()
