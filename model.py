@@ -46,7 +46,7 @@ class Track(SpotifyObject):
         self.track, self.album, self.artist = self.track_tuple
 
     def __str__(self):
-        return "%s on %s by %s" % self.track_tuple
+        return "%s    %s    %s" % self.track_tuple
 
     def str(self, cols):
         # Account for 4 spaces.
