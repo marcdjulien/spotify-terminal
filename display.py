@@ -60,6 +60,10 @@ class CursesDisplay(object):
         self._last_key_pressed_time = time.time()
         self._last_clear_time = time.time()
 
+        # This increments each control loop. A value of -50 means that we'll have
+        # 2.5s (50 * PROGRAM_LOOP) until the footer begins to roll.
+        self._footer_roll_index = -50
+
         # Initialize the display.
         self._init_curses()
 
@@ -310,8 +314,29 @@ class CursesDisplay(object):
         else:
             entry = self.state.current_menu.get_current_list_entry()
             if entry:
-                text = entry.str(self._cols)
-                uc.mvwaddstr(self.stdscr, self._rows-1, 0, text, uc.A_BOLD)
+                ncols = self._cols-1
+                short_str = entry.str(ncols)
+                long_str = str(entry)
+
+                if "".join(short_str.split()) == "".join(long_str.split()):
+                    uc.mvwaddstr(self.stdscr, self._rows-1, 0, short_str, uc.A_BOLD)
+                    # This helps ensure that we always start form the same position
+                    # when we go from a static footer to a long footer that requris rolling.
+                    self._footer_roll_index = -50
+                else:
+                    self._footer_roll_index += 1
+                    footer_roll_index = 0 if self._footer_roll_index < 0 else self._footer_roll_index
+                    footer_roll_index = self._footer_roll_index % len(long_str)
+                    # Double the string length so that we always uniformly roll
+                    # even in the case the entire string length is less than the terminal width.
+                    # Also, add a border to easily identify the end.
+                    long_str = 2 * (long_str + " | ")
+                    text = list(long_str)
+                    for _ in range(self._footer_roll_index):
+                        text.append(text.pop(0))
+                    text = "".join(text)
+                    text = text[0:ncols]
+                    uc.mvwaddstr(self.stdscr, self._rows-1, 0, text, uc.A_BOLD)
 
     def render_search_panel(self):
         win, rows, cols = self._init_render_window("search_results")
