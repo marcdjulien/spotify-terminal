@@ -16,12 +16,17 @@ logger = common.logging.getLogger(__name__)
 def get_args():
     """Parse and return the command line arguments."""
     parser = argparse.ArgumentParser(description="Terminal remote Spotify player.")
-    parser.add_argument("username", help="spotify username")
+    parser.add_argument("username", help="username associated with your spotify account (email or user id)")
     parser.add_argument("-c --clear_cache",
                         action="store_true",
                         default=False,
                         dest="clear_cache",
                         help="clear the cache")
+    parser.add_argument("-a --clear_auth",
+                        action="store_true",
+                        default=False,
+                        dest="clear_auth",
+                        help="clear your authorization tokens")
     return parser.parse_args()
 
 
@@ -49,13 +54,18 @@ if __name__ == '__main__':
     # Check the version we're running.
     check_version()
 
+    # Clear your auth keys.
+    if args.clear_auth:
+        logger.debug("Clearing authorization tokens")
+        common.clear_auth(args.username)
+
+    # Spotify API interface.
+    api = SpotifyApi(args.username)
+
     # Reset the cache.
     if args.clear_cache:
         logger.debug("Clearing the cache")
         common.clear_cache(args.username)
-
-    # Spotify API interface.
-    api = SpotifyApi(args.username)
 
     # Create Spotify state.
     sp_state = SpotifyState(api)

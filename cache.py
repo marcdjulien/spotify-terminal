@@ -16,8 +16,6 @@ class UriCache(object):
         self._cache = {}
         """Storage for the memory cache."""
 
-        common.create_cache(username)
-
     def get(self, key):
         """Return the cached object
 

@@ -97,7 +97,7 @@ class Album(SpotifyObject):
         self.extra_info = "[{}]".format(", ".join(info))
 
     def __str__(self):
-        return "%s [%s] by %s" % (self['name'],
+        return "%s    %s    %s" % (self['name'],
                                   self.extra_info,
                                   self.artists)
 

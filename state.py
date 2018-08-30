@@ -272,17 +272,17 @@ class SpotifyState(object):
             attr_name: getattr(self, attr_name)
             for attr_name in self.PICKLE_ATTRS
         }
-        state_filename = common.get_file_from_cache(self.get_username(), "state")
+        state_filename = common.get_file_from_cache(self.api.get_username(), "state")
         with open(state_filename, "wb") as file:
-            logger.debug("Saving %s state", self.get_username())
+            logger.debug("Saving %s state", self.api.get_username())
             pickle.dump(ps, file)
 
     def load_state(self):
         """Load part of the state from disk."""
-        state_filename = common.get_file_from_cache(self.get_username(), "state")
+        state_filename = common.get_file_from_cache(self.api.get_username(), "state")
         if os.path.isfile(state_filename):
             with open(state_filename, "rb") as file:
-                logger.debug("Loading %s state", self.get_username())
+                logger.debug("Loading %s state", self.api.get_username())
                 ps = pickle.load(file)
 
             for attr in self.PICKLE_ATTRS:
@@ -290,10 +290,10 @@ class SpotifyState(object):
 
     def init(self):
         # Get the User info.
-        self.user = self.api.get_user(self.get_username())
+        self.user = self.api.get_user()
 
         if not self.user:
-            print("Could not load user {}".format(self.get_username()))
+            print("Could not load user {}".format(self.api.get_username()))
             exit(1)
 
         # Initialize PlayerActions.
@@ -324,7 +324,7 @@ class SpotifyState(object):
         saved = Playlist({"name": "Saved",
                           "uri": common.SAVED_TRACKS_CONTEXT_URI,
                           "id": "",
-                          "owner_id": self.get_username()})
+                          "owner_id": self.api.get_id()})
         playlists.insert(0, saved)
         self.main_menu['user'].update_list(tuple(playlists))
 
@@ -676,7 +676,7 @@ class SpotifyState(object):
             if command_input == ":":
                 self.creating_command = False
                 return
-            elif command_input.lower() == ":q":
+            elif command_input.lower().startswith(":q"):
                 command_string = "exit"
             else:
                 command_string = command_input[1::]
@@ -918,8 +918,8 @@ class SpotifyState(object):
     def get_cursor_i(self):
         return self.command_cursor_i
 
-    def get_username(self):
-        return self.api.get_username()
+    def get_display_name(self):
+        return self.api.get_display_name()
 
     def get_command_query(self):
         return self.command_query

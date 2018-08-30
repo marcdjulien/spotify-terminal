@@ -149,7 +149,6 @@ class CursesDisplay(object):
             key = uc.wgetch(win)
             if key != -1:
                 key_buf.append(key)
-        logger.info(key_buf)
 
         key_pressed = False
         while key_buf:
@@ -243,17 +242,17 @@ class CursesDisplay(object):
         # Draw border.
         uc.box(win)
 
-        # Show the username.
-        username_start_line = 1
-        uc.mvwaddnstr(win, username_start_line, 2,
-                      self.state.get_username(),
+        # Show the display_name.
+        display_name_start_line = 1
+        uc.mvwaddnstr(win, display_name_start_line, 2,
+                      self.state.get_display_name(),
                       cols-3,
                       uc.A_BOLD)
 
         # Show the playlists.
         playlists = [str(playlist) for playlist in self.state.main_menu.get_list('user')]
         selected_i = self.state.main_menu["user"].i
-        playlist_start_line = username_start_line + 2
+        playlist_start_line = display_name_start_line + 2
         self._render_list(win, playlists, playlist_start_line, rows-4,
                           2, cols-3, selected_i, self.is_active_window("user"))
 

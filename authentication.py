@@ -27,6 +27,7 @@ class Authenticator(object):
         "playlist-modify-public",
         "playlist-read-collaborative",
         "playlist-read-private",
+        "user-read-email",
         "user-read-currently-playing",
         "user-read-playback-state",
         "user-modify-playback-state",
@@ -34,7 +35,8 @@ class Authenticator(object):
         "user-library-read"
     ])
 
-    def __init__(self):
+    def __init__(self, username):
+        self.username = username
         self.token_type = None
         self.access_token = None
         self.refresh_token = None
@@ -42,24 +44,24 @@ class Authenticator(object):
         self._init()
 
     def authenticate(self):
-        if self._auth_from_file():
-            return
+        # Try to use local auth file.
+        if not self._auth_from_file():
+            def start_server():
+                http_server = HTTPServer(('localhost', self.port), AuthenticationHandler)
+                http_server.handle_request()
+                self.data = http_server.data
 
-        def start_server():
-            http_server = HTTPServer(('localhost', self.port), AuthenticationHandler)
-            http_server.handle_request()
-            self.data = http_server.data
+            logger.debug("Starting auth server")
+            web_thread = Thread(target=start_server)
+            web_thread.start()
 
-        logger.debug("Starting auth server")
-        web_thread = Thread(target=start_server)
-        web_thread.start()
+            logger.debug("Opening %s in browser", self._authorize_url())
+            webbrowser.open_new_tab(self._authorize_url())
 
-        logger.debug("Opening %s in browser", self._authorize_url())
-        webbrowser.open_new_tab(self._authorize_url())
+            logger.debug("Waiting for user to complete authentication process")
+            web_thread.join()
 
-        logger.debug("Waiting for user to complete authentication process")
-        web_thread.join()
-        self._get_tokens()
+            self._get_tokens()
 
     def refresh(self):
         logger.debug("Refreshing token")
@@ -96,8 +98,8 @@ class Authenticator(object):
                          "token_type",
                          "refresh_token"}
         found_keys = set()
-        if os.path.isfile(common.AUTH_FILENAME):
-            with open(common.AUTH_FILENAME) as auth_file:
+        if os.path.isfile(common.get_auth_filename(self.username)):
+            with open(common.get_auth_filename(self.username)) as auth_file:
                 for line in auth_file:
                     line = line.strip()
                     toks = line.split("=")
@@ -110,6 +112,7 @@ class Authenticator(object):
             return False
 
     def _get_tokens(self):
+        # First request to get tokens.
         post_body = {
             "grant_type": "authorization_code",
             "code": self.data["code"],
@@ -117,11 +120,10 @@ class Authenticator(object):
             "client_id": self.app_data[0],
             "client_secret": self.app_data[1]
         }
-
         resp = requests.post(self._token_url(), data=post_body)
         resp.raise_for_status()
-
         data = json.loads(resp.text)
+
         self._save(data)
 
     def _authorize_url(self):
@@ -145,14 +147,14 @@ class Authenticator(object):
             if not os.path.isdir(common.get_app_dir()):
                 os.mkdir(common.get_app_dir())
 
-            with open(common.AUTH_FILENAME, "w") as auth_file:
+            with open(common.get_auth_filename(self.username), "w") as auth_file:
                 for k, v in data.items():
                     auth_file.write("%s=%s\n" % (k, v))
-                logger.debug("%s created", common.AUTH_FILENAME)
+                logger.debug("%s created", common.get_auth_filename(self.username))
         else:
             try:
-                os.remove(common.AUTH_FILENAME)
-                logger.debug("%s deleted", common.AUTH_FILENAME)
+                os.remove(common.get_auth_filename(self.username))
+                logger.debug("%s deleted", common.get_auth_filename(self.username))
             except OSError:
                 pass
 

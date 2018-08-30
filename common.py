@@ -7,6 +7,26 @@ import shutil
 import time
 import traceback
 import unicodedata
+import tempfile
+
+logger = None
+
+
+def catch_exceptions(func):
+    """Decorator to catch an exceptions and print it.
+
+    All threaded functions should be threaded with this,
+    otherwise exceptions will go uncaught.
+    """
+    def wrapper(*args, **kwargs):
+        """Wrapper to catch and print exceptions."""
+        try:
+            return func(*args, **kwargs)
+        except BaseException:
+            clear()
+            traceback.print_exc()
+            os._exit(1)
+    return wrapper
 
 
 def get_default_market():
@@ -91,21 +111,30 @@ def clamp(value, low, high):
     return max(low, min(value, high))
 
 
+def ensure_dir(func):
+    """Ensure a path exists before returning it."""
+
+    @catch_exceptions
+    def wrapper(*args, **kwargs):
+        """A wrapper that ensures the dir exists before returning it."""
+        path = func(*args, **kwargs)
+        if not os.path.exists(path):
+            os.makedirs(path)
+            if logger:
+                logger.debug("Created %s", path)
+        return path
+
+    return wrapper
+
+
+@ensure_dir
 def get_app_dir():
     """Return the application's directory.
 
     Returns:
         str: The full path to the directory.
     """
-    if is_windows():
-        dirname = os.path.join(os.getenv('APPDATA'), ".spotifyterminal")
-    elif is_linux():
-        dirname = os.path.join(os.path.expanduser("~"), ".spotifyterminal")
-
-    if not os.path.isdir(dirname):
-        os.mkdir(dirname)
-
-    return dirname
+    return os.path.join(tempfile.gettempdir(), "spotifyterminal")
 
 
 def get_app_file_path(*args):
@@ -120,6 +149,32 @@ def get_app_file_path(*args):
     return os.path.join(get_app_dir(), *args)
 
 
+@ensure_dir
+def get_user_dir(username):
+    """Return dir for the user
+
+    Args:
+        username (str): The user name.
+
+    Returns:
+        str: The path to the user's cache.
+    """
+    return get_app_file_path(username)
+
+
+def get_user_file_path(username, *args):
+    """Return the path from the applications directory.
+
+    Args:
+        args (tuple): The file paths.
+
+    Returns:
+        str: The full path to the file.
+    """
+    return os.path.join(get_user_dir(username), *args)
+
+
+@ensure_dir
 def get_cache(username):
     """Return the directory of the user's cache.
 
@@ -129,7 +184,7 @@ def get_cache(username):
     Returns:
         str: The path to the user's cache.
     """
-    return get_app_file_path(".cache", username)
+    return get_user_file_path(username, ".cache")
 
 
 def get_file_from_cache(username, file):
@@ -159,20 +214,27 @@ def clear_cache(username):
         logger.debug("%s", e)
 
 
-def create_cache(username):
-    """Create the user's cache.
+def get_auth_filename(username):
+    """Return the path to the auth filename.
 
-    If the cache already exists, this has no effect.
+    Returns:
+        str: The full path to the auth filename
+    """
+    return get_user_file_path(username, "auth")
+
+
+def clear_auth(username):
+    """Clear the user's authorization tokens.
 
     Args:
         username (str): The user name.
     """
-    if not get_app_file_path(".cache"):
-        os.mkdir(get_app_file_path(".cache"))
-
-    user_cache = get_cache(username)
-    if not os.path.isdir(user_cache):
-        os.mkdir(user_cache)
+    auth_filename = get_auth_filename(username)
+    try:
+        os.remove(auth_filename)
+    except Exception as e:
+        logger.debug("Could not clear %s", auth_filename)
+        logger.debug("%s", e)
 
 
 def extract_version(stream):
@@ -203,10 +265,6 @@ def get_master_version():
         return extract_version(resp)
     except BaseException as e:
         logger.info("Could not get latest version %s", e)
-
-
-# Authentication filename
-AUTH_FILENAME = get_app_file_path("auth")
 
 
 # Configuration filename
@@ -275,23 +333,6 @@ logging.basicConfig(filename=get_app_file_path("log"),
 
 logger = logging.getLogger(__name__)
 logger.info("\n\n\n")
-
-
-def catch_exceptions(func):
-    """Decorator to catch an exceptions and print it.
-
-    All threaded functions should be threaded with this,
-    otherwise exceptions will go uncaught.
-    """
-    def wrapper(*args, **kwargs):
-        """Wrapper to catch and print exceptions."""
-        try:
-            return func(*args, **kwargs)
-        except BaseException:
-            clear()
-            traceback.print_exc()
-            os._exit(1)
-    return wrapper
 
 
 class ContextDuration(object):
