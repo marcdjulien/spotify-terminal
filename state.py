@@ -195,7 +195,7 @@ class SpotifyState(object):
 
         # Initialize track list.
         if not self.restore_previous_tracks(0):
-            logger.debug("Loading the last track list")
+            logger.debug("Loading the saved track list")
             self._set_playlist(self.main_menu['user'][0])
 
     def sync_player_state(self):
