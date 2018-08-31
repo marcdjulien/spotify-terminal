@@ -195,7 +195,7 @@ class SpotifyState(object):
 
         # Initialize track list.
         if not self.restore_previous_tracks(0):
-            logger.debug("Loading the saved track list")
+            logger.debug("Loading the Saved track list")
             self._set_playlist(self.main_menu['user'][0])
 
     def sync_player_state(self):
@@ -656,6 +656,13 @@ class SpotifyState(object):
                 track = self.main_menu['tracks'].i
             else:
                 context_uri = context['uri']
+
+        # If using a custom context, limit it to 750 tracks.
+        if uris:
+            n = 750
+            offset_i = max(track - (n/2) + 1, 0)
+            uris = uris[offset_i:offset_i + n]
+            track -= offset_i
 
         self.api.play(track, context_uri, uris, self.current_device)
 
