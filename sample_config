@@ -1,0 +1,26 @@
+# This is a sample configuration file.
+find_next: "n"
+find_previous: "p"
+add_track: "P"
+current_album: 88
+goto_album: 83
+goto_artist: 68
+current_artist: 67
+play: " "
+next_track: "A"
+previous_track: "<""
+show_devices: "W"
+refresh: "R"
+volume_up: "+"
+volume_down: "_"
+volume_0: "~"
+volume_1: "!"
+volume_2: "@"
+volume_3: "#"
+volume_4: "$"
+volume_5: "%"
+volume_6: "^"
+volume_7: "&"
+volume_8: "*"
+volume_9: "("
+volume_10: ")"

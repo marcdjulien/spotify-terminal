@@ -6,8 +6,8 @@ import unicurses as uc
 
 import common
 from display import CursesDisplay
-from spotify_api import SpotifyApi
-from state import SpotifyState
+from api import SpotifyApi
+from state import SpotifyState, Config
 
 
 logger = common.logging.getLogger(__name__)
@@ -15,7 +15,9 @@ logger = common.logging.getLogger(__name__)
 
 def get_args():
     """Parse and return the command line arguments."""
-    parser = argparse.ArgumentParser(description="Terminal remote Spotify player.")
+    parser = argparse.ArgumentParser(description="Terminal remote Spotify player.",
+                                     epilog=Config.help(),
+                                     formatter_class=argparse.RawTextHelpFormatter)
     parser.add_argument("username", help="username associated with your spotify account (email or user id)")
     parser.add_argument("-c --clear_cache",
                         action="store_true",
@@ -27,6 +29,10 @@ def get_args():
                         default=False,
                         dest="clear_auth",
                         help="clear your authorization tokens")
+    parser.add_argument("-p --config_path",
+                        default=None,
+                        dest="config_path",
+                        help="pass a configuration file")
     return parser.parse_args()
 
 
@@ -59,17 +65,26 @@ if __name__ == '__main__':
         logger.debug("Clearing authorization tokens")
         common.clear_auth(args.username)
 
-    # Spotify API interface.
-    api = SpotifyApi(args.username)
-
     # Reset the cache.
     if args.clear_cache:
         logger.debug("Clearing the cache")
         common.clear_cache(args.username)
 
+    # Parse config file.
+    logger.debug("Parsing config file %s", args.config_path)
+    config = Config(args.config_path)
+
+    # Spotify API interface.
+    api = SpotifyApi(args.username)
+
+    # Display premium warning.
+    if not api.is_premium():
+        print "This is not a Premium account. Some features may not work."
+        time.sleep(3)
+
     # Create Spotify state.
-    sp_state = SpotifyState(api)
-    sp_state.load_state();
+    sp_state = SpotifyState(api, config)
+    sp_state.load_state()
     sp_state.init()
 
     # Initialize the curses screen.

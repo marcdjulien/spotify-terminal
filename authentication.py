@@ -30,6 +30,7 @@ class Authenticator(object):
         "user-read-email",
         "user-read-currently-playing",
         "user-read-playback-state",
+        "user-read-private",
         "user-modify-playback-state",
         "user-library-modify",
         "user-library-read"
@@ -162,6 +163,7 @@ class Authenticator(object):
 class AuthenticationHandler(BaseHTTPRequestHandler):
     HTML = """
         <html>
+        You may close this tab, and continue jamming in your terminal!
             <script type="text/javascript">
                     window.close();
             </script>
