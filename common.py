@@ -29,17 +29,6 @@ def catch_exceptions(func):
     return wrapper
 
 
-def get_default_market():
-    """Return the default market.
-
-    Currently only supports US.
-
-    Returns:
-        str: The default market.
-    """
-    return "US"
-
-
 def is_windows():
     return platform.system() == "Windows"
 
@@ -112,7 +101,7 @@ def clamp(value, low, high):
 
 
 def ensure_dir(func):
-    """Ensure a path exists before returning it."""
+    """Decorator to ensure a path exists before returning it."""
 
     @catch_exceptions
     def wrapper(*args, **kwargs):
@@ -138,7 +127,7 @@ def get_app_dir():
 
 
 def get_app_file_path(*args):
-    """Return the path from the applications directory.
+    """Return the path of a file in the application's directory.
 
     Args:
         args (tuple): The file paths.
@@ -151,7 +140,7 @@ def get_app_file_path(*args):
 
 @ensure_dir
 def get_user_dir(username):
-    """Return dir for the user
+    """Return dir for the user.
 
     Args:
         username (str): The user name.
@@ -163,7 +152,7 @@ def get_user_dir(username):
 
 
 def get_user_file_path(username, *args):
-    """Return the path from the applications directory.
+    """Return the path from the user's directory.
 
     Args:
         args (tuple): The file paths.
@@ -267,47 +256,51 @@ def get_master_version():
         logger.info("Could not get latest version %s", e)
 
 
-# Configuration filename
-CONFIG_FILENAME = get_app_file_path("spotifyrc")
+class ContextDuration(object):
+    """Measured the duration of the context."""
+
+    def __enter__(self):
+        self.start = time.time()
+        return self
+
+    def __exit__(self, exception, value, traceback):
+        self.end = time.time()
+        self.duration = self.end - self.start
+        if not exception:
+            return self
+
+
+SPOTIFY_BANNER = """
+   _____             __  _ ____
+  / ___/____  ____  / /_(_/ ____  __
+  \__ \/ __ \/ __ \/ __/ / /_/ / / /
+ ___/ / /_/ / /_/ / /_/ / __/ /_/ /
+/____/ .___/\____/\__/_/_/  \__, /
+    /_/                    /____/
+       ______                    _             __
+      /_  _____  _________ ___  (_)___  ____ _/ /
+       / / / _ \/ ___/ __ `__ \/ / __ \/ __ `/ /
+      / / /  __/ /  / / / / / / / / / / /_/ / /
+     /_/  \___/_/  /_/ /_/ /_/_/_/ /_/\__,_/_/
+"""
 
 
 TITLE = """
 
-   _____             __  _ ____
-  / ___/____  ____  / /_(_/ ____  __
-  \__ \/ __ \/ __ \/ __/ / /_/ / / /
- ___/ / /_/ / /_/ / /_/ / __/ /_/ /
-/____/ .___/\____/\__/_/_/  \__, /
-    /_/                    /____/
-       ______                    _             __
-      /_  _____  _________ ___  (_)___  ____ _/ /
-       / / / _ \/ ___/ __ `__ \/ / __ \/ __ `/ /
-      / / /  __/ /  / / / / / / / / / / /_/ / /
-     /_/  \___/_/  /_/ /_/ /_/_/_/ /_/\__,_/_/
-
+{}
 
    Loading Playlists...
 
    [marcdjulien] v{}.{}.{}
-""".format(*get_version())
+""".format(SPOTIFY_BANNER, *get_version())
 
 
 PEACE = """
-   _____             __  _ ____
-  / ___/____  ____  / /_(_/ ____  __
-  \__ \/ __ \/ __ \/ __/ / /_/ / / /
- ___/ / /_/ / /_/ / /_/ / __/ /_/ /
-/____/ .___/\____/\__/_/_/  \__, /
-    /_/                    /____/
-       ______                    _             __
-      /_  _____  _________ ___  (_)___  ____ _/ /
-       / / / _ \/ ___/ __ `__ \/ / __ \/ __ `/ /
-      / / /  __/ /  / / / / / / / / / / /_/ / /
-     /_/  \___/_/  /_/ /_/ /_/_/_/ /_/\__,_/_/
 
+{}
 
    Saving...
-"""
+""".format(SPOTIFY_BANNER)
 
 SAVED_TRACKS_CONTEXT_URI = "spotify_terminal:saved_tracks:context"
 
@@ -332,18 +325,3 @@ logging.basicConfig(filename=get_app_file_path("log"),
 
 
 logger = logging.getLogger(__name__)
-logger.info("\n\n\n")
-
-
-class ContextDuration(object):
-    """Measured the duration of the context."""
-
-    def __enter__(self):
-        self.start = time.time()
-        return self
-
-    def __exit__(self, exception, value, traceback):
-        self.end = time.time()
-        self.duration = self.end - self.start
-        if not exception:
-            return self

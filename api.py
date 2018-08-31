@@ -138,6 +138,9 @@ class SpotifyApi(object):
     def is_premium(self):
         return self.me['product'] == "premium"
 
+    def get_market(self):
+        return self.me['country']
+
     @async
     def play(self, track=None, context_uri=None, uris=None, device=None):
         """Play a Spotify track.
@@ -327,18 +330,18 @@ class SpotifyApi(object):
     @uri_cache
     def get_albums_from_artist(self, artist,
                                type=("album", "single", "appears_on", "compilation"),
-                               market=common.get_default_market()):
+                               market=None):
         """Get Albums from a certain Artist.
 
         Args:
             artist (Artist): The Artist.
             type (iter): Which types of albums to return.
-
+            market (str): The market. Default is None which means use the account.
         Returns:
             tuple: The Albums.
         """
         q = {"include_groups": ",".join(type),
-             "market": market,
+             "market": market or self.get_market(),
              "limit": 50}
         url = "artists/{}/albums".format(artist['id'])
         page = self.get_api_v1(url, q)
@@ -347,18 +350,19 @@ class SpotifyApi(object):
         return tuple(Album(album) for album in albums)
 
     @uri_cache
-    def get_top_tracks_from_artist(self, artist, market=common.get_default_market()):
+    def get_top_tracks_from_artist(self, artist, market=None):
         """Get top tracks from a certain Artist.
 
         This also returns a pseudo-track to play the Artist context.
 
         Args:
             artist (Artist): The Artist to get Tracks from.
+            market (str): The market. Default is None which means use the account.
 
         Returns:
             tuple: The Tracks.
         """
-        q = {"country": market}
+        q = {"country": market or self.get_market()}
         url = "artists/{}/top-tracks".format(artist['id'])
         result = self.get_api_v1(url, q)
 
