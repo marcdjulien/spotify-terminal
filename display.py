@@ -27,7 +27,7 @@ class CursesDisplay(object):
     RENDER_PERIOD = PROGRAM_PERIOD
 
     # How often to clear the screen.
-    CLEAR_PERIOD = 60
+    CLEAR_PERIOD = 60 * 10
 
     def __init__(self, stdscr, sp_state):
         self.state = sp_state
