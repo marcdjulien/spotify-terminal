@@ -72,7 +72,7 @@ Execute the following command to run the program:
 Linux: ./spotify.py [username]
 Windows: spotify.py [username]
 ```
-Where ```username``` is your Spotify username.
+Where ```username``` is either the email associated with your Spotify account or the user id.
 
 # " Search
 By typing ```"``` you can begin a search. You may optionally the search with an end ".

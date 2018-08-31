@@ -1,5 +1,6 @@
 import os
 import pickle
+import re
 from threading import Lock, Thread, Event
 
 import unicurses as uc
@@ -16,145 +17,6 @@ import common
 
 
 logger = common.logging.getLogger(__name__)
-
-
-class List(object):
-    """Represents a list of selectable items.
-
-    Spotify Terminal treats most things as a list
-    that the user traverses through to make actions.
-    """
-
-    def __init__(self, name=None):
-        self.i = 0
-        """Currently selected index."""
-
-        self.list = tuple()
-        """List of entries."""
-
-        self.name = name
-        """Name of List."""
-
-        self.header = ""
-        """Header."""
-
-    def update_list(self, l):
-        """Update the list.
-
-        Args:
-            l (iter): The list ot update to.
-        """
-        self.list = tuple(l)
-        self.i = 0
-
-    def current_entry(self):
-        """Return the currently selected entry.
-
-        Returns:
-            object: The currently selected entry.
-        """
-        return self.list[self.i] if self.list else None
-
-    def set_index(self, i):
-        """Set the selection to 'i'.
-
-        Args:
-            i (int): The index.
-        """
-        self.i = common.clamp(i, 0, len(self.list) - 1)
-
-    def get_index(self):
-        """Get the current index.
-
-        Returns:
-            int: The index.
-        """
-        return self.i
-
-    def update_index(self, delta):
-        """Set the index to the current index + delta.
-
-        Args:
-            delta (int): The delta.
-        """
-        self.set_index(self.i + delta)
-
-    def increment_index(self, amount=None):
-        self.update_index(amount or 1)
-
-    def decrement_index(self, amount=None):
-        self.update_index((-amount if amount else None) or -1)
-
-    def __len__(self):
-        return len(self.list)
-
-    def __iter__(self):
-        return self.list.__iter__()
-
-    def __next__(self):
-        return self.list.__next__()
-
-    def __getitem__(self, i):
-        return self.list[i]
-
-    def __equals__(self, other_list):
-        return self.name == other_list.name
-
-
-class ListCollection(object):
-    """A collection of Lists."""
-
-    def __init__(self, name, lists):
-        self.name = name
-        self.ordered_lists = lists
-        self.lists = {l.name: l for l in lists}
-        self.list_i = 0
-
-    def decrement_list(self):
-        """Decrement the currently List."""
-        self.list_i = common.clamp(self.list_i - 1, 0, len(self.ordered_lists) - 1)
-
-    def increment_list(self):
-        """Increment the currently List."""
-        self.list_i = common.clamp(self.list_i + 1, 0, len(self.ordered_lists) - 1)
-
-    def get_current_list(self):
-        """Get the currently selected List.
-
-        Returns:
-            List: The current List.
-        """
-        return self.ordered_lists[self.list_i]
-
-    def get_current_list_entry(self):
-        """Return the current entry of the current list.
-
-        Returns:
-            object: The current entry.
-        """
-        return self.get_current_list().current_entry()
-
-    def get_list(self, list_name):
-        """Return a list byu its name.
-
-        Args:
-            list_name (str): The name of the list.
-
-        Returns:
-            List: The List with the requested name.
-        """
-        return self.lists[list_name]
-
-    def set_current_list(self, list_name):
-        """Set the current List by its name.
-
-        Args:
-            list_name (str): The name of the List to set.
-        """
-        self.list_i = self.ordered_lists.index(self.lists[list_name])
-
-    def __getitem__(self, key):
-        return self.lists[key]
 
 
 class SpotifyState(object):
@@ -185,12 +47,15 @@ class SpotifyState(object):
 
     ADD_TO_PLAYLIST_CONFIRM = "add_to_playlist_confirm"
 
-    def __init__(self, api):
+    def __init__(self, api, config):
         self.lock = Lock()
         """Lock for the class."""
 
         self.api = api
         """SpotifyApi object to make Spotify API calls."""
+
+        self.config = config
+        """The Config parameters."""
 
         self.main_menu = ListCollection("main",
                                         [List("user"),
@@ -272,17 +137,17 @@ class SpotifyState(object):
             attr_name: getattr(self, attr_name)
             for attr_name in self.PICKLE_ATTRS
         }
-        state_filename = common.get_file_from_cache(self.get_username(), "state")
+        state_filename = common.get_file_from_cache(self.api.get_username(), "state")
         with open(state_filename, "wb") as file:
-            logger.debug("Saving %s state", self.get_username())
+            logger.debug("Saving %s state", self.api.get_username())
             pickle.dump(ps, file)
 
     def load_state(self):
         """Load part of the state from disk."""
-        state_filename = common.get_file_from_cache(self.get_username(), "state")
+        state_filename = common.get_file_from_cache(self.api.get_username(), "state")
         if os.path.isfile(state_filename):
             with open(state_filename, "rb") as file:
-                logger.debug("Loading %s state", self.get_username())
+                logger.debug("Loading %s state", self.api.get_username())
                 ps = pickle.load(file)
 
             for attr in self.PICKLE_ATTRS:
@@ -290,10 +155,10 @@ class SpotifyState(object):
 
     def init(self):
         # Get the User info.
-        self.user = self.api.get_user(self.get_username())
+        self.user = self.api.get_user()
 
         if not self.user:
-            print("Could not load user {}".format(self.get_username()))
+            print("Could not load user {}".format(self.api.get_username()))
             exit(1)
 
         # Initialize PlayerActions.
@@ -324,7 +189,7 @@ class SpotifyState(object):
         saved = Playlist({"name": "Saved",
                           "uri": common.SAVED_TRACKS_CONTEXT_URI,
                           "id": "",
-                          "owner_id": self.get_username()})
+                          "owner_id": self.api.get_id()})
         playlists.insert(0, saved)
         self.main_menu['user'].update_list(tuple(playlists))
 
@@ -332,19 +197,6 @@ class SpotifyState(object):
         if not self.restore_previous_tracks(0):
             logger.debug("Loading the last track list")
             self._set_playlist(self.main_menu['user'][0])
-
-    def _read_rc_file(self):
-        """Initializes the users settings based on the stermrc file"""
-        try:
-            rc_file = open(common.CONFIG_FILENAME, "r")
-        except IOError:
-            logger.debug("No configuration file '%s'" % (common.CONFIG_FILENAME))
-            return
-
-        for line in rc_file:
-            # Strip whitespace and comments.
-            line = line.strip()
-            line = line.split("#")[0]
 
     def sync_player_state(self):
         player_state = self.api.get_player_state()
@@ -510,7 +362,7 @@ class SpotifyState(object):
                 self.current_menu.get_current_list().decrement_index(15)
 
         # ASCII character pressed
-        elif 0 <= key <= 256:
+        elif (0 <= key <= 256) or self.config.has_key(key):
             char = chr(key)
 
             if self.is_creating_command():
@@ -540,21 +392,21 @@ class SpotifyState(object):
                         self.command_cursor_i = 1
                     self.creating_command = True
 
-            elif char == "n":
+            elif key == self.config.find_next:
                 if self.prev_command[0] in ["find"]:
                     i = int(self.prev_command[1])
                     command = self.prev_command
                     command[1] = str(i + 1)
                     self._process_command(" ".join(command))
 
-            elif char == "p":
+            elif key == self.config.find_previous:
                 if self.prev_command[0] in ["find"]:
                     i = int(self.prev_command[1])
                     command = self.prev_command
                     command[1] = str(i - 1)
                     self._process_command(" ".join(command))
 
-            elif char == "P":
+            elif key == self.config.add_track:
                 entry = self.current_menu.get_current_list_entry()
                 if entry['type'] == 'track':
                     self.track_to_add = entry
@@ -562,27 +414,39 @@ class SpotifyState(object):
                     self.main_menu.get_list('user').set_index(0)
                     self.current_state = self.ADD_TO_PLAYLIST_SELECT
 
-            elif char == 'W':
+            elif key == self.config.show_devices:
                 self.current_state = self.PLAYER_MENU_STATE
                 devices = self.api.get_devices()
                 self.select_player_menu['players'].update_list(devices)
 
-            elif char == 'R':
+            elif key == self.config.refresh:
                 self.sync_player_state()
 
-            elif char == 'D':
+            elif key == self.config.goto_artist:
                 entry = self.current_menu.get_current_list_entry()
                 if entry['type'] == 'track':
                     artist = entry['artists'][0]
                     self._set_artist(artist)
 
-            elif char == 'S':
+            elif key == self.config.current_artist:
+                entry = self.currently_playing_track
+                if entry:
+                    artist = entry['artists'][0]
+                    self._set_artist(artist)
+
+            elif key == self.config.goto_album:
                 entry = self.current_menu.get_current_list_entry()
                 if entry['type'] == 'track':
                     album = entry['album']
                     self._set_album(album)
                 elif entry['type'] == 'album':
                     self._set_album(entry)
+
+            elif key == self.config.current_album:
+                entry = self.currently_playing_track
+                if entry:
+                    album = entry['album']
+                    self._set_album(album)
 
             elif char == '\t':
                 if self.current_context and self.current_menu.get_current_list().name == "tracks":
@@ -592,27 +456,25 @@ class SpotifyState(object):
                     elif self.current_context.get("type") == "artist":
                         self._set_artist_all_tracks(self.current_context)
 
-            elif char == " ":
+            elif key == self.config.play:
                 self._toggle_play()
 
-            elif char == ">":
+            elif key == self.config.next_track:
                 self.api.next()
 
-            elif char == "<":
+            elif key == self.config.previous_track:
                 self.api.previous()
 
-            elif char in ["~", "!", "@", "#", "$", "%", "^", "&", "*", "(", ")"]:
-                volume = {
-                    "~": 0, "!": 10, "@": 20, "#": 30, "$": 40, "%": 50, "^": 60, "&": 70,
-                    "*": 80, "(": 90, ")": 100
-                }[char]
+            elif self.config.is_volume_key(key):
+                config_param = self.config.get_config_param(key)
+                volume = 10*int(config_param.split("_")[1])
                 self._process_command("volume {}".format(volume))
 
-            elif char == "_":
-                self._process_command("volume {}".format(self.volume - 1))
+            elif key == self.config.volume_down:
+                self._process_command("volume {}".format(self.volume - 5))
 
-            elif char == "+":
-                self._process_command("volume {}".format(self.volume + 1))
+            elif key == self.config.volume_up:
+                self._process_command("volume {}".format(self.volume + 5))
 
             elif key in [uc.KEY_ENTER, 10, 13]:
                 if self.in_search_menu():
@@ -676,7 +538,7 @@ class SpotifyState(object):
             if command_input == ":":
                 self.creating_command = False
                 return
-            elif command_input.lower() == ":q":
+            elif command_input.lower().startswith(":q"):
                 command_string = "exit"
             else:
                 command_string = command_input[1::]
@@ -918,8 +780,8 @@ class SpotifyState(object):
     def get_cursor_i(self):
         return self.command_cursor_i
 
-    def get_username(self):
-        return self.api.get_username()
+    def get_display_name(self):
+        return self.api.get_display_name()
 
     def get_command_query(self):
         return self.command_query
@@ -939,6 +801,145 @@ class SpotifyState(object):
     def get_loading_progress(self):
         if self.futures:
             return self.futures[0].get_progress()
+
+
+class List(object):
+    """Represents a list of selectable items.
+
+    Spotify Terminal treats most things as a list
+    that the user traverses through to make actions.
+    """
+
+    def __init__(self, name=None):
+        self.i = 0
+        """Currently selected index."""
+
+        self.list = tuple()
+        """List of entries."""
+
+        self.name = name
+        """Name of List."""
+
+        self.header = ""
+        """Header."""
+
+    def update_list(self, l):
+        """Update the list.
+
+        Args:
+            l (iter): The list ot update to.
+        """
+        self.list = tuple(l)
+        self.i = 0
+
+    def current_entry(self):
+        """Return the currently selected entry.
+
+        Returns:
+            object: The currently selected entry.
+        """
+        return self.list[self.i] if self.list else None
+
+    def set_index(self, i):
+        """Set the selection to 'i'.
+
+        Args:
+            i (int): The index.
+        """
+        self.i = common.clamp(i, 0, len(self.list) - 1)
+
+    def get_index(self):
+        """Get the current index.
+
+        Returns:
+            int: The index.
+        """
+        return self.i
+
+    def update_index(self, delta):
+        """Set the index to the current index + delta.
+
+        Args:
+            delta (int): The delta.
+        """
+        self.set_index(self.i + delta)
+
+    def increment_index(self, amount=None):
+        self.update_index(amount or 1)
+
+    def decrement_index(self, amount=None):
+        self.update_index((-amount if amount else None) or -1)
+
+    def __len__(self):
+        return len(self.list)
+
+    def __iter__(self):
+        return self.list.__iter__()
+
+    def __next__(self):
+        return self.list.__next__()
+
+    def __getitem__(self, i):
+        return self.list[i]
+
+    def __equals__(self, other_list):
+        return self.name == other_list.name
+
+
+class ListCollection(object):
+    """A collection of Lists."""
+
+    def __init__(self, name, lists):
+        self.name = name
+        self.ordered_lists = lists
+        self.lists = {l.name: l for l in lists}
+        self.list_i = 0
+
+    def decrement_list(self):
+        """Decrement the currently List."""
+        self.list_i = common.clamp(self.list_i - 1, 0, len(self.ordered_lists) - 1)
+
+    def increment_list(self):
+        """Increment the currently List."""
+        self.list_i = common.clamp(self.list_i + 1, 0, len(self.ordered_lists) - 1)
+
+    def get_current_list(self):
+        """Get the currently selected List.
+
+        Returns:
+            List: The current List.
+        """
+        return self.ordered_lists[self.list_i]
+
+    def get_current_list_entry(self):
+        """Return the current entry of the current list.
+
+        Returns:
+            object: The current entry.
+        """
+        return self.get_current_list().current_entry()
+
+    def get_list(self, list_name):
+        """Return a list byu its name.
+
+        Args:
+            list_name (str): The name of the list.
+
+        Returns:
+            List: The List with the requested name.
+        """
+        return self.lists[list_name]
+
+    def set_current_list(self, list_name):
+        """Set the current List by its name.
+
+        Args:
+            list_name (str): The name of the List to set.
+        """
+        self.list_i = self.ordered_lists.index(self.lists[list_name])
+
+    def __getitem__(self, key):
+        return self.lists[key]
 
 
 class Future(object):
@@ -1054,3 +1055,168 @@ class Progress(object):
     def get_percent(self):
         with self.lock:
             return self.percent_done
+
+
+class Config(object):
+    """Read and store config parameters."""
+    default = {
+        "find_next": ord("n"),
+        "find_previous": ord("p"),
+        "add_track": ord("P"),
+        "show_devices": ord("W"),
+        "refresh": ord("R"),
+        "goto_artist": ord("D"),
+        "goto_album": ord("S"),
+        "current_artist": ord("C"),
+        "current_album": ord("X"),
+        "next_track": ord(">"),
+        "previous_track": ord("<"),
+        "play": ord(" "),
+        "volume_0": ord("~"),
+        "volume_1": ord("!"),
+        "volume_2": ord("@"),
+        "volume_3": ord("#"),
+        "volume_4": ord("$"),
+        "volume_5": ord("%"),
+        "volume_6": ord("^"),
+        "volume_7": ord("&"),
+        "volume_8": ord("*"),
+        "volume_9": ord("("),
+        "volume_10": ord(")"),
+        "volume_up": ord("+"),
+        "volume_down": ord("_")
+    }
+
+    def __init__(self, config_filename=None):
+        self.config_filename = config_filename
+        """The full path to the config file."""
+
+        self.keys = {}
+        """Mapping of config keys to key codes and the reverse."""
+
+        if self.config_filename:
+            if not self._parse_and_validate_config_file():
+                raise RuntimeError("Unable to parse config file. See above for details.")
+
+            logger.debug("The following config parameters are being used:")
+            for param, key in self.keys.items():
+                if isinstance(param, basestring):
+                    try:
+                        logger.debug("\t%s: %s (%s)", param, chr(key), key)
+                    except:
+                        logger.debug("\t%s: %s", param, key)
+        else:
+            self.keys = self.default
+
+        # Reverse map the params and keys.
+        for key, value in self.keys.items():
+            self.keys[value] = key
+
+    def has_key(self, code):
+        return code in self.keys
+
+    def is_volume_key(self, key):
+        return bool(re.match(r"volume_[0-9]+", self.get_config_param(key)))
+
+    def get_config_param(self, key):
+        return self.keys.get(key, "")
+
+    def __getattr__(self, attr):
+        return self.keys[attr]
+
+    def _parse_and_validate_config_file(self):
+        """Initializes the users settings based on the stermrc file"""
+        rc_file = open(self.config_filename, "r")
+
+        new_keys = {}
+
+        for line in rc_file:
+            # Strip whitespace and comments.
+            line = line.strip()
+            line = line.split("#")[0]
+            try:
+                param, code = line.split(":")
+                code = code.strip()
+                if common.is_int(code):
+                    code = int(code)
+                else:
+                    code = ord(eval(code))
+
+                # Make sure this is a valid config param.
+                if param not in self.default:
+                    print("The following parameter is not recognized: {}".format(param))
+
+                # Make sure this wasn't defined twice.
+                if param in new_keys:
+                    print("The following line is redefining a param:")
+                    print(line)
+                    return False
+
+                # Make sure this wasn't defined twice.
+                if code in new_keys.values():
+                    print("The following line is redefining a key code:")
+                    print(line)
+                    return False
+
+                new_keys[param] = code
+            except:
+                print("The following line is not formatted properly:")
+                print(line)
+                return False
+
+        # Copy over the defaults.
+        for param in set(self.default.keys()) - set(new_keys.keys()):
+            new_keys[param] = self.default[param]
+
+        # Make sure there's no collision.
+        if len(set(new_keys.values())) != len(new_keys):
+            print("A conflicting parameter was found with the default configuration!")
+            print("Check the help message (-h) for the defaults and make sure")
+            print("you aren't using the same keys.")
+            return False
+
+        # Success!
+        self.keys = new_keys
+
+        return True
+
+    @staticmethod
+    def help():
+        key_help = [
+            ("find_next", "Find the next entry matching the previous expression."),
+            ("find_previous", "Find the previous entry matching the previous expression."),
+            ("add_track", "Add a track to a playlist."),
+            ("show_devices", "Show available devices"),
+            ("refresh", "Refresh the player."),
+            ("goto_artist", "Go to the artist page of the highlighted track."),
+            ("goto_album", "Go to the album page of the highlighted track."),
+            ("current_artist", "Go to the artist page of the currently playing track."),
+            ("current_album", "Go to the album page of the currently playing track."),
+            ("next_track", "Play the next track."),
+            ("previous_track", "Play the previous track."),
+            ("play", "Toggle play/pause."),
+            ("volume_0", "Mute volume."),
+            ("volume_1", "Set volume to 10%."),
+            ("volume_2", "Set volume to 20%."),
+            ("volume_3", "Set volume to 30%."),
+            ("volume_4", "Set volume to 40%."),
+            ("volume_5", "Set volume to 50%."),
+            ("volume_6", "Set volume to 60%."),
+            ("volume_7", "Set volume to 70%."),
+            ("volume_8", "Set volume to 80%."),
+            ("volume_9", "Set volume to 90%."),
+            ("volume_10", "Set volume to 100%."),
+            ("volume_up", "Increase volume by 5%."),
+            ("volume_down", "Decrease volume by 5%.")
+        ]
+
+        msg = "The following keys can be specified in the config file:\n\n"
+        for key, help_msg in key_help:
+            msg = msg + "%20s - %s (Default=%s)\n" % (key, help_msg, Config.default[key])
+
+        msg = msg + "\nEach key should be defined by a single character in quotes.\n"
+        msg = msg + "Example:\n next_track: \">\"\n\n"
+        msg = msg + "Alternatively, you can define a special key code not in quotes.\n"
+        msg = msg + "Example:\n next_track: 67\n\n"
+
+        return msg
