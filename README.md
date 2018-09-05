@@ -3,7 +3,7 @@ Terminal program to play/control music via Spotify. Some features require a Spot
 
 ```
 ┌──────────────────────┐┌────────────────────────────────────────────────────────────────────────┐
-│ marcjulien           ││ Fine                                                                   │
+│ Display Name         ││ Fine                                                                   │
 │                      ││                                                                        │
 │ Techno Bunker        ││           I Don't Know                  Fine                SONOIO     │
 │ Guitar               ││                   Left                  Fine                SONOIO     │
@@ -27,7 +27,7 @@ Terminal program to play/control music via Spotify. Some features require a Spot
 │ Mobile Download      ││ Computer: YEARZERO                                                     │
 │ Space                ││                                                                        │
 └──────────────────────┘└────────────────────────────────────────────────────────────────────────┘
-------------------------
+-------------------------------------
                               Left                           Fine                         SONOIO
 ```
 # Install
