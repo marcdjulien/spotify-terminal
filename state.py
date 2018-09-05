@@ -171,9 +171,9 @@ class SpotifyState(object):
         # Initialize PlayerActions.
         self.main_menu['player'].update_list([
             PlayerAction("(S)", self._toggle_shuffle),
-            PlayerAction("<< ", self.api.previous),
+            PlayerAction("<< ", self._play_previous),
             PlayerAction("(P)", self._toggle_play),
-            PlayerAction(" >>", self.api.next),
+            PlayerAction(" >>", self._play_next),
             PlayerAction("(R)", self._toggle_repeat),
             PlayerAction(" --", self._decrease_volume),
             PlayerAction(" ++", self._increase_volume),
@@ -237,7 +237,7 @@ class SpotifyState(object):
             if future.is_done():
                 self.futures.pop(0)
                 if not self.futures:
-                    self.current_state = future.get_end_state()
+                    self.current_state = future.get_end_state() or self.MAIN_MENU_STATE
                 else:
                     self.futures[0].run()
         elif key:
@@ -461,10 +461,10 @@ class SpotifyState(object):
                 self._toggle_play()
 
             elif key == self.config.next_track:
-                self.api.next()
+                self._play_next()
 
             elif key == self.config.previous_track:
-                self.api.previous()
+                self._play_previous()
 
             elif self.config.is_volume_key(key):
                 config_param = self.config.get_config_param(key)
@@ -686,6 +686,26 @@ class SpotifyState(object):
             track_id -= offset_i
 
         self.api.play(track_id, context_uri, uris, self.current_device)
+
+    def _play_next(self):
+        def wait_and_sync():
+            time.sleep(2)
+            self.sync_player_state()
+
+        future = Future(target=self.api.next,
+                        result=wait_and_sync,
+                        progress=False)
+        self.execute_future(future)
+
+    def _play_previous(self):
+        def wait_and_sync():
+            time.sleep(2)
+            self.sync_player_state()
+
+        future = Future(target=self.api.previous,
+                        result=wait_and_sync,
+                        progress=False)
+        self.execute_future(future)
 
     def _toggle_play(self):
         if self.paused:
@@ -983,7 +1003,7 @@ class Future(object):
     Also has information about the progress of the call.
     """
 
-    def __init__(self, target, result=(), end_state=None):
+    def __init__(self, target, result=(), end_state=None, progress=True):
         """Constructor.
 
         Args:
@@ -1030,7 +1050,8 @@ class Future(object):
         self.progress = Progress()
         """Percent done."""
 
-        self.target_kwargs['progress'] = self.progress
+        if progress:
+            self.target_kwargs['progress'] = self.progress
 
     def run(self):
         Thread(target=self.execute).start()
@@ -1050,7 +1071,10 @@ class Future(object):
                 "Executing Future Callback: %s",
                 str((self.result_func.__name__, self.result_args, self.result_kwargs))
             )
-            self.result_func(result, *self.result_args, **self.result_kwargs)\
+            if result:
+                self.result_func(result, *self.result_args, **self.result_kwargs)
+            else:
+                self.result_func(*self.result_args, **self.result_kwargs)
 
         # Notify that we're done.
         self.event.set()
