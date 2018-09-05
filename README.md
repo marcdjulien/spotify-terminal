@@ -16,24 +16,6 @@ Terminal program to play/control music via Spotify. Some features require a Spot
 │ The Ones That Got Awa││    I Don't Know (Coda)                  Fine                SONOIO     │
 │ Your Top Songs 2017  ││                                                                        │
 │ Vince Staples  Big Fi││                                                                        │
-│ Discover Weekly      ││                                                                        │
-│ MJK et al            ││                                                                        │
-│ Download 2           ││                                                                        │
-│ Your Time Capsule    ││                                                                        │
-│ Feed Me              ││                                                                        │
-│ How To Destroy Angels││                                                                        │
-│ Your Summer Rewind   ││                                                                        │
-│ Party Playlist       ││                                                                        │
-│ SoundHound           ││                                                                        │
-│ Your Top Songs 2016  ││                                                                        │
-│ Blanck Mass          ││                                                                        │
-│ THIS IS: HEALTH      ││                                                                        │
-│ Mr. Robot - music fro││                                                                        │
-│ Seven Lions Discograp││                                                                        │
-│ MMBP                 ││                                                                        │
-│ Discover Weekly Archi││                                                                        │
-│ Stranger Things      ││                                                                        │
-│ Best Trap and Electro││                                                                        │
 │ A Perfect Circle     │└────────────────────────────────────────────────────────────────────────┘
 │ No Mana              │┌────────────────────────────────────────────────────────────────────────┐
 │ ATTLAS               ││ Thanks for Calling                                                     │
@@ -44,13 +26,8 @@ Terminal program to play/control music via Spotify. Some features require a Spot
 │ Ki:Theory  KITTY HAWK││                                                                        │
 │ Mobile Download      ││ Computer: YEARZERO                                                     │
 │ Space                ││                                                                        │
-│ DragonBall Z  Bruce F││                                                                        │
-│ Wolfgang             ││                                                                        │
-│ HEALTH + DF          ││                                                                        │
-│ The Bloody Beetroots ││                                                                        │
-│ Download             ││                                                                        │
 └──────────────────────┘└────────────────────────────────────────────────────────────────────────┘
-
+------------------------
                               Left                           Fine                         SONOIO
 ```
 # Install
