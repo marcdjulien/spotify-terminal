@@ -1,4 +1,4 @@
-# spotifyterminal
+# Spotify Terminal
 Terminal program to play/control music via Spotify. Some features require a Spotify Premium account.
 
 ```
