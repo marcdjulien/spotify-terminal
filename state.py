@@ -486,7 +486,7 @@ class SpotifyState(object):
                         elif entry['type'] == 'album':
                             self._set_album(entry)
                         elif entry['type'] == 'track':
-                            self._play(entry['uri'], context=None)
+                            self._play(entry, context=None)
                     self.current_state = self.MAIN_MENU_STATE
 
                 elif self.in_main_menu():
@@ -502,7 +502,7 @@ class SpotifyState(object):
                             elif entry['type'] == 'album':
                                 self._set_album(entry)
                             elif entry['type'] == 'track':
-                                self._play(entry['uri'], context=self.current_context)
+                                self._play(entry, context=self.current_context)
                     elif self.main_menu.get_current_list().name == "player":
                         self.main_menu.get_current_list_entry().action()
 
@@ -652,6 +652,12 @@ class SpotifyState(object):
     def _play(self, track, context):
         context_uri = None
         uris = None
+        track_id = None
+
+        if track:
+            self.currently_playing_track = track
+            self.progress = [0, track['duration_ms']]
+            track_id = track['uri']
 
         # The Saved Tracks playlist in Spotify doesn't have a Context.
         # So we have to give the API a list of Tracks to play
@@ -660,26 +666,26 @@ class SpotifyState(object):
             if context['uri'] == common.SAVED_TRACKS_CONTEXT_URI:
                 uris = [t['uri'] for t in
                         self.api.get_tracks_from_playlist(self.main_menu['user'][0])]
-                track = self.main_menu['tracks'].i
+                track_id = self.main_menu['tracks'].i
             elif context.get('type') == 'artist':
                 uris = [s['uri']
                         for s in self.api.get_selections_from_artist(self.current_context)
                         if s['type'] == 'track']
-                track = self.main_menu['tracks'].i
+                track_id = self.main_menu['tracks'].i
             elif common.is_all_tracks_context(context):
                 uris = [t['uri'] for t in self.main_menu['tracks'].list]
-                track = self.main_menu['tracks'].i
+                track_id = self.main_menu['tracks'].i
             else:
                 context_uri = context['uri']
 
         # If using a custom context, limit it to 750 tracks.
         if uris:
             n = 750
-            offset_i = max(track - (n/2) + 1, 0)
+            offset_i = max(track_id - (n/2) + 1, 0)
             uris = uris[offset_i:offset_i + n]
-            track -= offset_i
+            track_id -= offset_i
 
-        self.api.play(track, context_uri, uris, self.current_device)
+        self.api.play(track_id, context_uri, uris, self.current_device)
 
     def _toggle_play(self):
         if self.paused:
@@ -1241,7 +1247,7 @@ class Config(object):
 
         msg = "The following keys can be specified in the config file:\n\n"
         for key, help_msg in key_help:
-            msg = msg + "%20s - %s (Default=%s)\n" % (key, help_msg, Config.default[key])
+            msg = msg + "%20s - %s (Default=\"%s\")\n" % (key, help_msg, chr(Config.default[key]))
 
         msg = msg + "\nEach key should be defined by a single character in quotes.\n"
         msg = msg + "Example:\n next_track: \">\"\n\n"
