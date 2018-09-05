@@ -293,8 +293,6 @@ class PeriodicCallback(object):
         if call_time >= self._next_call_time:
             self.func(*self.args, **self.kwargs)
             self._next_call_time += self.period
-            if call_time >= self._next_call_time:
-                logger.warning("{} periodic is falling behind!", self.func.__name__)
 
     def call_at(self, call_time):
         self._next_call_time = call_time

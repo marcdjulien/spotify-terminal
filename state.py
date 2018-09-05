@@ -507,16 +507,13 @@ class SpotifyState(object):
                         self.main_menu.get_current_list_entry().action()
 
                 elif self.in_select_player_menu():
-                    current_device = self.select_player_menu.get_current_list_entry()
-                    if current_device:
-                        self.current_device = current_device
-                        self.api.transfer_playback(self.current_device)
+                    new_device = self.select_player_menu.get_current_list_entry()
+                    if new_device:
+                        self._transfer_playback(new_device, not self.paused)
                         self.current_state = self.MAIN_MENU_STATE
 
         else:
             logger.debug("Unregistered key: %d", key)
-
-        logger.debug("Key: %d", key)
 
     def _run_calc(self, call_time):
         """Run any calculations that we need to do at the end of the update."""
@@ -711,7 +708,6 @@ class SpotifyState(object):
 
     def _add_track_to_playlist(self, track, playlist):
         self.api.add_track_to_playlist(track, playlist)
-        self._set_playlist(playlist)
 
     def _set_playlist(self, playlist):
         future = Future(target=(self.api.get_tracks_from_playlist, playlist),
@@ -751,6 +747,11 @@ class SpotifyState(object):
             # Go to the tracks pane.
             self.main_menu.set_current_list('tracks')
             self.main_menu.get_list('tracks').set_index(0)
+
+    def _transfer_playback(self, new_device, play):
+        self.sync_player_state()
+        self.current_device = new_device
+        self.api.transfer_playback(new_device, play)
 
     def _set_command_query(self, text):
         self.command_query = list(text)
