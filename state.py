@@ -269,7 +269,7 @@ class SpotifyState(object):
                     else:
                         self.track_to_add = None
                         self.playlist_to_add = None
-                        self.current_state = self.MAIN_MENU_STATE
+                    self.current_state = self.MAIN_MENU_STATE
             # In another menu.
             else:
                 self._update_state(key)
@@ -734,6 +734,8 @@ class SpotifyState(object):
 
     def _add_track_to_playlist(self, track, playlist):
         self.api.add_track_to_playlist(track, playlist)
+        self.track_to_add = None
+        self.playlist_to_add = None
 
     def _set_playlist(self, playlist):
         future = Future(target=(self.api.get_tracks_from_playlist, playlist),
