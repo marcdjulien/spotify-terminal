@@ -179,14 +179,15 @@ class SpotifyApi(object):
         self.put_api_v1("me/player/play", params, data)
 
     @async
-    def transfer_playback(self, device):
+    def transfer_playback(self, device, play=False):
         """Transfer playback to a different Device.
 
         Args:
             device (Device): The Device to transfer playback to.
+            play (bool): Whether to ensure playback happens on new device.
         """
         data = {"device_ids": [device['id']],
-                "play": True}
+                "play": play}
         self.put_api_v1("me/player", data=data)
 
     @async

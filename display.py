@@ -16,10 +16,10 @@ class Window(object):
 
 class CursesDisplay(object):
     # How often to sync up the player state.
-    SYNC_PERIOD = 30
+    SYNC_PERIOD = 60 * 5
 
     # How often to run the program loop.
-    PROGRAM_PERIOD = 0.05
+    PROGRAM_PERIOD = 0.01
 
     # How often to re-render.
     # For now, this is the same as the program loop.
@@ -55,10 +55,13 @@ class CursesDisplay(object):
         self._register_window("tracks", self._window_sizes["tracks"])
         self._register_window("player", self._window_sizes["player"])
 
-        self._next_sync_time = time.time()
-        self._last_render_time = time.time()
-        self._last_key_pressed_time = time.time()
-        self._last_clear_time = time.time()
+        self.sync_period = common.PeriodicCallback(self.SYNC_PERIOD, self.sync_player)
+
+        self.periodic_callbacks = [
+            self.sync_period,
+            common.PeriodicCallback(self.RENDER_PERIOD, self.render),
+            common.PeriodicCallback(self.CLEAR_PERIOD, self.clear),
+        ]
 
         # This increments each control loop. A value of -50 means that we'll have
         # 2.5s (50 * PROGRAM_LOOP) until the footer begins to roll.
@@ -111,20 +114,21 @@ class CursesDisplay(object):
         self.render()
 
         while self._running:
+            # Time how long it takes to process input
+            # and render the screen.
             with common.ContextDuration() as t:
                 # Handle user input.
                 pressed = self.process_input()
 
-                # Are we still running?
-                self._running = self.state.is_running()
-
                 # Do any calculations related to rendering.
                 self.render_calcs()
 
-                # Render the display if needed.
-                rerender = (time.time() - self._last_render_time) > self.RENDER_PERIOD
-                if pressed or rerender:
-                    self.render()
+                # Execute the periodic call backs.
+                for pc in self.periodic_callbacks:
+                    pc.update(time.time())
+
+            # Are we still running?
+            self._running = self.state.is_running()
 
             # Sleep for an amount of time.
             sleep_time = self.PROGRAM_PERIOD - t.duration
@@ -152,39 +156,36 @@ class CursesDisplay(object):
 
         key_pressed = False
         while key_buf:
-            self._last_key_pressed_time = time.time()
+            call_time = time.time()
             key_pressed = True
             key = key_buf.pop()
 
             # Enter key
             if key in [13, 10]:
                 # We probably just selected a Track, let's plan to update the
-                # currently playing track in 1 second.
-                self._next_sync_time = time.time() + 1
+                # currently playing track in 2s.
+                self.sync_period.call_in(2)
 
-            self.state.process_key(key)
+            self.state.process_key(key, call_time)
 
         # If we didn't press a key, kick the state anyway.
         if not key_pressed:
-            self.state.process_key(None)
+            self.state.process_key(None, time.time())
 
         return key_pressed
 
     def render_calcs(self):
         """Perform any calculations related to rendering."""
-        cur_time = time.time()
-        if cur_time >= self._next_sync_time:
-            self.sync_player()
 
     def render(self):
-        # Clear the screen before rendering anything.
-        self.clear()
-
         # Set the panel order based on what action is going on.
         self.set_panel_order()
 
         # Update the panel size incase the terminal size changed.
         self.update_panel_size()
+
+        # Clear the screen.
+        uc.erase()
 
         # Draw all of the panels.
         self.render_user_panel()
@@ -199,16 +200,11 @@ class CursesDisplay(object):
         uc.update_panels()
         uc.doupdate()
 
-        self._last_render_time = time.time()
-
     def clear(self):
         uc.erase()
-
-        if (time.time() - self._last_clear_time) > self.CLEAR_PERIOD:
-            uc.move(0, 0)
-            uc.clrtobot()
-            uc.refresh()
-            self._last_clear_time = time.time()
+        uc.move(0, 0)
+        uc.clrtobot()
+        uc.refresh()
 
     def set_panel_order(self):
         if self.is_active_window("confirm"):
@@ -317,25 +313,39 @@ class CursesDisplay(object):
                 short_str = entry.str(ncols)
                 long_str = str(entry)
 
+                # Check if we need to scroll or not.
                 if "".join(short_str.split()) == "".join(long_str.split()):
                     uc.mvwaddstr(self.stdscr, self._rows-1, 0, short_str, uc.A_BOLD)
-                    # This helps ensure that we always start form the same position
-                    # when we go from a static footer to a long footer that requris rolling.
+                    # This ensures that we always start form the same position
+                    # when we go from a static footer to a long footer that needs rolling.
                     self._footer_roll_index = -50
                 else:
                     self._footer_roll_index += 1
                     footer_roll_index = 0 if self._footer_roll_index < 0 else self._footer_roll_index
-                    footer_roll_index = self._footer_roll_index % len(long_str)
+                    footer_roll_index /= 6
                     # Double the string length so that we always uniformly roll
                     # even in the case the entire string length is less than the terminal width.
                     # Also, add a border to easily identify the end.
                     long_str = 2 * (long_str + " | ")
                     text = list(long_str)
-                    for _ in range(self._footer_roll_index):
+                    for _ in xrange(footer_roll_index):
                         text.append(text.pop(0))
                     text = "".join(text)
                     text = text[0:ncols]
                     uc.mvwaddstr(self.stdscr, self._rows-1, 0, text, uc.A_BOLD)
+
+        # Track progress bar
+        progress = self.state.get_track_progress()
+        if progress:
+            percent = float(progress[0])/progress[1]
+            text = "-"*int(self._cols*percent)
+            uc.mvwaddnstr(self.stdscr, self._rows-2, 0, text, self._cols, uc.A_BOLD)
+
+            # Song is done. Let's plan to re-sync in 1 second.
+            if percent > 1.0:
+                logger.debug("Reached end of song. Re-syncing in 1s.")
+                self.sync_period.call_in(1)
+                self.state.progress = None
 
     def render_search_panel(self):
         win, rows, cols = self._init_render_window("search_results")
@@ -385,7 +395,6 @@ class CursesDisplay(object):
         resp_2 = self.state.confirm_menu.get_current_list()[1].get()
         start_col = (cols/2) - ((len(resp_1)+len(resp_2))/2) - 1
 
-
         selected_i = self.state.confirm_menu.get_current_list().i
         response_row = title_start_line + 2
         uc.mvwaddnstr(win,
@@ -399,7 +408,6 @@ class CursesDisplay(object):
                       resp_2,
                       cols-3,
                       uc.A_BOLD if selected_i == 0 else uc.A_STANDOUT)
-
 
     def _render_list(self, win, list, row_start, n_rows,
                      col_start, n_cols, selected_i, is_active):
@@ -418,7 +426,6 @@ class CursesDisplay(object):
 
     def sync_player(self):
         self.state.sync_player_state()
-        self._next_sync_time = time.time() + self.SYNC_PERIOD
 
     def is_active_window(self, window_name):
         if self.state.in_search_menu():
