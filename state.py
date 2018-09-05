@@ -1,6 +1,7 @@
 import os
 import pickle
 import re
+import time
 from threading import Lock, Thread, Event
 
 import unicurses as uc
@@ -85,6 +86,9 @@ class SpotifyState(object):
         self.paused = True
         """Whether the play is paused or not."""
 
+        self.progress = None
+        """Progress into the track."""
+
         self.shuffle = False
         """Whether to shuffle or not."""
 
@@ -130,6 +134,9 @@ class SpotifyState(object):
 
         self.futures = []
         """List of futures to execute."""
+
+        self.last_update_time = time.time()
+        """The last time we were called to update."""
 
     def save_state(self):
         """Save the state to disk."""
@@ -210,11 +217,16 @@ class SpotifyState(object):
 
             self._set_repeat(player_state['repeat_state'])
             self._set_shuffle(player_state['shuffle_state'])
+
+            duration = player_state['progress_ms']
+            if self.currently_playing_track and duration:
+                self.progress = [duration, self.currently_playing_track['duration_ms']]
         else:
+            self.progress = None
             self.currently_playing_track = NoneTrack
             self.current_device = UnableToFindDevice
 
-    def process_key(self, key):
+    def process_key(self, key, call_time):
         # First check loading state.
         if self.is_loading():
             # Get the current Future.
@@ -228,10 +240,7 @@ class SpotifyState(object):
                     self.current_state = future.get_end_state()
                 else:
                     self.futures[0].run()
-            else:
-                return
-
-        if key:
+        elif key:
             # Adding to a playlist
             if self.current_state == self.ADD_TO_PLAYLIST_SELECT:
                 if key == uc.KEY_UP:
@@ -263,17 +272,9 @@ class SpotifyState(object):
                         self.current_state = self.MAIN_MENU_STATE
             # In another menu.
             else:
-                # Process keys.
                 self._update_state(key)
 
-                if self.in_search_menu():
-                    self.current_menu = self.search_menu
-                elif self.in_select_player_menu():
-                    self.current_menu = self.select_player_menu
-                else:
-                    self.current_menu = self.main_menu
-
-                self._clamp_values()
+        self._run_calc(call_time)
 
     def _update_state(self, key):
         if key == uc.KEY_LEFT:
@@ -517,10 +518,27 @@ class SpotifyState(object):
 
         logger.debug("Key: %d", key)
 
-    def _clamp_values(self):
+    def _run_calc(self, call_time):
+        """Run any calculations that we need to do at the end of the update."""
         self.command_cursor_i = common.clamp(self.command_cursor_i,
                                              0,
                                              len(self.get_command_query()))
+
+        # Set our menu.
+        if self.in_search_menu():
+            self.current_menu = self.search_menu
+        elif self.in_select_player_menu():
+            self.current_menu = self.select_player_menu
+        else:
+            self.current_menu = self.main_menu
+
+        # Calculate track progress.
+        time_delta = 1000*(call_time - self.last_update_time)
+        if self.progress and not self.paused:
+            self.progress[0] = self.progress[0] + time_delta
+
+        # Save off this last time.
+        self.last_update_time = call_time
 
     def _process_command(self, command_input):
         logger.debug("Processing command: %s", command_input)
@@ -808,6 +826,9 @@ class SpotifyState(object):
     def get_loading_progress(self):
         if self.futures:
             return self.futures[0].get_progress()
+
+    def get_track_progress(self):
+        return self.progress
 
 
 class List(object):
