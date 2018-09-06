@@ -34,19 +34,18 @@ class SpotifyState(object):
 
     REPEAT_OFF, REPEAT_CONTEXT, REPEAT_TRACK = range(3)
 
-    MAIN_MENU_STATE = "main_menu_state"
+    MAIN_MENU_STATE, \
+        SEARCH_MENU_STATE, \
+        PLAYER_MENU_STATE, \
+        LOAD_STATE, \
+        EXIT_STATE, \
+        ADD_TO_PLAYLIST_SELECT_PLAYLIST, \
+        ADD_TO_PLAYLIST_CONFIRM_PLAYLIST, \
+        SELECT_ARTIST = range(8)
 
-    SEARCH_MENU_STATE = "search_menu_state"
+    BACKSPACE_KEYS = [uc.KEY_BACKSPACE, 8]
 
-    PLAYER_MENU_STATE = "player_menu_state"
-
-    LOAD_STATE = "load_state"
-
-    EXIT_STATE = "exit_state"
-
-    ADD_TO_PLAYLIST_SELECT = "add_to_playlist_select"
-
-    ADD_TO_PLAYLIST_CONFIRM = "add_to_playlist_confirm"
+    CANCEL_KEYS = [uc.KEY_EXIT, 27] + BACKSPACE_KEYS
 
     def __init__(self, api, config):
         self.lock = Lock()
@@ -69,10 +68,16 @@ class SpotifyState(object):
         self.select_player_menu = ListCollection("select_player",
                                                  [List("players")])
 
-        self.confirm_menu = ListCollection("confirm", [List("confirm")])
+        self.confirm_menu = ListCollection("confirm",
+                                           [List("confirm", header="Are you sure?")])
+
+        self.artist_menu = ListCollection("select_artist",
+                                          [List("artists", header="Select an artist")])
 
         self.current_menu = self.main_menu
         """The current model that we are acting on."""
+
+        self.current_popup_menu = self.confirm_menu
 
         self.previous_tracks = []
         """Keeps track of previously displayed Tracks."""
@@ -215,8 +220,8 @@ class SpotifyState(object):
             self.current_device = Device(player_state['device'])
             self.volume = self.current_device['volume_percent']
 
-            self._set_repeat(player_state['repeat_state'])
-            self._set_shuffle(player_state['shuffle_state'])
+            self._set_player_repeat(player_state['repeat_state'])
+            self._set_player_shuffle(player_state['shuffle_state'])
 
             duration = player_state['progress_ms']
             if self.currently_playing_track and duration:
@@ -227,56 +232,83 @@ class SpotifyState(object):
             self.current_device = UnableToFindDevice
 
     def process_key(self, key, call_time):
-        # First check loading state.
         if self.is_loading():
-            # Get the current Future.
-            future = self.futures[0]
+            # In the loading state.
+            self._update_loading_state(key)
+        elif self.is_adding_track_to_playlist():
+            # Adding a Track to a Playlist
+            self._update_adding_track_to_playlist_state(key)
+        elif self.is_selecting_artist():
+            # Selecting an Artist
+            self._update_selecting_artist(key)
+        else:
+            # In the main screen.
+            self._update_main_state(key)
 
-            # If it's done, leave the LOAD_STATE.
-            # But if there are more Futures to execute, run them.
-            if future.is_done():
-                self.futures.pop(0)
-                if not self.futures:
-                    self.current_state = future.get_end_state() or self.MAIN_MENU_STATE
+        self._run_calcs(call_time)
+
+    def _update_loading_state(self, key):
+        # Get the current Future.
+        future = self.futures[0]
+
+        # If it's done, leave the LOAD_STATE.
+        # But if there are more Futures to execute, continue to run them.
+        if future.is_done():
+            self.futures.pop(0)
+            if not self.futures:
+                self.current_state = future.get_end_state() or self.MAIN_MENU_STATE
+            else:
+                self.futures[0].run()
+
+    def _update_adding_track_to_playlist_state(self, key):
+        if key:
+            logger.info(key)
+        if self.current_state == self.ADD_TO_PLAYLIST_SELECT_PLAYLIST:
+            if key == uc.KEY_UP:
+                self.main_menu["user"].decrement_index()
+            elif key == uc.KEY_DOWN:
+                self.main_menu["user"].increment_index()
+            elif key in self.CANCEL_KEYS:
+                self.track_to_add = None
+                self.playlist_to_add = None
+                self.current_state = self.MAIN_MENU_STATE
+            elif key in [uc.KEY_ENTER, 10, 13]:
+                self.playlist_to_add = self.main_menu.get_current_list_entry()
+                self.current_state = self.ADD_TO_PLAYLIST_CONFIRM_PLAYLIST
+
+        elif self.current_state == self.ADD_TO_PLAYLIST_CONFIRM_PLAYLIST:
+            if key == uc.KEY_UP:
+                self.confirm_menu["confirm"].decrement_index()
+            elif key == uc.KEY_DOWN:
+                self.confirm_menu["confirm"].increment_index()
+            elif key in self.CANCEL_KEYS:
+                self.track_to_add = None
+                self.playlist_to_add = None
+                self.current_state = self.MAIN_MENU_STATE
+            elif key in [uc.KEY_ENTER, 10, 13]:
+                entry = self.confirm_menu.get_current_list_entry()
+                if entry.get().lower() == "yes":
+                    self._add_track_to_playlist(self.track_to_add, self.playlist_to_add)
                 else:
-                    self.futures[0].run()
-        elif key:
-            # Adding to a playlist
-            if self.current_state == self.ADD_TO_PLAYLIST_SELECT:
-                if key == uc.KEY_UP:
-                    self.main_menu.get_list("user").decrement_index()
-                elif key == uc.KEY_DOWN:
-                    self.main_menu.get_list("user").increment_index()
-                elif key in [uc.KEY_EXIT, 27]:
-                    self.track_to_add = None
-                    self.current_state = self.MAIN_MENU_STATE
-                elif key in [uc.KEY_ENTER, 10, 13]:
-                    self.playlist_to_add = self.main_menu.get_current_list_entry()
-                    self.current_state = self.ADD_TO_PLAYLIST_CONFIRM
-            elif self.current_state == self.ADD_TO_PLAYLIST_CONFIRM:
-                if key == uc.KEY_LEFT:
-                    self.confirm_menu.get_list("confirm").decrement_index()
-                elif key == uc.KEY_RIGHT:
-                    self.confirm_menu.get_list("confirm").increment_index()
-                elif key in [uc.KEY_EXIT, 27]:
                     self.track_to_add = None
                     self.playlist_to_add = None
-                    self.current_state = self.MAIN_MENU_STATE
-                elif key in [uc.KEY_ENTER, 10, 13]:
-                    entry = self.confirm_menu.get_current_list_entry()
-                    if entry.get().lower() == "yes":
-                        self._add_track_to_playlist(self.track_to_add, self.playlist_to_add)
-                    else:
-                        self.track_to_add = None
-                        self.playlist_to_add = None
-                    self.current_state = self.MAIN_MENU_STATE
-            # In another menu.
-            else:
-                self._update_state(key)
+                self.current_state = self.MAIN_MENU_STATE
 
-        self._run_calc(call_time)
+    def _update_selecting_artist(self, key):
+        if self.current_state == self.SELECT_ARTIST:
+            if key == uc.KEY_UP:
+                self.artist_menu["artists"].decrement_index()
+            elif key == uc.KEY_DOWN:
+                self.artist_menu["artists"].increment_index()
+            elif key in self.CANCEL_KEYS:
+                self.current_state = self.MAIN_MENU_STATE
+            elif key in [uc.KEY_ENTER, 10, 13]:
+                artist = self.artist_menu.get_current_list_entry()
+                if artist:
+                    self._set_artist(artist)
+                    self.current_state = self.MAIN_MENU_STATE
 
-    def _update_state(self, key):
+    def _update_main_state(self, key):
         if key == uc.KEY_LEFT:
             if self.is_creating_command():
                 self.command_cursor_i -= 1
@@ -339,7 +371,7 @@ class SpotifyState(object):
             elif self.in_search_menu() or self.in_select_player_menu():
                 self.current_menu.get_current_list().increment_index()
 
-        elif key in [uc.KEY_BACKSPACE, 8]:
+        elif key in self.BACKSPACE_KEYS:
             if self.is_creating_command():
                 if self.command_cursor_i > 0:
                     self.get_command_query().pop(self.command_cursor_i - 1)
@@ -412,8 +444,8 @@ class SpotifyState(object):
                 if entry['type'] == 'track':
                     self.track_to_add = entry
                     self.main_menu.set_current_list('user')
-                    self.main_menu.get_list('user').set_index(0)
-                    self.current_state = self.ADD_TO_PLAYLIST_SELECT
+                    self.main_menu['user'].set_index(0)
+                    self.current_state = self.ADD_TO_PLAYLIST_SELECT_PLAYLIST
 
             elif key == self.config.show_devices:
                 self.current_state = self.PLAYER_MENU_STATE
@@ -426,14 +458,20 @@ class SpotifyState(object):
             elif key == self.config.goto_artist:
                 entry = self.current_menu.get_current_list_entry()
                 if entry['type'] == 'track':
-                    artist = entry['artists'][0]
-                    self._set_artist(artist)
+                    artists = entry['artists']
+                    if len(artists) == 1:
+                        self._set_artist(artists[0])
+                    else:
+                        self._set_choose_artist(artists)
 
             elif key == self.config.current_artist:
                 entry = self.currently_playing_track
                 if entry:
-                    artist = entry['artists'][0]
-                    self._set_artist(artist)
+                    artists = entry['artists']
+                    if len(artists) == 1:
+                        self._set_artist(artists[0])
+                    else:
+                        self._set_choose_artist(artists)
 
             elif key == self.config.goto_album:
                 entry = self.current_menu.get_current_list_entry()
@@ -509,13 +547,14 @@ class SpotifyState(object):
                 elif self.in_select_player_menu():
                     new_device = self.select_player_menu.get_current_list_entry()
                     if new_device:
-                        self._transfer_playback(new_device, not self.paused)
+                        self._set_player_device(new_device, not self.paused)
                         self.current_state = self.MAIN_MENU_STATE
 
         else:
-            logger.debug("Unregistered key: %d", key)
+            if key is not None:
+                logger.debug("Unregistered key: %d", key)
 
-    def _run_calc(self, call_time):
+    def _run_calcs(self, call_time):
         """Run any calculations that we need to do at the end of the update."""
         self.command_cursor_i = common.clamp(self.command_cursor_i,
                                              0,
@@ -528,6 +567,12 @@ class SpotifyState(object):
             self.current_menu = self.select_player_menu
         else:
             self.current_menu = self.main_menu
+
+        # Set our popup menu.
+        if self.is_adding_track_to_playlist():
+            self.current_popup_menu = self.confirm_menu
+        elif self.is_selecting_artist():
+            self.current_popup_menu = self.artist_menu
 
         # Calculate track progress.
         time_delta = 1000*(call_time - self.last_update_time)
@@ -623,13 +668,13 @@ class SpotifyState(object):
     def _execute_shuffle(self, state):
         state = state.lower().strip()
         state = True if state == "true" else False
-        self._set_shuffle(state)
+        self._set_player_shuffle(state)
         self.api.shuffle(state)
 
     def _execute_repeat(self, state):
         state = state.lower().strip()
         if state in ["off", "context", "track"]:
-            self._set_repeat(state)
+            self._set_player_repeat(state)
             self.api.repeat(state)
 
     def _execute_volume(self, volume):
@@ -769,14 +814,19 @@ class SpotifyState(object):
 
             # Set the new track listing.
             self.current_context = context
-            self.main_menu.get_list('tracks').update_list(tracks)
-            self.main_menu.get_list('tracks').header = header
+            self.main_menu['tracks'].update_list(tracks)
+            self.main_menu['tracks'].header = header
 
             # Go to the tracks pane.
             self.main_menu.set_current_list('tracks')
-            self.main_menu.get_list('tracks').set_index(0)
+            self.main_menu['tracks'].set_index(0)
 
-    def _transfer_playback(self, new_device, play):
+    def _set_choose_artist(self, artists):
+        self.artist_menu["artists"].update_list(artists)
+        self.artist_menu["artists"].set_index(0)
+        self.current_state = self.SELECT_ARTIST
+
+    def _set_player_device(self, new_device, play):
         self.sync_player_state()
         self.current_device = new_device
         self.api.transfer_playback(new_device, play)
@@ -784,13 +834,13 @@ class SpotifyState(object):
     def _set_command_query(self, text):
         self.command_query = list(text)
 
-    def _set_repeat(self, state):
+    def _set_player_repeat(self, state):
         self.repeat = self._get_repeat_enum(state)
-        self.main_menu.get_list('player')[4].title = "({})".format(['x', 'o', '1'][self.repeat])
+        self.main_menu['player'][4].title = "({})".format(['x', 'o', '1'][self.repeat])
 
-    def _set_shuffle(self, state):
+    def _set_player_shuffle(self, state):
         self.shuffle = state
-        self.main_menu.get_list('player')[0].title = "({})".format(
+        self.main_menu['player'][0].title = "({})".format(
             {True: "S", False: "s"}[self.shuffle]
         )
 
@@ -820,16 +870,18 @@ class SpotifyState(object):
     def is_loading(self):
         return self.is_in_state(self.LOAD_STATE)
 
+    def is_adding_track_to_playlist(self):
+        return self.is_in_state(self.ADD_TO_PLAYLIST_SELECT_PLAYLIST,
+                                self.ADD_TO_PLAYLIST_CONFIRM_PLAYLIST)
+
+    def is_selecting_artist(self):
+        return self.is_in_state(self.SELECT_ARTIST)
+
     def is_running(self):
         return not self.is_in_state(self.EXIT_STATE)
 
-    def is_in_state(self, state):
-        return self.current_state == state
-
-    def poll_currently_playing_track(self):
-        track = self.api.get_currently_playing()
-        if track != NoneTrack:
-            self.currently_playing_track = track
+    def is_in_state(self, *states):
+        return self.current_state in states
 
     def get_cursor_i(self):
         return self.command_cursor_i
@@ -867,7 +919,7 @@ class List(object):
     that the user traverses through to make actions.
     """
 
-    def __init__(self, name=None):
+    def __init__(self, name=None, header=""):
         self.i = 0
         """Currently selected index."""
 
@@ -877,7 +929,7 @@ class List(object):
         self.name = name
         """Name of List."""
 
-        self.header = ""
+        self.header = header
         """Header."""
 
     def update_list(self, l):

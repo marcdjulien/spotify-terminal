@@ -48,7 +48,7 @@ class CursesDisplay(object):
         self._ordered_windows = []
         """Windows in an odered list."""
 
-        self._register_window("confirm", self._window_sizes["confirm"])
+        self._register_window("popup", self._window_sizes["popup"])
         self._register_window("search_results", self._window_sizes["search"])
         self._register_window("select_player", self._window_sizes["select_player"])
         self._register_window("user", self._window_sizes["user"])
@@ -162,9 +162,9 @@ class CursesDisplay(object):
 
             # Enter key
             if key in [13, 10]:
-                # We probably just selected a Track, let's plan to update the
-                # currently playing track in 2s.
-                self.sync_period.call_in(2)
+                # We probably just selected a Track, let's plan
+                # to re-sync in 5s.
+                self.sync_period.call_in(5)
 
             self.state.process_key(key, call_time)
 
@@ -194,7 +194,7 @@ class CursesDisplay(object):
         self.render_footer()
         self.render_search_panel()
         self.render_select_player_panel()
-        self.render_confirm_panel()
+        self.render_popup_panel()
 
         # Required.
         uc.update_panels()
@@ -207,19 +207,19 @@ class CursesDisplay(object):
         uc.refresh()
 
     def set_panel_order(self):
-        if self.is_active_window("confirm"):
-            uc.top_panel(self._panels["confirm"])
+        if self.is_active_window("popup"):
+            uc.top_panel(self._panels["popup"])
         elif self.is_active_window("search_results"):
             uc.top_panel(self._panels["search_results"])
         elif self.is_active_window("select_player"):
             uc.top_panel(self._panels["select_player"])
         else:
             for panel_name, panel in self._panels.items():
-                if panel_name not in ["search_results", "select_player", "confirm"]:
+                if panel_name not in ["search_results", "select_player", "popup"]:
                     uc.top_panel(panel)
 
     def update_panel_size(self):
-        self._resize_window("confirm", self._window_sizes["confirm"])
+        self._resize_window("popup", self._window_sizes["popup"])
         self._resize_window("search_results", self._window_sizes["search"])
         self._resize_window("select_player", self._window_sizes["select_player"])
         self._resize_window("user", self._window_sizes["user"])
@@ -246,7 +246,7 @@ class CursesDisplay(object):
                       uc.A_BOLD)
 
         # Show the playlists.
-        playlists = [str(playlist) for playlist in self.state.main_menu.get_list('user')]
+        playlists = [str(playlist) for playlist in self.state.main_menu['user']]
         selected_i = self.state.main_menu["user"].i
         playlist_start_line = display_name_start_line + 2
         self._render_list(win, playlists, playlist_start_line, rows-4,
@@ -259,14 +259,14 @@ class CursesDisplay(object):
         uc.box(win)
 
         # Show the title of the context.
-        title_start_line = 1
-        uc.mvwaddnstr(win, title_start_line, 2,
+        title_start_row = 1
+        uc.mvwaddnstr(win, title_start_row, 2,
                       self.state.main_menu['tracks'].header, cols-3, uc.A_BOLD)
 
         # Show the tracks.
         selected_i = self.state.main_menu['tracks'].i
-        track_start_line = title_start_line + 2
-        tracks = [track.str(cols-3) for track in self.state.main_menu.get_list('tracks')]
+        track_start_line = title_start_row + 2
+        tracks = [track.str(cols-3) for track in self.state.main_menu['tracks']]
         self._render_list(win, tracks, track_start_line, rows-4,
                           2, cols-3, selected_i, self.is_active_window("tracks"))
 
@@ -281,7 +281,7 @@ class CursesDisplay(object):
         uc.mvwaddnstr(win, 3, 2, self.state.get_currently_playing_track().artist, cols-3, uc.A_BOLD)
         uc.mvwaddnstr(win, 7, 2, self.state.current_device, cols-3, uc.A_NORMAL)
 
-        for i, action in enumerate(self.state.main_menu.get_list("player")):
+        for i, action in enumerate(self.state.main_menu["player"]):
             if (i == self.state.main_menu['player'].i) and self.is_active_window("player"):
                 style = uc.A_BOLD | uc.A_STANDOUT
             else:
@@ -294,7 +294,7 @@ class CursesDisplay(object):
             text = " " * int(self._cols * percent)
             uc.mvwaddstr(self.stdscr, self._rows-1, 0, text, uc.A_STANDOUT)
 
-        elif self.state.is_in_state(self.state.ADD_TO_PLAYLIST_SELECT):
+        elif self.state.is_adding_track_to_playlist():
             text = "Select a playlist to add this track"
             uc.mvwaddstr(self.stdscr, self._rows-1, 0, text, uc.A_BOLD)
 
@@ -322,7 +322,7 @@ class CursesDisplay(object):
                 else:
                     self._footer_roll_index += 1
                     footer_roll_index = 0 if self._footer_roll_index < 0 else self._footer_roll_index
-                    footer_roll_index /= 6
+                    footer_roll_index /= 10
                     # Double the string length so that we always uniformly roll
                     # even in the case the entire string length is less than the terminal width.
                     # Also, add a border to easily identify the end.
@@ -353,9 +353,9 @@ class CursesDisplay(object):
         n_display_cols = cols - 4
 
         # Show the title of the context.
-        title_start_line = 1
+        title_start_row = 1
         uc.mvwaddnstr(win,
-                      title_start_line, 2,
+                      title_start_row, 2,
                       self.state.search_menu["search_results"].header,
                       n_display_cols, uc.A_BOLD)
 
@@ -374,55 +374,60 @@ class CursesDisplay(object):
         uc.box(win)
 
         # Show the title of the context.
-        title_start_line = 1
-        uc.mvwaddnstr(win, title_start_line, 2,
+        title_start_row = 1
+        uc.mvwaddnstr(win, title_start_row, 2,
                       "Select a Player", cols-3, uc.A_BOLD)
 
         selected_i = self.state.select_player_menu.get_current_list().i
         self._render_list(win, self.state.select_player_menu["players"], 3, rows-4, 2, cols-3, selected_i, self.is_active_window("select_player"))
 
-    def render_confirm_panel(self):
-        win, rows, cols = self._init_render_window("confirm")
-        uc.box(win)
+    def render_popup_panel(self):
+        win, rows, cols = self._init_render_window("popup")
+        uc.box(win)\
+
+        current_popup_list = self.state.current_popup_menu.get_current_list()
 
         # Show the title of the context.
-        prompt = "Are you sure?"
-        title_start_line = 2
-        uc.mvwaddnstr(win, title_start_line, (cols/2) - (len(prompt)/2) - 1,
-                      prompt, cols-3, uc.A_BOLD)
-
-        resp_1 = self.state.confirm_menu.get_current_list()[0].get()
-        resp_2 = self.state.confirm_menu.get_current_list()[1].get()
-        start_col = (cols/2) - ((len(resp_1)+len(resp_2))/2) - 1
-
-        selected_i = self.state.confirm_menu.get_current_list().i
-        response_row = title_start_line + 2
+        prompt = current_popup_list.header
+        title_start_row = 1
         uc.mvwaddnstr(win,
-                      response_row, start_col,
-                      resp_1,
+                      title_start_row,
+                      (cols/2) - (len(prompt)/2) - 1,
+                      prompt,
                       cols-3,
-                      uc.A_BOLD if selected_i == 1 else uc.A_STANDOUT)
+                      uc.A_BOLD)
 
-        uc.mvwaddnstr(win,
-                      response_row, start_col + len(resp_1) + 1,
-                      resp_2,
-                      cols-3,
-                      uc.A_BOLD if selected_i == 0 else uc.A_STANDOUT)
+        selected_i = current_popup_list.i
+        list_start_row = title_start_row + 2
+        self._render_list(win,
+                          current_popup_list,
+                          list_start_row, rows-list_start_row,
+                          2, cols-4,
+                          selected_i,
+                          self.is_active_window("popup"),
+                          centered=True)
 
     def _render_list(self, win, list, row_start, n_rows,
-                     col_start, n_cols, selected_i, is_active):
+                     col_start, n_cols, selected_i, is_active,
+                     centered=False):
         n_elems = len(list)
         start_entry_i = common.clamp(selected_i - n_rows/2,
                                      0, max(n_elems-n_rows, 0))
         end_entry_i = start_entry_i + n_rows
         display_list = list[start_entry_i:end_entry_i]
 
-        for i, text in enumerate(display_list):
+        for i, entry in enumerate(display_list):
+            text = str(entry)
             if i == (selected_i-start_entry_i) and is_active:
                 style = uc.A_BOLD | uc.A_STANDOUT
             else:
                 style = uc.A_NORMAL
-            uc.mvwaddnstr(win, row_start+i, col_start, text, n_cols, style)
+            if centered:
+                w2 = (n_cols-col_start)/2
+                n2 = len(text)/2
+                uc.mvwaddnstr(win, row_start+i, col_start+w2-n2, text, n_cols, style)
+            else:
+                uc.mvwaddnstr(win, row_start+i, col_start, text, n_cols, style)
 
     def sync_player(self):
         self.state.sync_player_state()
@@ -432,8 +437,9 @@ class CursesDisplay(object):
             return window_name == "search_results"
         elif self.state.in_select_player_menu():
             return window_name == "select_player"
-        elif self.state.is_in_state(self.state.ADD_TO_PLAYLIST_CONFIRM):
-            return window_name == "confirm"
+        elif self.state.is_in_state(self.state.ADD_TO_PLAYLIST_CONFIRM_PLAYLIST) or \
+                self.state.is_selecting_artist():
+            return window_name == "popup"
         else:
             return self.state.main_menu.get_current_list().name == window_name
 
@@ -477,7 +483,7 @@ class CursesDisplay(object):
                          self._rows*2/10,
                          self._cols*2/10)
 
-        confirm = (self._rows/4,
+        popup = (self._rows/4,
                    self._cols/4,
                    self._rows*3/8,
                    self._cols*3/8)
@@ -488,5 +494,5 @@ class CursesDisplay(object):
             "player": player,
             "search": search,
             "select_player": select_player,
-            "confirm": confirm
+            "popup": popup
         }
