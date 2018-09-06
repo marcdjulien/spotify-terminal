@@ -1,7 +1,6 @@
 import urllib
 import json
 import requests
-from threading import Thread
 
 import common
 from authentication import Authenticator
@@ -35,7 +34,7 @@ def needs_authentication(func):
     def wrapper(self, *args, **kwargs):
         """Call then function and wrapper on authentication failure."""
         try:
-            logger.debug("Executing:\n\t%s(%s %s)", func.__name__, args, kwargs)
+            logger.debug("Executing: %s(%s %s)", func.__name__, args, kwargs)
             return func(self, *args, **kwargs)
         except requests.HTTPError as e:
             msg = str(e)
@@ -63,7 +62,7 @@ def uri_cache(func):
         """Use the cache to fetch the URI."""
         key = func.__name__ + ":" + str(obj['uri'])
 
-        # Get a fresh copy and clear the cache.
+        # Get a fresh copy and clear the cache if requested to.
         if "force_clear" in kwargs:
             kwargs.pop("force_clear")
             self._uri_cache.clear(key)
@@ -80,30 +79,21 @@ def uri_cache(func):
     return wrapper
 
 
-def async(func):
-    """Execute the function asynchronously"""
-    @common.catch_exceptions
-    def wrapper(*args, **kwargs):
-        Thread(target=func, args=args, kwargs=kwargs).start()
-
-    return wrapper
-
-
 class SpotifyApi(object):
     """Interface to make API calls."""
 
     def __init__(self, username):
+        self.username = username
+        """Email or user id."""
+
         self.auth = Authenticator(username)
         """Handles OAuth 2.0 authentication."""
-
-        self.me = None
-        """The Spotify user information."""
 
         self._uri_cache = UriCache(username)
         """Cache of Spotify URIs."""
 
-        self.username = username
-        """Email or user id."""
+        self.me = None
+        """The Spotify user information."""
 
         # Get authorization.
         self.auth.authenticate()
@@ -141,7 +131,7 @@ class SpotifyApi(object):
     def get_market(self):
         return self.me['country']
 
-    @async
+    @common.async
     def play(self, track=None, context_uri=None, uris=None, device=None):
         """Play a Spotify track.
 
@@ -178,7 +168,7 @@ class SpotifyApi(object):
 
         self.put_api_v1("me/player/play", params, data)
 
-    @async
+    @common.async
     def transfer_playback(self, device, play=False):
         """Transfer playback to a different Device.
 
@@ -190,22 +180,22 @@ class SpotifyApi(object):
                 "play": play}
         self.put_api_v1("me/player", data=data)
 
-    @async
+    @common.async
     def pause(self):
         """Pause the player."""
         self.put_api_v1("me/player/pause")
 
-    @async
+    @common.async
     def next(self):
         """Play the next song."""
         self.post_api_v1("me/player/next")
 
-    @async
+    @common.async
     def previous(self):
         """Play the previous song."""
         self.post_api_v1("me/player/previous")
 
-    @async
+    @common.async
     def shuffle(self, shuffle):
         """Set the player to shuffle.
 
@@ -216,7 +206,7 @@ class SpotifyApi(object):
         url = "me/player/shuffle"
         self.put_api_v1(url, q)
 
-    @async
+    @common.async
     def repeat(self, repeat):
         """Set the player to repeat.
 
@@ -227,7 +217,7 @@ class SpotifyApi(object):
         url = "me/player/repeat"
         self.put_api_v1(url, q)
 
-    @async
+    @common.async
     def volume(self, volume):
         """Set the player volume.
 

@@ -1,6 +1,5 @@
 import logging
 import os
-import pickle
 import platform
 import requests
 import shutil
@@ -8,6 +7,8 @@ import time
 import traceback
 import unicodedata
 import tempfile
+
+from threading import Thread
 
 logger = None
 
@@ -26,6 +27,15 @@ def catch_exceptions(func):
             clear()
             traceback.print_exc()
             os._exit(1)
+    return wrapper
+
+
+def async(func):
+    """Decorator to execute a function asynchronously."""
+    @catch_exceptions
+    def wrapper(*args, **kwargs):
+        Thread(target=func, args=args, kwargs=kwargs).start()
+
     return wrapper
 
 

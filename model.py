@@ -35,11 +35,28 @@ class Playlist(SpotifyObject):
         return self['name']
 
 
+class Artist(SpotifyObject):
+    """Represents a Spotify Artist."""
+
+    def __init__(self, artist):
+        super(Artist, self).__init__(artist)
+
+    def __str__(self):
+        return self['name']
+
+    def str(self, cols):
+        fmt = "%{0}.{0}s".format(cols)
+        return fmt % self['name']
+
+
 class Track(SpotifyObject):
     """Represents a Spotify Track."""
 
     def __init__(self, track):
         super(Track, self).__init__(track)
+        # Convert the Artists
+        self['artists'] = [Artist(a) for a in self['artists']]
+
         self.track_tuple = (self['name'],
                             self['album']['name'],
                             ", ".join(artist['name'] for artist in self['artists']))
@@ -63,20 +80,6 @@ class Track(SpotifyObject):
 NoneTrack = Track({"name": "---",
                    "artists": [{"name": "---"}],
                    "album": {"name": "---"}})
-
-
-class Artist(SpotifyObject):
-    """Represents a Spotify Artist."""
-
-    def __init__(self, artist):
-        super(Artist, self).__init__(artist)
-
-    def __str__(self):
-        return self['name']
-
-    def str(self, cols):
-        fmt = "%{0}.{0}s".format(cols)
-        return fmt % self['name']
 
 
 class Album(SpotifyObject):
@@ -143,5 +146,8 @@ class Option(object):
         self.text = text
 
     def get(self):
+        return self.text
+
+    def __str__(self):
         return self.text
 
