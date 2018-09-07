@@ -229,6 +229,12 @@ class CursesDisplay(object):
                           uc.A_BOLD,
                           centered=True)
 
+        # Bar.
+        self._render_text(win, display_name_start_line+1, 1,
+                          "_"*cols,
+                          cols-2,
+                          uc.A_NORMAL)
+
         # Show the playlists.
         playlists = [str(playlist) for playlist in self.state.main_menu['user']]
         selected_i = self.state.main_menu["user"].i
