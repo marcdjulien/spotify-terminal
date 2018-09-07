@@ -283,7 +283,7 @@ class ContextDuration(object):
 class PeriodicCallback(object):
     """Execute a callback at certain intervals."""
 
-    def __init__(self, period, func, args=(), kwargs={}):
+    def __init__(self, period, func, args=(), kwargs={}, active=True):
         self.period = period
         """How often to run."""
 
@@ -296,11 +296,14 @@ class PeriodicCallback(object):
         self.kwargs = kwargs
         """Keyward arguments for the fucntion."""
 
+        self.active = active
+        """Whether active or not."""
+
         self._next_call_time = time.time()
         """The next time to call the function."""
 
     def update(self, call_time):
-        if call_time >= self._next_call_time:
+        if call_time >= self._next_call_time and self.active:
             self.func(*self.args, **self.kwargs)
             self._next_call_time += self.period
 
@@ -312,6 +315,21 @@ class PeriodicCallback(object):
 
     def call_now(self):
         self.call_in(0)
+
+    def is_active(self):
+        return self.active
+
+    def activate(self):
+        logger.debug("%s: Activating", self)
+        self.active = True
+        self.call_now()
+
+    def deactivate(self):
+        logger.debug("%s: Deactivating", self)
+        self.active = False
+
+    def __str__(self):
+        return "{}({}, {})".format(self.func.__name__, self.args, self.kwargs)
 
 
 SPOTIFY_BANNER = """

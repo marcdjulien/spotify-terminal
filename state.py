@@ -25,6 +25,17 @@ class SpotifyState(object):
 
     User input will alter this state.
     """
+    # Different states.
+    MAIN_MENU_STATE, \
+        SEARCH_MENU_STATE, \
+        DEVICE_MENU_STATE, \
+        LOAD_STATE, \
+        EXIT_STATE, \
+        ADD_TO_PLAYLIST_SELECT_PLAYLIST, \
+        ADD_TO_PLAYLIST_CONFIRM_PLAYLIST, \
+        SELECT_ARTIST = range(8)
+
+    # Attributes to save between runs.
     PICKLE_ATTRS = [
         "command_history",
         "previous_tracks",
@@ -32,20 +43,23 @@ class SpotifyState(object):
         "current_device"
     ]
 
+    # Enums for repeat state.
     REPEAT_OFF, REPEAT_CONTEXT, REPEAT_TRACK = range(3)
 
-    MAIN_MENU_STATE, \
-        SEARCH_MENU_STATE, \
-        PLAYER_MENU_STATE, \
-        LOAD_STATE, \
-        EXIT_STATE, \
-        ADD_TO_PLAYLIST_SELECT_PLAYLIST, \
-        ADD_TO_PLAYLIST_CONFIRM_PLAYLIST, \
-        SELECT_ARTIST = range(8)
-
+    # List of backspace keys.
     BACKSPACE_KEYS = [uc.KEY_BACKSPACE, 8]
 
+    # List of enter keys.
+    ENTER_KEYS = [uc.KEY_ENTER, 10, 13]
+
+    # List of keys for cancling.
     CANCEL_KEYS = [uc.KEY_EXIT, 27] + BACKSPACE_KEYS
+
+    # How often to sync the player state.
+    SYNC_PLAYER_PERIOD = 60 * 5
+
+    # How often to sync the available devices.
+    SYNC_DEVICES_PERIOD = 1
 
     def __init__(self, api, config):
         self.lock = Lock()
@@ -57,6 +71,21 @@ class SpotifyState(object):
         self.config = config
         """The Config parameters."""
 
+        self.sync_period = common.PeriodicCallback(self.SYNC_PLAYER_PERIOD,
+                                                   self.sync_player_state)
+        """Periodic for syncing the player."""
+
+        self.sync_devices = common.PeriodicCallback(self.SYNC_DEVICES_PERIOD,
+                                                    self.sync_available_devices,
+                                                    active=False)
+        """Periodic for syncing the available devices."""
+
+        self.periodics = [
+            self.sync_period,
+            self.sync_devices
+        ]
+        """All Periodics."""
+
         self.main_menu = ListCollection("main",
                                         [List("user"),
                                          List("tracks"),
@@ -65,8 +94,8 @@ class SpotifyState(object):
         self.search_menu = ListCollection("search",
                                           [List("search_results")])
 
-        self.select_player_menu = ListCollection("select_player",
-                                                 [List("players")])
+        self.select_device_menu = ListCollection("select_device",
+                                                 [List("devices")])
 
         self.confirm_menu = ListCollection("confirm",
                                            [List("confirm", header="Are you sure?")])
@@ -88,8 +117,11 @@ class SpotifyState(object):
         self.current_device = UnableToFindDevice
         """The current Device."""
 
-        self.paused = True
-        """Whether the play is paused or not."""
+        self.available_devices = []
+        """The list of available devices."""
+
+        self.playing = False
+        """Whether the play is playing or not."""
 
         self.progress = None
         """Progress into the track."""
@@ -215,7 +247,7 @@ class SpotifyState(object):
         if player_state:
             self.currently_playing_track = Track(player_state['item']) \
                 if player_state['item'] else NoneTrack
-            self.paused = not player_state['is_playing']
+            self.playing = player_state['is_playing']
 
             self.current_device = Device(player_state['device'])
             self.volume = self.current_device['volume_percent']
@@ -231,7 +263,12 @@ class SpotifyState(object):
             self.currently_playing_track = NoneTrack
             self.current_device = UnableToFindDevice
 
-    def process_key(self, key, call_time):
+    def sync_available_devices(self):
+        self.available_devices = self.api.get_devices()
+        self.select_device_menu['devices'].update_list(self.available_devices,
+                                                       reset_index=False)
+
+    def process_key(self, key):
         if self.is_loading():
             # In the loading state.
             self._update_loading_state(key)
@@ -245,7 +282,12 @@ class SpotifyState(object):
             # In the main screen.
             self._update_main_state(key)
 
-        self._run_calcs(call_time)
+        self._run_calcs()
+
+        # We probably just selected a Track, let's plan
+        # to re-sync in 5s.
+        if key in self.ENTER_KEYS:
+            self.sync_period.call_in(5)
 
     def _update_loading_state(self, key):
         # Get the current Future.
@@ -272,7 +314,7 @@ class SpotifyState(object):
                 self.track_to_add = None
                 self.playlist_to_add = None
                 self.current_state = self.MAIN_MENU_STATE
-            elif key in [uc.KEY_ENTER, 10, 13]:
+            elif key in self.ENTER_KEYS:
                 self.playlist_to_add = self.main_menu.get_current_list_entry()
                 self.current_state = self.ADD_TO_PLAYLIST_CONFIRM_PLAYLIST
 
@@ -285,7 +327,7 @@ class SpotifyState(object):
                 self.track_to_add = None
                 self.playlist_to_add = None
                 self.current_state = self.MAIN_MENU_STATE
-            elif key in [uc.KEY_ENTER, 10, 13]:
+            elif key in self.ENTER_KEYS:
                 entry = self.confirm_menu.get_current_list_entry()
                 if entry.get().lower() == "yes":
                     self._add_track_to_playlist(self.track_to_add, self.playlist_to_add)
@@ -302,7 +344,7 @@ class SpotifyState(object):
                 self.artist_menu["artists"].increment_index()
             elif key in self.CANCEL_KEYS:
                 self.current_state = self.MAIN_MENU_STATE
-            elif key in [uc.KEY_ENTER, 10, 13]:
+            elif key in self.ENTER_KEYS:
                 artist = self.artist_menu.get_current_list_entry()
                 if artist:
                     self._set_artist(artist)
@@ -351,7 +393,7 @@ class SpotifyState(object):
                     self.main_menu.decrement_list()
                 else:
                     self.main_menu.get_current_list().decrement_index()
-            elif self.in_search_menu() or self.in_select_player_menu():
+            elif self.in_search_menu() or self.in_select_device_menu():
                 self.current_menu.get_current_list().decrement_index()
 
         elif key == uc.KEY_DOWN:
@@ -368,7 +410,7 @@ class SpotifyState(object):
                     self.main_menu.get_current_list().increment_index()
                 else:
                     self.main_menu.get_current_list().increment_index()
-            elif self.in_search_menu() or self.in_select_player_menu():
+            elif self.in_search_menu() or self.in_select_device_menu():
                 self.current_menu.get_current_list().increment_index()
 
         elif key in self.BACKSPACE_KEYS:
@@ -383,7 +425,7 @@ class SpotifyState(object):
                 self.restore_previous_tracks()
             elif self.in_search_menu():
                 self.current_state = self.MAIN_MENU_STATE
-            elif self.in_select_player_menu():
+            elif self.in_select_device_menu():
                 self.current_state = self.MAIN_MENU_STATE
 
         elif key == uc.KEY_NPAGE:
@@ -402,14 +444,14 @@ class SpotifyState(object):
                 if 32 <= key and key <= 126:
                     self.get_command_query().insert(self.command_cursor_i, char)
                     self.command_cursor_i += 1
-                elif key in [uc.KEY_ENTER, 10, 13]:
+                elif key in self.ENTER_KEYS:
                     self._process_command(self.get_command_query())
                 return
 
             elif key in [uc.KEY_EXIT, 27]:
                 if self.in_search_menu():
                     self.current_state = self.MAIN_MENU_STATE
-                elif self.in_select_player_menu():
+                elif self.in_select_device_menu():
                     self.current_state = self.MAIN_MENU_STATE
                 elif self.is_creating_command():
                     self.current_state = self.MAIN_MENU_STATE
@@ -448,9 +490,8 @@ class SpotifyState(object):
                     self.current_state = self.ADD_TO_PLAYLIST_SELECT_PLAYLIST
 
             elif key == self.config.show_devices:
-                self.current_state = self.PLAYER_MENU_STATE
-                devices = self.api.get_devices()
-                self.select_player_menu['players'].update_list(devices)
+                self.current_state = self.DEVICE_MENU_STATE
+                self.sync_devices.activate()
 
             elif key == self.config.refresh:
                 self.sync_player_state()
@@ -515,7 +556,7 @@ class SpotifyState(object):
             elif key == self.config.volume_up:
                 self._process_command("volume {}".format(self.volume + 5))
 
-            elif key in [uc.KEY_ENTER, 10, 13]:
+            elif key in self.ENTER_KEYS:
                 if self.in_search_menu():
                     entry = self.search_menu.get_current_list_entry()
                     if entry:
@@ -544,29 +585,38 @@ class SpotifyState(object):
                     elif self.main_menu.get_current_list().name == "player":
                         self.main_menu.get_current_list_entry().action()
 
-                elif self.in_select_player_menu():
-                    new_device = self.select_player_menu.get_current_list_entry()
+                elif self.in_select_device_menu():
+                    new_device = self.select_device_menu.get_current_list_entry()
                     if new_device:
-                        self._set_player_device(new_device, not self.paused)
+                        self._set_player_device(new_device, self.playing)
                         self.current_state = self.MAIN_MENU_STATE
 
         else:
             if key is not None:
                 logger.debug("Unregistered key: %d", key)
 
-    def _run_calcs(self, call_time):
+    def _run_calcs(self):
         """Run any calculations that we need to do at the end of the update."""
         self.command_cursor_i = common.clamp(self.command_cursor_i,
                                              0,
                                              len(self.get_command_query()))
 
+        # Run all Periodics.
+        for periodic in self.periodics:
+            periodic.update(time.time())
+
         # Set our menu.
         if self.in_search_menu():
             self.current_menu = self.search_menu
-        elif self.in_select_player_menu():
-            self.current_menu = self.select_player_menu
+        elif self.in_select_device_menu():
+            self.current_menu = self.select_device_menu
         else:
             self.current_menu = self.main_menu
+
+        # Make sure sync_devices is only active when selecting a device.
+        if not self.in_select_device_menu():
+            if self.sync_devices.is_active():
+                self.sync_devices.deactivate()
 
         # Set our popup menu.
         if self.is_adding_track_to_playlist():
@@ -575,12 +625,19 @@ class SpotifyState(object):
             self.current_popup_menu = self.artist_menu
 
         # Calculate track progress.
-        time_delta = 1000*(call_time - self.last_update_time)
-        if self.progress and not self.paused:
+        time_delta = 1000*(time.time() - self.last_update_time)
+        if self.progress and self.playing:
             self.progress[0] = self.progress[0] + time_delta
 
+            # Song is done. Let's plan to re-sync in 1 second.
+            percent = float(self.progress[0])/self.progress[1]
+            if percent > 1.0:
+                logger.debug("Reached end of song. Re-syncing in 1s.")
+                self.sync_period.call_in(1)
+                self.progress = None
+
         # Save off this last time.
-        self.last_update_time = call_time
+        self.last_update_time = time.time()
 
     def _process_command(self, command_input):
         logger.debug("Processing command: %s", command_input)
@@ -684,11 +741,11 @@ class SpotifyState(object):
             self.api.volume(self.volume)
 
     def _execute_play(self):
-        self.paused = False
+        self.playing = True
         self._play(None, None)
 
     def _execute_pause(self):
-        self.paused = True
+        self.playing = False
         self.api.pause()
 
     def _execute_exit(self):
@@ -753,10 +810,10 @@ class SpotifyState(object):
         self.execute_future(future)
 
     def _toggle_play(self):
-        if self.paused:
-            self._process_command("play")
-        else:
+        if self.playing:
             self._process_command("pause")
+        else:
+            self._process_command("play")
 
     def _toggle_shuffle(self):
         self._process_command("shuffle {}".format(not self.shuffle))
@@ -864,8 +921,8 @@ class SpotifyState(object):
     def in_main_menu(self):
         return self.is_in_state(self.MAIN_MENU_STATE)
 
-    def in_select_player_menu(self):
-        return self.is_in_state(self.PLAYER_MENU_STATE)
+    def in_select_device_menu(self):
+        return self.is_in_state(self.DEVICE_MENU_STATE)
 
     def is_loading(self):
         return self.is_in_state(self.LOAD_STATE)
@@ -932,14 +989,16 @@ class List(object):
         self.header = header
         """Header."""
 
-    def update_list(self, l):
+    def update_list(self, l, reset_index=True):
         """Update the list.
 
         Args:
             l (iter): The list ot update to.
         """
         self.list = tuple(l)
-        self.i = 0
+        if reset_index:
+            self.i = 0
+        self.set_index(self.i)
 
     def current_entry(self):
         """Return the currently selected entry.
