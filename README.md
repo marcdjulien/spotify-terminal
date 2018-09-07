@@ -102,6 +102,10 @@ By typing ```:``` you can enter commands. The following is a list of all command
 
 ```Shift + D``` on any track to immediately go to the artist page.
 
+```Shift + X``` to immediately go to the album page of the currently playing song.
+
+```Shift + C``` to immediately go to the artist page of the currently playing song.
+
 ```Shift + R``` to re-sync the player.
 
 ```Shift + >``` to play the next song.
