@@ -2,33 +2,49 @@
 Terminal program to play/control music via Spotify. Some features require a Spotify Premium account.
 
 ```
-┌──────────────────────┐┌────────────────────────────────────────────────────────────────────────┐
-│ Display Name         ││ Fine                                                                   │
-│                      ││                                                                        │
-│ Techno Bunker        ││           I Don't Know                  Fine                SONOIO     │
-│ Guitar               ││                   Left                  Fine                SONOIO     │
-│ Boxplot              ││     Thanks for Calling                  Fine                SONOIO     │
-│ Instrumental Madness ││                 Pieces                  Fine                SONOIO     │
-│ Bad Religion         ││              Vitamin D                  Fine                SONOIO     │
-│ Wonderland Complete  ││              Bad Habit                  Fine                SONOIO     │
-│ Better Alone         ││          Under the Sea                  Fine                SONOIO     │
-│ WAF                  ││          What's Before                  Fine                SONOIO     │
-│ The Ones That Got Awa││    I Don't Know (Coda)                  Fine                SONOIO     │
-│ Your Top Songs 2017  ││                                                                        │
-│ Vince Staples  Big Fi││                                                                        │
-│ A Perfect Circle     │└────────────────────────────────────────────────────────────────────────┘
-│ No Mana              │┌────────────────────────────────────────────────────────────────────────┐
-│ ATTLAS               ││ Thanks for Calling                                                     │
-│ ATTLAS Storyline Vol.││ Fine                                                                   │
-│ ATTLAS After Hours Mi││ SONOIO                                                                 │
-│ Old Collection       ││                                                                        │
-│ Jack U NYE Playlist  ││ (S) <<  (P)  >> (o)  --  ++                                            │
-│ Ki:Theory  KITTY HAWK││                                                                        │
-│ Mobile Download      ││ Computer: YEARZERO                                                     │
-│ Space                ││                                                                        │
-└──────────────────────┘└────────────────────────────────────────────────────────────────────────┘
--------------------------------------
-                              Left                           Fine                         SONOIO
+┌──────────────────────────────┐┌───────────────────────────────────────────────────────────────────────────────────────────────┐
+│     [Spotify Terminal]       ││ Saved                                                                                         │
+│        Display Name          ││                                                                                               │
+│______________________________││                Can You Feel It                 Can You Feel It                  T-Mass, Enthic│
+│                              ││                    Convolution                  Tear The Roots                         Kaleida│
+│ Saved                        ││    Tactical Precision Disarray     Tactical Precision Disarray                     Perturbator│
+│ NIN Trilogy                  ││          Heptan - Enjoii Remix           Heptan (Enjoii Remix)        MYSTXRIVL, Sokos, Enjoii│
+│ Techno Bunker                ││ Watch You Sleeping - Instrumen              Watch You Sleeping   Blue Foundation, Mark Kozelek│
+│ Guitar                       ││            XXVI Crimes of Love             XXVI Crimes of Love                       Huoratron│
+│ Boxplot                      ││ Something About Smooth Seas an  Something About Smooth Seas an                      Half Empty│
+│ Instrumental Madness         ││ Bringing Me Down (feat. Ruelle                         Silence               Ki:Theory, Ruelle│
+│ Bad Religion                 ││                 Sell Your Soul             Time Is A Landscape      We Plants Are Happy Plants│
+│ Wonderland Complete          ││                      Humanizer                       Humanizer                       Powercyan│
+│ Better Alone                 ││                     STILLBIRTH                      STILLBIRTH                     Alice Glass│
+│ WAF                          ││                   Still Wasted                    Still Wasted                 Enjoii, Skeler.│
+│ The Ones That Got Away       ││                                                                                        Ic3peak│
+│ Your Top Songs 2017          ││    High Speed Weekend Survivor        Feed Me's Family Reunion                         Feed Me│
+│ Vince Staples  Big Fish Theor││                      It's Only                      Deflection                         Arkasia│
+│ Discover Weekly              ││         We Stayed Up All Night          We Stayed Up All Night                  Tourist, Ardyn│
+│ Stranger Things              ││     Serpent's Missing Messages            Assorted Repetitions                         No Mana│
+│ Best Trap and Electronic     ││                 E Is More Than            Assorted Repetitions                         No Mana│
+│ A Perfect Circle             ││                      Gray Pill                  Piety of Ashes                   The Flashbulb│
+│ No Mana                      ││ Turn off the Lights (feat. Ale  Turn off the Lights (feat. Ale      Chris Lake, Alexis Roberts│
+│ ATTLAS                       ││                    SV_Cheats 0             The Maze To Nowhere                            Lorn│
+│ ATTLAS Storyline Vol. 1      ││                     Tramontane                   Tramontane EP                         Boxplot│
+│ ATTLAS After Hours Mix       ││           Runnin' - Radio Edit                         Runnin'           Cutline, Belle Humble│
+│ Jack U NYE Playlist          ││                    Star Trails                     Star Trails          Fraunhofer Diffraction│
+│ Ki:Theory  KITTY HAWK        ││          The Bleeding of Mercy            The Course of Empire           Telepathic Teddy Bear│
+│ Mobile Download              │└───────────────────────────────────────────────────────────────────────────────────────────────┘
+│ Space                        │┌───────────────────────────────────────────────────────────────────────────────────────────────┐
+│ DragonBall Z  Bruce Faulconer││ Can You Feel It                                                                               │
+│ Wolfgang                     ││ Can You Feel It                                                                               │
+│ HEALTH + DF                  ││ T-Mass, Enthic                                                                                │
+│ The Bloody Beetroots  HIDE   ││                                                                                               │
+│ Download                     ││ (s) <<  (P)  >> (x)  --  ++                                                                   │
+│ PnR                          ││                                                                                               │
+│ Starred                      ││ Computer: YEARZERO                                                                            │
+│ Seven Lions                  ││                                                                                               │
+│ COHSOTV                      ││                                                                                               │
+│ Buckethead                   ││                                                                                               │
+└──────────────────────────────┘└───────────────────────────────────────────────────────────────────────────────────────────────┘
+---------------------------------------------------------------------------------------------------------------
+                            Can You Feel It                            Can You Feel It                             T-Mass, Enthic
 ```
 # Install
 Unicurses and Requests for Python are required to run this program.
