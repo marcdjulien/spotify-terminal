@@ -632,8 +632,8 @@ class SpotifyState(object):
             # Song is done. Let's plan to re-sync in 1 second.
             percent = float(self.progress[0])/self.progress[1]
             if percent > 1.0:
-                logger.debug("Reached end of song. Re-syncing in 1s.")
-                self.sync_period.call_in(1)
+                logger.debug("Reached end of song. Re-syncing in 2s.")
+                self.sync_period.call_in(2)
                 self.progress = None
 
         # Save off this last time.
