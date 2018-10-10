@@ -64,6 +64,8 @@ Execute the following command to run the program:
 ```
 Linux: ./spotify.py [username]
 Windows: spotify.py [username]
+
+Use --help or -h to see more options.
 ```
 Where ```username``` is either the email associated with your Spotify account or the user id.
 
