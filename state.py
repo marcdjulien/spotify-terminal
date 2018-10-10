@@ -437,7 +437,7 @@ class SpotifyState(object):
                 self.current_menu.get_current_list().decrement_index(15)
 
         # ASCII character pressed
-        elif (0 <= key <= 256) or self.config.has_key(key):
+        elif (0 <= key <= 256) or (key in self.config):
             char = chr(key)
 
             if self.is_creating_command():
@@ -1284,9 +1284,6 @@ class Config(object):
         for key, value in self.keys.items():
             self.keys[value] = key
 
-    def has_key(self, code):
-        return code in self.keys
-
     def is_volume_key(self, key):
         return bool(re.match(r"volume_[0-9]+", self.get_config_param(key)))
 
@@ -1296,8 +1293,11 @@ class Config(object):
     def __getattr__(self, attr):
         return self.keys[attr]
 
+    def __contains__(self, key):
+        return key in self.keys
+
     def _parse_and_validate_config_file(self):
-        """Initializes the users settings based on the stermrc file"""
+        """Initializes the users settings based on the config file."""
         rc_file = open(self.config_filename, "r")
 
         new_keys = {}
@@ -1318,13 +1318,13 @@ class Config(object):
                 if param not in self.default:
                     print("The following parameter is not recognized: {}".format(param))
 
-                # Make sure this wasn't defined twice.
+                # Make sure this param wasn't defined twice.
                 if param in new_keys:
                     print("The following line is redefining a param:")
                     print(line)
                     return False
 
-                # Make sure this wasn't defined twice.
+                # Make sure this code wasn't defined twice.
                 if code in new_keys.values():
                     print("The following line is redefining a key code:")
                     print(line)

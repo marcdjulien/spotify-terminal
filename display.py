@@ -273,7 +273,9 @@ class CursesDisplay(object):
         self._render_text(win, 1, 2, self.state.get_currently_playing_track().track, cols-3, uc.A_BOLD)
         self._render_text(win, 2, 2, self.state.get_currently_playing_track().album, cols-3, uc.A_BOLD)
         self._render_text(win, 3, 2, self.state.get_currently_playing_track().artist, cols-3, uc.A_BOLD)
-        self._render_text(win, 7, 2, self.state.current_device, cols-3, uc.A_NORMAL)
+
+        device_info = "{} ({}%)".format(self.state.current_device, self.state.volume)
+        self._render_text(win, 7, 2, device_info, cols-3, uc.A_NORMAL)
 
         for i, action in enumerate(self.state.main_menu["player"]):
             if (i == self.state.main_menu['player'].i) and self.is_active_window("player"):
