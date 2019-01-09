@@ -147,6 +147,9 @@ class SpotifyState(object):
         self.command_history = []
         self.command_history_i = 0
         """History of commands."""
+        
+        self.prev_command = ["exit"]
+        """The previous command that was executed."""
 
         self.running = True
         """Whether we're running or not."""
