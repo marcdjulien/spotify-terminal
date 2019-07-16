@@ -233,10 +233,12 @@ class SpotifyState(object):
         playlists = list(playlists)
 
         # Add the Saved tracks playlist.
-        saved = Playlist({"name": "Saved",
-                          "uri": common.SAVED_TRACKS_CONTEXT_URI,
-                          "id": "",
-                          "owner_id": self.api.get_id()})
+        saved = Playlist({
+            "name": "Saved",
+            "uri": common.SAVED_TRACKS_CONTEXT_URI,
+            "id": "",
+            "owner_id": self.api.get_id()
+        })
         playlists.insert(0, saved)
         self.main_menu['user'].update_list(tuple(playlists))
 
@@ -530,6 +532,12 @@ class SpotifyState(object):
                 if entry:
                     album = entry['album']
                     self._set_album(album)
+
+            elif key == self.config.current_context:
+                state = self.api.get_player_state()
+                if state:
+                    context = state['context']
+                    self._set_context(context)
 
             elif char == '\t':
                 if self.current_context and self.current_menu.get_current_list().name == "tracks":
@@ -864,6 +872,27 @@ class SpotifyState(object):
     def _set_album(self, album):
         future = Future(target=(self.api.get_tracks_from_album, album),
                         result=(self._set_tracks, (album, album['name'])),
+                        end_state=self.MAIN_MENU_STATE)
+        self.execute_future(future)
+
+    def _set_context(self, context):
+        if context is None:
+            context = {
+                "type":"playlist",
+                "uri": common.SAVED_TRACKS_CONTEXT_URI
+            }
+
+        target_api_call = {
+            "artist": self.api.get_selections_from_artist,
+            "playlist": self.api.get_tracks_from_playlist,
+            "album": self.api.get_tracks_from_album,
+            common.ALL_ARTIST_TRACKS_CONTEXT_TYPE: self.api.get_all_tracks_from_artist,
+        }[context["type"]]
+
+        context = self.api.convert_context(context)
+
+        future = Future(target=(target_api_call, context),
+                        result=(self._set_tracks, (context, context['name'])),
                         end_state=self.MAIN_MENU_STATE)
         self.execute_future(future)
 
@@ -1244,6 +1273,7 @@ class Config(object):
         "goto_album": ord("S"),
         "current_artist": ord("C"),
         "current_album": ord("X"),
+        "current_context": ord("?"),
         "next_track": ord(">"),
         "previous_track": ord("<"),
         "play": ord(" "),
@@ -1367,6 +1397,7 @@ class Config(object):
             ("goto_album", "Go to the album page of the highlighted track."),
             ("current_artist", "Go to the artist page of the currently playing track."),
             ("current_album", "Go to the album page of the currently playing track."),
+            ("current_context", "Go to the currently playing context."),
             ("next_track", "Play the next track."),
             ("previous_track", "Play the previous track."),
             ("play", "Toggle play/pause."),
