@@ -147,7 +147,7 @@ class SpotifyState(object):
         self.command_history = []
         self.command_history_i = 0
         """History of commands."""
-        
+
         self.prev_command = ["exit"]
         """The previous command that was executed."""
 
@@ -223,7 +223,7 @@ class SpotifyState(object):
                                                   Option("No")])
 
         # Get current player state.
-        self.sync_player_state()
+        player_state = self.sync_player_state()
 
         # Get the users playlists.
         playlists = self.api.get_user_playlists(self.user)
@@ -243,9 +243,14 @@ class SpotifyState(object):
         self.main_menu['user'].update_list(tuple(playlists))
 
         # Initialize track list.
-        if not self.restore_previous_tracks(0):
-            logger.debug("Loading the Saved track list")
-            self._set_playlist(self.main_menu['user'][0])
+        if player_state:
+            context = player_state['context']
+            self._set_context(context)
+        else:
+            if not self.restore_previous_tracks(0):
+                logger.debug("Loading the Saved track list")
+                self._set_playlist(self.main_menu['user'][0])
+
 
     def sync_player_state(self):
         player_state = self.api.get_player_state()
@@ -263,6 +268,8 @@ class SpotifyState(object):
             duration = player_state['progress_ms']
             if self.currently_playing_track and duration:
                 self.progress = [duration, self.currently_playing_track['duration_ms']]
+
+            return player_state
         else:
             self.progress = None
             self.currently_playing_track = NoneTrack
