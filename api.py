@@ -78,6 +78,19 @@ def uri_cache(func):
 
     return wrapper
 
+def id_from_uri(uri):
+    """Return the ID from a URI.
+
+    For example, "spotify:album:kjasg98qw35hg0" returns "kjasg98qw35hg0".
+
+    Args:
+        uri (str): The URI string.
+
+    Returns:
+        str: The ID.
+    """
+    return uri.split(":")[-1]
+
 
 class SpotifyApi(object):
     """Interface to make API calls."""
@@ -454,6 +467,77 @@ class SpotifyApi(object):
 
         return tuple(result)
 
+    @uri_cache
+    def convert_context(self, context, progress=None):
+        """Convert a Context to an Album, Playlist, or Artist.
+
+        Args:
+            context (dict): The Context to convert from.
+            progress (Progress): Progress associated with this call.
+
+        Returns:
+            SpotifyObject: Album, Artist, or Playlist.
+        """
+        context_type = context["type"]
+        if context_type == "artist":
+             return self.get_artist_from_context(context)
+        elif context_type == common.ALL_ARTIST_TRACKS_CONTEXT_TYPE:
+            return self.get_artist_from_context(context)
+        elif context_type == "album":
+            return self.get_album_from_context(context)
+        elif context_type == "playlist":
+            return self.get_playlist_from_context(context)
+
+    @uri_cache
+    def get_artist_from_context(self, context):
+        """Return an Artist from a Context.
+
+        Args:
+            context (dict): The Context to convert from.
+
+        Returns:
+            Artist: The Artist.
+        """
+        artist_id = id_from_uri(context["uri"])
+        result = self.get_api_v1("artists/{}".format(artist_id))
+        return Artist(result or {})
+
+    @uri_cache
+    def get_album_from_context(self, context):
+        """Return an Album from a Context.
+
+        Args:
+            context (dict): The Context to convert from.
+
+        Returns:
+            Album: The Album.
+        """
+        album_id = id_from_uri(context["uri"])
+        result = self.get_api_v1("albums/{}".format(album_id))
+        return Album(result or {})
+
+    @uri_cache
+    def get_playlist_from_context(self, context):
+        """Return an Playlist from a Context.
+
+        Args:
+            context (dict): The Context to convert from.
+
+        Returns:
+            Playlist: The Playlist.
+        """
+        if context["uri"] == common.SAVED_TRACKS_CONTEXT_URI:
+            # TODO: Consider creating a common/factory function for
+            # obtaining the Saved PLaylist.
+            return Playlist({
+                "uri":common.SAVED_TRACKS_CONTEXT_URI,
+                "name": "Saved"
+                })
+
+        playlist_id = id_from_uri(context["uri"])
+        result = self.get_api_v1("playlists/{}".format(playlist_id))
+        return Playlist(result or {})
+
     def add_track_to_playlist(self, track, playlist):
         """Add a Track to a Playlist.
 
@@ -567,7 +651,7 @@ class SpotifyApi(object):
 
         data = json.loads(common.ascii(resp.text)) if resp.text else {}
         if not data:
-            logger.info("GET return no data")
+            logger.info("GET returned no data")
 
         return data
 

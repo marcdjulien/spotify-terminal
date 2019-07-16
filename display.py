@@ -128,8 +128,6 @@ class CursesDisplay(object):
             sleep_time = self.PROGRAM_PERIOD - t.duration
             if sleep_time > 0:
                 time.sleep(sleep_time)
-            else:
-                logger.debug("Cycle took %fs", t.duration)
 
         # Tear down the display.
         logger.debug("Tearing down curses display")

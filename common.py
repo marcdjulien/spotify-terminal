@@ -370,10 +370,12 @@ ARTIST_ALL_TRACKS_CONTEXT_URI = "spotify_terminal:artist:all_tracks_context"
 
 ARTIST_ALL_TRACKS_CONTEXT = {'uri': ARTIST_ALL_TRACKS_CONTEXT_URI}
 
+ALL_ARTIST_TRACKS_CONTEXT_TYPE = "all_artist_tracks"
 
 def get_all_tracks_context(artist):
     return {'uri': ARTIST_ALL_TRACKS_CONTEXT_URI,
-            'artist': artist}
+            'artist': artist,
+            'type': ALL_ARTIST_TRACKS_CONTEXT_TYPE}
 
 
 def is_all_tracks_context(context):
