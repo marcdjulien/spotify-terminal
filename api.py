@@ -1,4 +1,4 @@
-import urllib
+import urllib.request, urllib.parse, urllib.error
 import json
 import requests
 
@@ -144,7 +144,7 @@ class SpotifyApi(object):
     def get_market(self):
         return self.me['country']
 
-    @common.async
+    @common.asynchronously
     def play(self, track=None, context_uri=None, uris=None, device=None):
         """Play a Spotify track.
 
@@ -167,12 +167,12 @@ class SpotifyApi(object):
 
             if common.is_int(track):
                 data["offset"] = {"position": track}
-            elif isinstance(track, basestring):
+            elif isinstance(track, str):
                 data["offset"] = {"uri": track}
 
         # No context given, just play the track.
         elif track is not None and not context_uri:
-            if isinstance(track, basestring) and track.startswith("spotify:track"):
+            if isinstance(track, str) and track.startswith("spotify:track"):
                 data['uris'] = [track]
 
         params = {}
@@ -181,7 +181,7 @@ class SpotifyApi(object):
 
         self.put_api_v1("me/player/play", params, data)
 
-    @common.async
+    @common.asynchronously
     def transfer_playback(self, device, play=False):
         """Transfer playback to a different Device.
 
@@ -193,51 +193,51 @@ class SpotifyApi(object):
                 "play": play}
         self.put_api_v1("me/player", data=data)
 
-    @common.async
+    @common.asynchronously
     def pause(self):
         """Pause the player."""
         self.put_api_v1("me/player/pause")
 
-    @common.async
+    @common.asynchronously
     def next(self):
         """Play the next song."""
         self.post_api_v1("me/player/next")
 
-    @common.async
+    @common.asynchronously
     def previous(self):
         """Play the previous song."""
         self.post_api_v1("me/player/previous")
 
-    @common.async
+    @common.asynchronously
     def shuffle(self, shuffle):
         """Set the player to shuffle.
 
         Args:
             shuffle (bool): Whether to shuffle or not.
         """
-        q = urllib.urlencode({"state": shuffle})
+        q = urllib.parse.urlencode({"state": shuffle})
         url = "me/player/shuffle"
         self.put_api_v1(url, q)
 
-    @common.async
+    @common.asynchronously
     def repeat(self, repeat):
         """Set the player to repeat.
 
         Args:
             repeat (bool): Whether to repeat or not.
         """
-        q = urllib.urlencode({"state": repeat})
+        q = urllib.parse.urlencode({"state": repeat})
         url = "me/player/repeat"
         self.put_api_v1(url, q)
 
-    @common.async
+    @common.asynchronously
     def volume(self, volume):
         """Set the player volume.
 
         Args:
             volume (int): Volume level. 0 - 100 (inclusive).
         """
-        q = urllib.urlencode({"volume_percent": volume})
+        q = urllib.parse.urlencode({"volume_percent": volume})
         url = "me/player/volume"
         self.put_api_v1(url, q)
 

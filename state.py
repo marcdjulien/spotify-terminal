@@ -661,7 +661,7 @@ class SpotifyState(object):
         logger.debug("Processing command: %s", command_input)
 
         # Convert everything to string first
-        if not isinstance(command_input, basestring):
+        if not isinstance(command_input, str):
             command_input = "".join(command_input).strip()
 
         if not command_input:
@@ -801,7 +801,7 @@ class SpotifyState(object):
         # If using a custom context, limit it to 750 tracks.
         if uris:
             n = 750
-            offset_i = max(track_id - (n/2) + 1, 0)
+            offset_i = max(track_id - (n//2) + 1, 0)
             uris = uris[offset_i:offset_i + n]
             track_id -= offset_i
 
@@ -1312,7 +1312,7 @@ class Config(object):
 
             logger.debug("The following config parameters are being used:")
             for param, key in self.keys.items():
-                if isinstance(param, basestring):
+                if isinstance(param, str):
                     try:
                         logger.debug("\t%s: %s (%s)", param, chr(key), key)
                     except:
@@ -1321,7 +1321,7 @@ class Config(object):
             self.keys = self.default
 
         # Reverse map the params and keys.
-        for key, value in self.keys.items():
+        for key, value in list(self.keys.items()):
             self.keys[value] = key
 
     def is_volume_key(self, key):

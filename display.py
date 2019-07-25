@@ -145,7 +145,7 @@ class CursesDisplay(object):
 
         # If we didn't press a key, kick the state anyway.
         if not key_pressed:
-            self.state.process_key(None)
+            self.state.process_key(0)
 
     def render_calcs(self):
         """Perform any calculations related to rendering."""
@@ -316,13 +316,13 @@ class CursesDisplay(object):
                 else:
                     self._footer_roll_index += 1
                     footer_roll_index = max(0, self._footer_roll_index)
-                    footer_roll_index /= 10
+                    footer_roll_index //= 10
                     # Double the string length so that we always uniformly roll
                     # even in the case the entire string length is less than the terminal width.
                     # Also, add a border to easily identify the end.
                     long_str = 2 * (long_str + " | ")
                     text = list(long_str)
-                    for _ in xrange(footer_roll_index):
+                    for _ in range(footer_roll_index):
                         text.append(text.pop(0))
                     text = "".join(text)
                     text = text[0:ncols]
@@ -384,7 +384,7 @@ class CursesDisplay(object):
         title_start_row = 1
         self._render_text(win,
                           title_start_row,
-                          (cols/2) - (len(prompt)/2) - 1,
+                          (cols//2) - (len(prompt)//2) - 1,
                           prompt,
                           cols-3,
                           uc.A_BOLD)
@@ -406,7 +406,7 @@ class CursesDisplay(object):
                      is_active,
                      centered=False):
         n_elems = len(list)
-        start_entry_i = common.clamp(selected_i - n_rows/2,
+        start_entry_i = common.clamp(selected_i - n_rows//2,
                                      0, max(n_elems-n_rows, 0))
         end_entry_i = start_entry_i + n_rows
         display_list = list[start_entry_i:end_entry_i]
@@ -421,8 +421,8 @@ class CursesDisplay(object):
 
     def _render_text(self, win, row, col, text, n_cols, style, centered=False):
         if centered:
-            w2 = (n_cols-col)/2
-            n2 = len(text)/2
+            w2 = (n_cols-col)//2
+            n2 = len(text)//2
             uc.mvwaddnstr(win, row, col+w2-n2, text, n_cols, style)
         else:
             uc.mvwaddnstr(win, row, col, text, n_cols, style)
@@ -445,7 +445,7 @@ class CursesDisplay(object):
         return [w.window for w in self._windows.values()]
 
     def get_panels(self):
-        return self._panels.values()
+        return list(self._panels.values())
 
     @property
     def _rows(self):
@@ -458,10 +458,10 @@ class CursesDisplay(object):
     @property
     def _window_sizes(self):
         user = (self._rows-2,
-                self._cols/4,
+                self._cols//4,
                 0,
                 0)
-        tracks = (self._rows*2/3,
+        tracks = (self._rows*2//3,
                   self._cols-(user[1])-1,
                   0,
                   user[1]+user[3])
@@ -469,19 +469,19 @@ class CursesDisplay(object):
                   tracks[1],
                   tracks[0],
                   tracks[3])
-        search = (self._rows*8/10,
-                  self._cols*8/10,
-                  self._rows/10,
-                  self._cols/10)
-        select_device = (self._rows*6/10,
-                         self._cols*6/10,
-                         self._rows*2/10,
-                         self._cols*2/10)
+        search = (self._rows*8//10,
+                  self._cols*8//10,
+                  self._rows//10,
+                  self._cols//10)
+        select_device = (self._rows*6//10,
+                         self._cols*6//10,
+                         self._rows*2//10,
+                         self._cols*2//10)
 
-        popup = (self._rows/4,
-                   self._cols/4,
-                   self._rows*3/8,
-                   self._cols*3/8)
+        popup = (self._rows//4,
+                   self._cols//4,
+                   self._rows*3//8,
+                   self._cols*3//8)
 
         return {
             "user": user,

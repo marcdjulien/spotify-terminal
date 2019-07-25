@@ -79,7 +79,7 @@ if __name__ == '__main__':
 
     # Display premium warning.
     if not api.is_premium():
-        print "This is not a Premium account. Some features may not work."
+        print("This is not a Premium account. Some features may not work.")
         time.sleep(3)
 
     # Create Spotify state.

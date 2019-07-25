@@ -68,8 +68,8 @@ class Track(SpotifyObject):
     def str(self, cols):
         # Account for 4 spaces.
         nchrs = cols - 4
-        ar_chrs = nchrs/3
-        al_chrs = nchrs/3
+        ar_chrs = nchrs//3
+        al_chrs = nchrs//3
         tr_chrs = nchrs - al_chrs - ar_chrs
         fmt = "%{0}.{0}s  %{1}.{1}s  %{2}.{2}s".format(tr_chrs, al_chrs, ar_chrs)
         return fmt % (self.track_tuple[0],
@@ -107,8 +107,8 @@ class Album(SpotifyObject):
     def str(self, cols):
         # Account for 4 spaces.
         nchrs = cols - 4
-        tr_chrs = 2*nchrs/4
-        ty_chrs = nchrs/4
+        tr_chrs = 2*nchrs//4
+        ty_chrs = nchrs//4
         ar_chrs = nchrs - tr_chrs - ty_chrs
         fmt = "%{0}.{0}s  %{1}.{1}s  %{2}.{2}s".format(tr_chrs, ty_chrs, ar_chrs)
         return fmt % (self['name'], self.extra_info, self.artists)
