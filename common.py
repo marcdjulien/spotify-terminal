@@ -30,7 +30,7 @@ def catch_exceptions(func):
     return wrapper
 
 
-def async(func):
+def asynchronously(func):
     """Decorator to execute a function asynchronously."""
     @catch_exceptions
     def wrapper(*args, **kwargs):

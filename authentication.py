@@ -6,9 +6,9 @@ import json
 import os
 import requests
 import struct
-import urllib
+import urllib.request, urllib.parse, urllib.error
 import webbrowser
-from BaseHTTPServer import BaseHTTPRequestHandler, HTTPServer
+from http.server import BaseHTTPRequestHandler, HTTPServer
 from threading import Thread
 
 import common
@@ -135,7 +135,7 @@ class Authenticator(object):
             "response_type": "code",
             "show_dialog": True
         }
-        return "https://accounts.spotify.com/authorize" + "?" + urllib.urlencode(params)
+        return "https://accounts.spotify.com/authorize" + "?" + urllib.parse.urlencode(params)
 
     def _token_url(self):
         return "https://accounts.spotify.com/api/token"
