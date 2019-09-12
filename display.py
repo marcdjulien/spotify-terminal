@@ -160,7 +160,7 @@ class CursesDisplay(object):
 
         # If we didn't press a key, kick the state anyway.
         if not key_pressed:
-            self.state.process_key(0)
+            self.state.process_key(None)
 
     def render_calcs(self):
         """Perform any calculations related to rendering."""
@@ -257,8 +257,8 @@ class CursesDisplay(object):
                           uc.A_NORMAL)
 
         # Show the playlists.
-        playlists = [str(playlist) for playlist in self.state.main_menu['user']]
-        selected_i = self.state.main_menu["user"].i
+        playlists = [str(playlist) for playlist in self.state.user_list]
+        selected_i = self.state.user_list.i
         playlist_start_line = display_name_start_line + 2
         self._render_list(win,
                           playlists,
@@ -276,12 +276,12 @@ class CursesDisplay(object):
         # Show the title of the context.
         title_start_row = 1
         self._render_text(win, title_start_row, 2,
-                      self.state.main_menu['tracks'].header, cols-3, uc.A_BOLD)
+                      self.state.tracks_list.header, cols-3, uc.A_BOLD)
 
         # Show the tracks.
-        selected_i = self.state.main_menu['tracks'].i
+        selected_i = self.state.tracks_list.i
         track_start_line = title_start_row + 2
-        tracks = [track.str(cols-3) for track in self.state.main_menu['tracks']]
+        tracks = [track.str(cols-3) for track in self.state.tracks_list]
         self._render_list(win, tracks, track_start_line, rows-4,
                           2, cols-3, selected_i, self.is_active_window("tracks"))
 
@@ -298,8 +298,8 @@ class CursesDisplay(object):
         device_info = "{} ({}%)".format(self.state.current_device, self.state.volume)
         self._render_text(win, 7, 2, device_info, cols-3, uc.A_NORMAL)
 
-        for i, action in enumerate(self.state.main_menu["player"]):
-            if (i == self.state.main_menu['player'].i) and self.is_active_window("player"):
+        for i, action in enumerate(self.state.player_list):
+            if (i == self.state.player_list.i) and self.is_active_window("player"):
                 style = uc.A_BOLD | uc.A_STANDOUT
             else:
                 style = uc.A_NORMAL
@@ -324,7 +324,7 @@ class CursesDisplay(object):
                          text[self.state.get_cursor_i()],
                          uc.A_STANDOUT)
         else:
-            entry = self.state.current_menu.get_current_list_entry()
+            entry = self.state.current_state.get_list().get_current_entry()
             if entry:
                 ncols = self._cols-1
                 short_str = entry.str(ncols)
@@ -367,12 +367,12 @@ class CursesDisplay(object):
         title_start_row = 1
         self._render_text(win,
                           title_start_row, 2,
-                          self.state.search_menu["search_results"].header,
+                          self.state.search_list.header,
                           n_display_cols, uc.A_BOLD)
 
         # Show the results.
-        results = [r.str(n_display_cols) for r in self.state.search_menu["search_results"]]
-        selected_i = self.state.search_menu.get_current_list().i
+        results = [r.str(n_display_cols) for r in self.state.search_list]
+        selected_i = self.state.search_list.i
         self._render_list(win,
                           results,
                           3, rows-4,
@@ -393,14 +393,14 @@ class CursesDisplay(object):
                           cols-3,
                           uc.A_BOLD)
 
-        selected_i = self.state.select_device_menu.get_current_list().i
-        self._render_list(win, self.state.select_device_menu["devices"], 3, rows-4, 2, cols-3, selected_i, self.is_active_window("select_device"))
+        selected_i = self.state.device_list.i
+        self._render_list(win, self.state.device_list, 3, rows-4, 2, cols-3, selected_i, self.is_active_window("select_device"))
 
     def render_popup_panel(self):
         win, rows, cols = self._init_render_window("popup")
         uc.box(win)\
 
-        current_popup_list = self.state.current_popup_menu.get_current_list()
+        current_popup_list = self.state.current_state.get_list()
 
         # Show the title of the context.
         prompt = current_popup_list.header
@@ -455,14 +455,11 @@ class CursesDisplay(object):
             return window_name == "search_results"
         elif self.state.in_select_device_menu():
             return window_name == "select_device"
-        elif self.state.is_in_state(self.state.ADD_TO_PLAYLIST_CONFIRM_PLAYLIST) or \
+        elif self.state.is_in_state(self.state.a2p_confirm_state) or \
                 self.state.is_selecting_artist():
             return window_name == "popup"
         else:
-            return self.state.main_menu.get_current_list().name == window_name
-
-    def get_cur_window(self):
-        return self._ordered_windows[self.state.main_menu.list_i]
+            return self.state.current_state.get_list().name == window_name
 
     def get_windows(self):
         return [w.window for w in self._windows.values()]

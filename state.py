@@ -25,16 +25,6 @@ class SpotifyState(object):
 
     User input will alter this state.
     """
-    # Different states.
-    MAIN_MENU_STATE, \
-        SEARCH_MENU_STATE, \
-        DEVICE_MENU_STATE, \
-        LOAD_STATE, \
-        EXIT_STATE, \
-        ADD_TO_PLAYLIST_SELECT_PLAYLIST, \
-        ADD_TO_PLAYLIST_CONFIRM_PLAYLIST, \
-        SELECT_ARTIST = range(8)
-
     # Attributes to save between runs.
     PICKLE_ATTRS = [
         "command_history",
@@ -86,27 +76,13 @@ class SpotifyState(object):
         ]
         """All Periodics."""
 
-        self.main_menu = ListCollection("main",
-                                        [List("user"),
-                                         List("tracks"),
-                                         List("player")])
-
-        self.search_menu = ListCollection("search",
-                                          [List("search_results")])
-
-        self.select_device_menu = ListCollection("select_device",
-                                                 [List("devices")])
-
-        self.confirm_menu = ListCollection("confirm",
-                                           [List("confirm", header="Are you sure?")])
-
-        self.artist_menu = ListCollection("select_artist",
-                                          [List("artists", header="Select an artist")])
-
-        self.current_menu = self.main_menu
-        """The current model that we are acting on."""
-
-        self.current_popup_menu = self.confirm_menu
+        self.user_list = List("user")
+        self.tracks_list = List("tracks")
+        self.player_list = List("player")
+        self.search_list = List("search_results", header="Search")
+        self.device_list = List("devices")
+        self.confirm_list = List("confirm", header="Are you sure?")
+        self.artist_list = List("artists", header="Select an artist")
 
         self.previous_tracks = []
         """Keeps track of previously displayed Tracks."""
@@ -166,17 +142,31 @@ class SpotifyState(object):
         }
         """Dictionary of commands and their execution functions."""
 
-        self.current_state = self.MAIN_MENU_STATE
+        self.current_state = None
         """Current state of the applicaiton."""
 
-        self.creating_command = False
-        """Whether we're typing a command or not."""
+        self.prev_state = None
+        """Previous state of the applicaiton."""
 
         self.futures = []
         """List of futures to execute."""
 
         self.last_update_time = time.time()
         """The last time we were called to update."""
+
+        # Build the state machine and transition to the first state.
+        start_state = self.build_state_machine()
+        self.switch_to_state(self.build_state_machine())
+
+    def switch_to_state(self, new_state):
+        """Transition to a new State.
+
+        Args:
+            new_state (State): The new State to transition to.
+        """
+        logger.debug("State transition: %s -> %s", self.current_state, new_state)
+        self.prev_state = self.current_state
+        self.current_state = new_state
 
     def save_state(self):
         """Save the state to disk."""
@@ -209,7 +199,7 @@ class SpotifyState(object):
             exit(1)
 
         # Initialize PlayerActions.
-        self.main_menu['player'].update_list([
+        self.player_list.update_list([
             PlayerAction("(S)", self._toggle_shuffle),
             PlayerAction("<< ", self._play_previous),
             PlayerAction("(P)", self._toggle_play),
@@ -219,8 +209,8 @@ class SpotifyState(object):
             PlayerAction(" ++", self._increase_volume),
         ])
 
-        self.confirm_menu['confirm'].update_list([Option("Yes"),
-                                                  Option("No")])
+        self.confirm_list.update_list([Option("Yes"),
+                                       Option("No")])
 
         # Get current player state.
         player_state = self.sync_player_state()
@@ -240,7 +230,7 @@ class SpotifyState(object):
             "owner_id": self.api.get_id()
         })
         playlists.insert(0, saved)
-        self.main_menu['user'].update_list(tuple(playlists))
+        self.user_list.update_list(tuple(playlists))
 
         # Initialize track list.
         if player_state:
@@ -249,8 +239,7 @@ class SpotifyState(object):
         else:
             if not self.restore_previous_tracks(0):
                 logger.debug("Loading the Saved track list")
-                self._set_playlist(self.main_menu['user'][0])
-
+                self._set_playlist(self.user_list[0])
 
     def sync_player_state(self):
         player_state = self.api.get_player_state()
@@ -277,22 +266,21 @@ class SpotifyState(object):
 
     def sync_available_devices(self):
         self.available_devices = self.api.get_devices()
-        self.select_device_menu['devices'].update_list(self.available_devices,
-                                                       reset_index=False)
+        self.device_list.update_list(self.available_devices,
+                                     reset_index=False)
 
     def process_key(self, key):
-        if self.is_loading():
-            # In the loading state.
-            self._update_loading_state(key)
-        elif self.is_adding_track_to_playlist():
-            # Adding a Track to a Playlist
-            self._update_adding_track_to_playlist_state(key)
-        elif self.is_selecting_artist():
-            # Selecting an Artist
-            self._update_selecting_artist(key)
-        else:
-            # In the main screen.
-            self._update_main_state(key)
+        action = self.current_state.process_key(key)
+        if action:
+            # Kinda gross, but easiest way to deal with passing in the key that was presed
+            # and not forcing all functions to take in a positional argument.
+            try:
+                action(key)
+            except TypeError:
+                action()
+
+        if key is not None and action is None:
+            logger.info("Unrecognized key: %d", key)
 
         self._run_calcs()
 
@@ -301,320 +289,9 @@ class SpotifyState(object):
         if key in self.ENTER_KEYS:
             self.sync_period.call_in(5)
 
-    def _update_loading_state(self, key):
-        # Get the current Future.
-        future = self.futures[0]
-
-        # If it's done, leave the LOAD_STATE.
-        # But if there are more Futures to execute, continue to run them.
-        if future.is_done():
-            self.futures.pop(0)
-            if not self.futures:
-                self.current_state = future.get_end_state() or self.MAIN_MENU_STATE
-            else:
-                self.futures[0].run()
-
-    def _update_adding_track_to_playlist_state(self, key):
-        if key:
-            logger.info(key)
-        if self.current_state == self.ADD_TO_PLAYLIST_SELECT_PLAYLIST:
-            if key == uc.KEY_UP:
-                self.main_menu["user"].decrement_index()
-            elif key == uc.KEY_DOWN:
-                self.main_menu["user"].increment_index()
-            elif key in self.CANCEL_KEYS:
-                self.track_to_add = None
-                self.playlist_to_add = None
-                self.current_state = self.MAIN_MENU_STATE
-            elif key in self.ENTER_KEYS:
-                self.playlist_to_add = self.main_menu.get_current_list_entry()
-                self.current_state = self.ADD_TO_PLAYLIST_CONFIRM_PLAYLIST
-
-        elif self.current_state == self.ADD_TO_PLAYLIST_CONFIRM_PLAYLIST:
-            if key == uc.KEY_UP:
-                self.confirm_menu["confirm"].decrement_index()
-            elif key == uc.KEY_DOWN:
-                self.confirm_menu["confirm"].increment_index()
-            elif key in self.CANCEL_KEYS:
-                self.track_to_add = None
-                self.playlist_to_add = None
-                self.current_state = self.MAIN_MENU_STATE
-            elif key in self.ENTER_KEYS:
-                entry = self.confirm_menu.get_current_list_entry()
-                if entry.get().lower() == "yes":
-                    self._add_track_to_playlist(self.track_to_add, self.playlist_to_add)
-                else:
-                    self.track_to_add = None
-                    self.playlist_to_add = None
-                self.current_state = self.MAIN_MENU_STATE
-
-    def _update_selecting_artist(self, key):
-        if self.current_state == self.SELECT_ARTIST:
-            if key == uc.KEY_UP:
-                self.artist_menu["artists"].decrement_index()
-            elif key == uc.KEY_DOWN:
-                self.artist_menu["artists"].increment_index()
-            elif key in self.CANCEL_KEYS:
-                self.current_state = self.MAIN_MENU_STATE
-            elif key in self.ENTER_KEYS:
-                artist = self.artist_menu.get_current_list_entry()
-                if artist:
-                    self._set_artist(artist)
-                    self.current_state = self.MAIN_MENU_STATE
-
-    def _update_main_state(self, key):
-        if key == uc.KEY_LEFT:
-            if self.is_creating_command():
-                self.command_cursor_i -= 1
-            elif self.in_main_menu():
-                if self.main_menu.get_current_list().name == "player":
-                    if self.main_menu.get_current_list().get_index() == 0:
-                        self.main_menu.list_i = 0
-                    else:
-                        self.main_menu.get_current_list().decrement_index()
-                else:
-                    self.main_menu.list_i = 0
-
-        elif key == uc.KEY_RIGHT:
-            if self.is_creating_command():
-                self.command_cursor_i += 1
-            elif self.in_main_menu():
-                if self.main_menu.get_current_list().name == "player":
-                    self.main_menu.get_current_list().increment_index()
-                elif self.main_menu.get_current_list().name in ["user", "tracks"]:
-                    self.main_menu.increment_list()
-            elif self.in_search_menu():
-                entry = self.search_menu.get_current_list_entry()
-                if entry['type'] == 'album':
-                    self.current_state = self.MAIN_MENU_STATE
-                    self._set_album(entry)
-                elif entry['type'] == 'artist':
-                    albums = self.api.get_albums_from_artist(entry)
-                    if albums:
-                        self.search_menu['results'].update_list(albums)
-
-        elif key == uc.KEY_UP:
-            if self.is_creating_command():
-                if self.command_history:
-                    self.command_history_i = common.clamp(self.command_history_i-1,
-                                                          0,
-                                                          len(self.command_history)-1)
-                    self._set_command_query(self.command_history[self.command_history_i])
-            elif self.in_main_menu():
-                if self.main_menu.get_current_list().name == "player":
-                    self.main_menu.decrement_list()
-                else:
-                    self.main_menu.get_current_list().decrement_index()
-            elif self.in_search_menu() or self.in_select_device_menu():
-                self.current_menu.get_current_list().decrement_index()
-
-        elif key == uc.KEY_DOWN:
-            if self.is_creating_command():
-                if self.command_history:
-                    self.command_history_i = common.clamp(self.command_history_i+1,
-                                                          0,
-                                                          len(self.command_history)-1)
-                    self._set_command_query(self.command_history[self.command_history_i])
-            elif self.in_main_menu():
-                if self.main_menu.get_current_list().name == "player":
-                    self.main_menu.increment_list()
-                elif self.main_menu.get_current_list().name == "tracks":
-                    self.main_menu.get_current_list().increment_index()
-                else:
-                    self.main_menu.get_current_list().increment_index()
-            elif self.in_search_menu() or self.in_select_device_menu():
-                self.current_menu.get_current_list().increment_index()
-
-        elif key in self.BACKSPACE_KEYS:
-            if self.is_creating_command():
-                if self.command_cursor_i > 0:
-                    self.get_command_query().pop(self.command_cursor_i - 1)
-                    self.command_cursor_i -= 1
-                else:
-                    self.current_state = self.MAIN_MENU_STATE
-                    self.creating_command = False
-            elif self.in_main_menu():
-                self.restore_previous_tracks()
-            elif self.in_search_menu():
-                self.current_state = self.MAIN_MENU_STATE
-            elif self.in_select_device_menu():
-                self.current_state = self.MAIN_MENU_STATE
-
-        elif key == uc.KEY_NPAGE:
-            if not self.is_creating_command():
-                self.current_menu.get_current_list().increment_index(15)
-
-        elif key == uc.KEY_PPAGE:
-            if not self.is_creating_command():
-                self.current_menu.get_current_list().decrement_index(15)
-
-        # ASCII character pressed
-        elif (0 <= key <= 256) or (key in self.config):
-            char = chr(key)
-
-            if self.is_creating_command():
-                if 32 <= key and key <= 126:
-                    self.get_command_query().insert(self.command_cursor_i, char)
-                    self.command_cursor_i += 1
-                elif key in self.ENTER_KEYS:
-                    self._process_command(self.get_command_query())
-                return
-
-            elif key in [uc.KEY_EXIT, 27]:
-                if self.in_search_menu():
-                    self.current_state = self.MAIN_MENU_STATE
-                elif self.in_select_device_menu():
-                    self.current_state = self.MAIN_MENU_STATE
-                elif self.is_creating_command():
-                    self.current_state = self.MAIN_MENU_STATE
-
-            elif char in ['/', ':', '"']:
-                # Start creating command
-                if not self.is_creating_command():
-                    if char == '"':
-                        self._set_command_query("\"\"")
-                        self.command_cursor_i = 1
-                    else:
-                        self._set_command_query(char)
-                        self.command_cursor_i = 1
-                    self.creating_command = True
-
-            elif key == self.config.find_next:
-                if self.prev_command[0] in ["find"]:
-                    i = int(self.prev_command[1])
-                    command = self.prev_command
-                    command[1] = str(i + 1)
-                    self._process_command(" ".join(command))
-
-            elif key == self.config.find_previous:
-                if self.prev_command[0] in ["find"]:
-                    i = int(self.prev_command[1])
-                    command = self.prev_command
-                    command[1] = str(i - 1)
-                    self._process_command(" ".join(command))
-
-            elif key == self.config.add_track:
-                entry = self.current_menu.get_current_list_entry()
-                if entry['type'] == 'track':
-                    self.track_to_add = entry
-                    self.main_menu.set_current_list('user')
-                    self.main_menu['user'].set_index(0)
-                    self.current_state = self.ADD_TO_PLAYLIST_SELECT_PLAYLIST
-
-            elif key == self.config.show_devices:
-                self.current_state = self.DEVICE_MENU_STATE
-                self.sync_devices.activate()
-
-            elif key == self.config.refresh:
-                self.sync_player_state()
-
-            elif key == self.config.goto_artist:
-                entry = self.current_menu.get_current_list_entry()
-                if entry['type'] == 'track':
-                    artists = entry['artists']
-                    if len(artists) == 1:
-                        self._set_artist(artists[0])
-                    else:
-                        self._set_choose_artist(artists)
-
-            elif key == self.config.current_artist:
-                entry = self.currently_playing_track
-                if entry:
-                    artists = entry['artists']
-                    if len(artists) == 1:
-                        self._set_artist(artists[0])
-                    else:
-                        self._set_choose_artist(artists)
-
-            elif key == self.config.goto_album:
-                entry = self.current_menu.get_current_list_entry()
-                if entry['type'] == 'track':
-                    album = entry['album']
-                    self._set_album(album)
-                elif entry['type'] == 'album':
-                    self._set_album(entry)
-
-            elif key == self.config.current_album:
-                entry = self.currently_playing_track
-                if entry:
-                    album = entry['album']
-                    self._set_album(album)
-
-            elif key == self.config.current_context:
-                state = self.api.get_player_state()
-                if state:
-                    context = state['context']
-                    self._set_context(context)
-
-            elif char == '\t':
-                if self.current_context and self.current_menu.get_current_list().name == "tracks":
-                    if common.is_all_tracks_context(self.current_context):
-                        artist = self.current_context['artist']
-                        self._set_artist(artist)
-                    elif self.current_context.get("type") == "artist":
-                        self._set_artist_all_tracks(self.current_context)
-
-            elif key == self.config.play:
-                self._toggle_play()
-
-            elif key == self.config.next_track:
-                self._play_next()
-
-            elif key == self.config.previous_track:
-                self._play_previous()
-
-            elif self.config.is_volume_key(key):
-                config_param = self.config.get_config_param(key)
-                volume = 10*int(config_param.split("_")[1])
-                self._process_command("volume {}".format(volume))
-
-            elif key == self.config.volume_down:
-                self._process_command("volume {}".format(self.volume - 5))
-
-            elif key == self.config.volume_up:
-                self._process_command("volume {}".format(self.volume + 5))
-
-            elif key in self.ENTER_KEYS:
-                if self.in_search_menu():
-                    entry = self.search_menu.get_current_list_entry()
-                    if entry:
-                        if entry['type'] == 'artist':
-                            self._set_artist(entry)
-                        elif entry['type'] == 'album':
-                            self._set_album(entry)
-                        elif entry['type'] == 'track':
-                            self._play(entry, context=None)
-                    self.current_state = self.MAIN_MENU_STATE
-
-                elif self.in_main_menu():
-                    if self.main_menu.get_current_list().name == "user":
-                        playlist = self.main_menu.get_current_list_entry()
-                        if playlist:
-                            self._set_playlist(playlist)
-                    elif self.main_menu.get_current_list().name == "tracks":
-                        entry = self.main_menu.get_current_list_entry()
-                        if entry:
-                            if entry['type'] == 'artist':
-                                self._set_artist(entry)
-                            elif entry['type'] == 'album':
-                                self._set_album(entry)
-                            elif entry['type'] == 'track':
-                                self._play(entry, context=self.current_context)
-                    elif self.main_menu.get_current_list().name == "player":
-                        self.main_menu.get_current_list_entry().action()
-
-                elif self.in_select_device_menu():
-                    new_device = self.select_device_menu.get_current_list_entry()
-                    if new_device:
-                        self._set_player_device(new_device, self.playing)
-                        self.current_state = self.MAIN_MENU_STATE
-
-        else:
-            if key is not None:
-                logger.debug("Unregistered key: %d", key)
-
     def _run_calcs(self):
         """Run any calculations that we need to do at the end of the update."""
+        #TODO: Should be handled in the CommandProcessor
         self.command_cursor_i = common.clamp(self.command_cursor_i,
                                              0,
                                              len(self.get_command_query()))
@@ -623,24 +300,11 @@ class SpotifyState(object):
         for periodic in self.periodics:
             periodic.update(time.time())
 
-        # Set our menu.
-        if self.in_search_menu():
-            self.current_menu = self.search_menu
-        elif self.in_select_device_menu():
-            self.current_menu = self.select_device_menu
-        else:
-            self.current_menu = self.main_menu
-
         # Make sure sync_devices is only active when selecting a device.
+        # TODO: Should be handled on state changes
         if not self.in_select_device_menu():
             if self.sync_devices.is_active():
                 self.sync_devices.deactivate()
-
-        # Set our popup menu.
-        if self.is_adding_track_to_playlist():
-            self.current_popup_menu = self.confirm_menu
-        elif self.is_selecting_artist():
-            self.current_popup_menu = self.artist_menu
 
         # Calculate track progress.
         time_delta = 1000*(time.time() - self.last_update_time)
@@ -665,13 +329,11 @@ class SpotifyState(object):
             command_input = "".join(command_input).strip()
 
         if not command_input:
-            self.creating_command = False
             return
 
         # Convert special commands.
         if command_input[0] == ":":
             if command_input == ":":
-                self.creating_command = False
                 return
             elif command_input.lower().startswith(":q"):
                 command_string = "exit"
@@ -679,7 +341,6 @@ class SpotifyState(object):
                 command_string = command_input[1::]
         elif command_input[0] == '"':
             if command_input == '"' or command_input == '""':
-                self.creating_command = False
                 return
             else:
                 command_string = "search {}".format(command_input[1::])
@@ -712,7 +373,6 @@ class SpotifyState(object):
 
         self.command_history.append(command_input)
         self.command_history_i = len(self.command_history)
-        self.creating_command = False
 
     def _execute_search(self, *query):
         query = " ".join(query)
@@ -725,20 +385,22 @@ class SpotifyState(object):
             self.search_menu["search_results"].update_list([])
             self.search_menu["search_results"].header = "No results found for \"{}\"".format(query)
 
-        self.current_state = self.SEARCH_MENU_STATE
+        self.switch_to_state(self.search_state)
 
     def _execute_find(self, i, *query):
         query = " ".join(query)
         logger.debug("find:%s", query)
-        cur_list = self.current_menu.get_current_list()
+        search_list = self.prev_state.get_list()
 
         found = []
-        for index, item in enumerate(cur_list):
+        for index, item in enumerate(search_list):
             if query.lower() in str(item).lower():
                 found.append(index)
 
         if found:
-            self.current_menu.get_current_list().set_index(found[int(i) % len(found)])
+           search_list.set_index(found[int(i) % len(found)])
+
+        self.switch_to_state(self.prev_state)
 
     def _execute_shuffle(self, state):
         state = state.lower().strip()
@@ -767,7 +429,7 @@ class SpotifyState(object):
         self.api.pause()
 
     def _execute_exit(self):
-        self.current_state = self.EXIT_STATE
+        self.current_state = self.exit_state
 
     def _play(self, track, context):
         context_uri = None
@@ -785,16 +447,16 @@ class SpotifyState(object):
         if context:
             if context['uri'] == common.SAVED_TRACKS_CONTEXT_URI:
                 uris = [t['uri'] for t in
-                        self.api.get_tracks_from_playlist(self.main_menu['user'][0])]
-                track_id = self.main_menu['tracks'].i
+                        self.api.get_tracks_from_playlist(self.user_list[0])]
+                track_id = self.tracks_list.i
             elif context.get('type') == 'artist':
                 uris = [s['uri']
                         for s in self.api.get_selections_from_artist(self.current_context)
                         if s['type'] == 'track']
-                track_id = self.main_menu['tracks'].i
+                track_id = self.tracks_list.i
             elif common.is_all_tracks_context(context):
-                uris = [t['uri'] for t in self.main_menu['tracks'].list]
-                track_id = self.main_menu['tracks'].i
+                uris = [t['uri'] for t in self.tracks_list.list]
+                track_id = self.tracks_list.i
             else:
                 context_uri = context['uri']
 
@@ -859,27 +521,23 @@ class SpotifyState(object):
 
     def _set_playlist(self, playlist):
         future = Future(target=(self.api.get_tracks_from_playlist, playlist),
-                        result=(self._set_tracks, (playlist, playlist['name'])),
-                        end_state=self.MAIN_MENU_STATE)
+                        result=(self._choose_tracks, (playlist, playlist['name'])))
         self.execute_future(future)
 
     def _set_artist(self, artist):
         future = Future(target=(self.api.get_selections_from_artist, artist),
-                        result=(self._set_tracks, (artist, artist['name'])),
-                        end_state=self.MAIN_MENU_STATE)
+                        result=(self._choose_tracks, (artist, artist['name'])))
         self.execute_future(future)
 
     def _set_artist_all_tracks(self, artist):
         future = Future(target=(self.api.get_all_tracks_from_artist, artist),
-                        result=(self._set_tracks, (common.get_all_tracks_context(artist),
-                                                   "All tracks from " + artist['name'])),
-                        end_state=self.MAIN_MENU_STATE)
+                        result=(self._choose_tracks, (common.get_all_tracks_context(artist),
+                                                   "All tracks from " + artist['name'])))
         self.execute_future(future)
 
     def _set_album(self, album):
         future = Future(target=(self.api.get_tracks_from_album, album),
-                        result=(self._set_tracks, (album, album['name'])),
-                        end_state=self.MAIN_MENU_STATE)
+                        result=(self._choose_tracks, (album, album['name'])))
         self.execute_future(future)
 
     def _set_context(self, context):
@@ -899,28 +557,27 @@ class SpotifyState(object):
         context = self.api.convert_context(context)
 
         future = Future(target=(target_api_call, context),
-                        result=(self._set_tracks, (context, context['name'])),
-                        end_state=self.MAIN_MENU_STATE)
+                        result=(self._choose_tracks, (context, context['name'])))
         self.execute_future(future)
 
-    def _set_tracks(self, tracks, context, header):
+    def _choose_tracks(self, tracks, context, header):
         with self.lock:
             # Save the track listing.
             self.previous_tracks.append((tracks, context, header))
 
             # Set the new track listing.
             self.current_context = context
-            self.main_menu['tracks'].update_list(tracks)
-            self.main_menu['tracks'].header = header
+            self.tracks_list.update_list(tracks)
+            self.tracks_list.header = header
 
             # Go to the tracks pane.
-            self.main_menu.set_current_list('tracks')
-            self.main_menu['tracks'].set_index(0)
+            self.tracks_list.set_index(0)
+            self.switch_to_state(self.tracks_state)
 
-    def _set_choose_artist(self, artists):
+    def _choose_artist(self, artists):
         self.artist_menu["artists"].update_list(artists)
         self.artist_menu["artists"].set_index(0)
-        self.current_state = self.SELECT_ARTIST
+        self.switch_to_state(self.select_artist_state)
 
     def _set_player_device(self, new_device, play):
         self.sync_player_state()
@@ -932,11 +589,11 @@ class SpotifyState(object):
 
     def _set_player_repeat(self, state):
         self.repeat = self._get_repeat_enum(state)
-        self.main_menu['player'][4].title = "({})".format(['x', 'o', '1'][self.repeat])
+        self.player_list[4].title = "({})".format(['x', 'o', '1'][self.repeat])
 
     def _set_player_shuffle(self, state):
         self.shuffle = state
-        self.main_menu['player'][0].title = "({})".format(
+        self.player_list[0].title = "({})".format(
             {True: "S", False: "s"}[self.shuffle]
         )
 
@@ -946,35 +603,34 @@ class SpotifyState(object):
             for _ in range(i+1):
                 last = self.previous_tracks.pop()
 
-            self._set_tracks(*last)
+            self._choose_tracks(*last)
             return True
         else:
             return False
 
     def is_creating_command(self):
-        return self.creating_command
+        return self.is_in_state(self.creating_command_state)
 
     def in_search_menu(self):
-        return self.is_in_state(self.SEARCH_MENU_STATE)
+        return self.is_in_state(self.search_state)
 
     def in_main_menu(self):
-        return self.is_in_state(self.MAIN_MENU_STATE)
+        return self.is_in_state(self.tracks_state, self.user_state, self.player_state)
 
     def in_select_device_menu(self):
-        return self.is_in_state(self.DEVICE_MENU_STATE)
+        return self.is_in_state(self.device_state)
 
     def is_loading(self):
-        return self.is_in_state(self.LOAD_STATE)
+        return self.is_in_state(self.loading_state)
 
     def is_adding_track_to_playlist(self):
-        return self.is_in_state(self.ADD_TO_PLAYLIST_SELECT_PLAYLIST,
-                                self.ADD_TO_PLAYLIST_CONFIRM_PLAYLIST)
+        return self.is_in_state(self.a2p_select_state, self.a2p_confirm_state)
 
     def is_selecting_artist(self):
-        return self.is_in_state(self.SELECT_ARTIST)
+        return self.is_in_state(self.select_artist_state)
 
     def is_running(self):
-        return not self.is_in_state(self.EXIT_STATE)
+        return not self.is_in_state(self.exit_state)
 
     def is_in_state(self, *states):
         return self.current_state in states
@@ -997,7 +653,7 @@ class SpotifyState(object):
         logger.debug("Adding Future: %s", future)
         self.futures.append(future)
         if not self.is_loading():
-            self.current_state = self.LOAD_STATE
+            self.switch_to_state(self.loading_state)
             future.run()
 
     def get_loading_progress(self):
@@ -1006,6 +662,396 @@ class SpotifyState(object):
 
     def get_track_progress(self):
         return self.progress
+
+    def build_state_machine(self):
+        """Builds all of the states and binds all of the keys to alter the State.
+
+        Returns:
+            State: The initial State to start in.
+        """
+        # Common functions used to move around list and states
+        def move_up_current_list():
+            self.current_state.get_list().decrement()
+
+        def move_down_current_list():
+            self.current_state.get_list().increment()
+
+        def switch_to_tracks_state():
+            self.switch_to_state(self.tracks_state)
+
+        def swtch_to_player_state():
+            self.switch_to_state(self.player_state)
+
+        def switch_to_user_state():
+            self.switch_to_state(self.user_state)
+
+        def switch_to_prev_state():
+            self.switch_to_state(self.prev_state)
+
+        #
+        # User State - Handles commands while in the user pane
+        #
+        user_state = State("user", self.user_list)
+        user_state.bind_key(uc.KEY_UP, move_up_current_list)
+        user_state.bind_key(uc.KEY_DOWN, move_down_current_list)
+        user_state.bind_key(uc.KEY_RIGHT, switch_to_tracks_state)
+
+        def enter():
+            playlist = self.user_list.get_current_entry()
+            if playlist:
+                self._set_playlist(playlist)
+        user_state.bind_key(self.ENTER_KEYS, enter)
+
+        self.user_state = user_state
+
+        #
+        # Track State - Handles commands while in the tracks listing pane
+        #
+        tracks_state = State("tracks", self.tracks_list)
+        tracks_state.bind_key(uc.KEY_UP, move_up_current_list)
+        tracks_state.bind_key(uc.KEY_DOWN, move_down_current_list)
+        tracks_state.bind_key(uc.KEY_LEFT, switch_to_user_state)
+        tracks_state.bind_key(uc.KEY_RIGHT, swtch_to_player_state)
+
+        def dec():
+            self.tracks_list.decrement(15)
+        tracks_state.bind_key(uc.KEY_PPAGE, dec)
+
+        def inc():
+            self.tracks_list.increment(15)
+        tracks_state.bind_key(uc.KEY_NPAGE, inc)
+
+        def enter():
+            entry = self.tracks_list.get_current_entry()
+            if entry:
+                if entry['type'] == 'artist':
+                    self._set_artist(entry)
+                elif entry['type'] == 'album':
+                    self._set_album(entry)
+                elif entry['type'] == 'track':
+                    self._play(entry, context=self.current_context)
+        tracks_state.bind_key(self.ENTER_KEYS, enter)
+
+        def add_to_playlist():
+            entry = self.tracks_list.get_current_entry()
+            if entry['type'] == 'track':
+                self.track_to_add = entry
+                self.switch_to_state(self.a2p_select_state)
+        tracks_state.bind_key(self.config.add_track, add_to_playlist)
+
+        def goto_artist():
+            entry = self.tracks_list.get_current_entry()
+            if entry['type'] == 'track':
+                artists = entry['artists']
+                if len(artists) == 1:
+                    self._set_artist(artists[0])
+                else:
+                    self._choose_artist(artists)
+        tracks_state.bind_key(self.config.goto_artist, goto_artist)
+
+        def goto_album():
+            entry = self.tracks_list.get_current_entry()
+            if entry['type'] == 'track':
+                album = entry['album']
+                self._set_album(album)
+            elif entry['type'] == 'album':
+                self._set_album(entry)
+        tracks_state.bind_key(self.config.goto_album, goto_album)
+
+        self.tracks_state = tracks_state
+
+        #
+        # Player State - Handles commands while in the player pane
+        #
+        player_state = State("player", self.player_list)
+        player_state.bind_key(uc.KEY_UP, switch_to_tracks_state)
+        player_state.bind_key(uc.KEY_RIGHT, move_down_current_list)
+        def left():
+            if self.current_state.get_list().i == 0:
+                switch_to_user_state()
+            else:
+                move_up_current_list()
+        player_state.bind_key(uc.KEY_LEFT, left)
+
+        def enter():
+            self.player_list.get_current_entry().action()
+        player_state.bind_key(self.ENTER_KEYS, enter)
+
+        self.player_state = player_state
+
+
+        #
+        # Creaintg Command State - Handles commands while user is typing in a command
+        #
+        creating_command_state = State("creating_command")
+        def left():
+            self.command_cursor_i -= 1
+        def right():
+            self.command_cursor_i += 1
+        creating_command_state.bind_key(uc.KEY_LEFT, left)
+        creating_command_state.bind_key(uc.KEY_RIGHT, right)
+
+        def up():
+            if self.command_history:
+                self.command_history_i = common.clamp(self.command_history_i-1,
+                                                      0,
+                                                      len(self.command_history)-1)
+                self._set_command_query(self.command_history[self.command_history_i])
+        creating_command_state.bind_key(uc.KEY_UP, up)
+
+        def down():
+            if self.command_history:
+                self.command_history_i = common.clamp(self.command_history_i+1,
+                                                      0,
+                                                      len(self.command_history)-1)
+                self._set_command_query(self.command_history[self.command_history_i])
+        creating_command_state.bind_key(uc.KEY_DOWN, down)
+
+        def backspace():
+            if self.command_cursor_i > 0:
+                self.get_command_query().pop(self.command_cursor_i - 1)
+                self.command_cursor_i -= 1
+            else:
+                switch_to_prev_state()
+        creating_command_state.bind_key(self.BACKSPACE_KEYS, backspace)
+
+        def ascii_key(key):
+            char = chr(key)
+            self.get_command_query().insert(self.command_cursor_i, char)
+            self.command_cursor_i += 1
+        creating_command_state.bind_key(list(range(32, 128)), ascii_key)
+
+        def enter():
+            self._process_command(self.get_command_query())
+        creating_command_state.bind_key(self.ENTER_KEYS, enter)
+
+        creating_command_state.bind_key([uc.KEY_EXIT, 27], switch_to_prev_state)
+
+        self.creating_command_state = creating_command_state
+
+        #
+        # Search State - Handles commands while user is searching
+        #
+        search_state = State("search", self.search_list)
+        search_state.bind_key(uc.KEY_UP, move_up_current_list)
+        search_state.bind_key(uc.KEY_DOWN, move_down_current_list)
+        search_state.bind_key(self.BACKSPACE_KEYS + [uc.KEY_EXIT, 27], switch_to_prev_state)
+
+        def right():
+            entry = self.search_list.get_current_entry()
+            if entry['type'] == 'album':
+                self.current_state = tracks_state
+                self._set_album(entry)
+            elif entry['type'] == 'artist':
+                albums = self.api.get_albums_from_artist(entry)
+                if albums:
+                    self.search_menu['results'].update_list(albums)
+        search_state.bind_key(uc.KEY_RIGHT, right)
+
+        def enter():
+            entry = self.search_list.get_current_entry()
+            if entry:
+                if entry['type'] == 'artist':
+                    self._set_artist(entry)
+                elif entry['type'] == 'album':
+                    self._set_album(entry)
+                elif entry['type'] == 'track':
+                    self._play(entry, context=None)
+            self.current_state = tracks_state
+        search_state.bind_key(self.ENTER_KEYS, enter)
+
+        self.search_state = search_state
+
+        #
+        # Device State - Handles commands while user is searching for a device
+        #
+        device_state = State("device", self.device_list)
+        device_state.bind_key(uc.KEY_UP, move_up_current_list)
+        device_state.bind_key(uc.KEY_DOWN, move_down_current_list)
+        device_state.bind_key(self.BACKSPACE_KEYS + [uc.KEY_EXIT, 27], switch_to_prev_state)
+
+        def enter():
+            new_device = self.device_list.get_current_entry()
+            if new_device:
+                self._set_player_device(new_device, self.playing)
+                switch_to_tracks_state()
+        device_state.bind_key(self.ENTER_KEYS, enter)
+
+        self.device_state = device_state
+
+        #
+        # Command commands for all of the main states
+        #
+        main_states = [user_state, tracks_state, player_state]
+
+        bind_to_all(main_states, self.BACKSPACE_KEYS, self.restore_previous_tracks)
+
+        def start_generic_command(key):
+            char = chr(key)
+            self._set_command_query(char)
+            self.command_cursor_i = 1
+            self.switch_to_state(self.creating_command_state)
+        bind_to_all(main_states, [ord('/'), ord(':')], start_generic_command)
+
+        def start_search_command():
+            self._set_command_query("\"\"")
+            self.command_cursor_i = 1
+            self.switch_to_state(self.creating_command_state)
+        bind_to_all(main_states, ord('"'), start_search_command)
+
+        def find_next():
+            if self.prev_command[0] in ["find"]:
+                i = int(self.prev_command[1])
+                command = self.prev_command
+                command[1] = str(i + 1)
+                self._process_command(" ".join(command))
+        bind_to_all(main_states, self.config.find_next, find_next)
+
+        def find_prev():
+            if self.prev_command[0] in ["find"]:
+                i = int(self.prev_command[1])
+                command = self.prev_command
+                command[1] = str(i - 1)
+                self._process_command(" ".join(command))
+        bind_to_all(main_states, self.config.find_previous, find_prev)
+
+        def show_devices():
+            self.switch_to_state(self.device_state)
+            self.sync_devices.activate()
+        bind_to_all(main_states, self.config.show_devices, show_devices)
+
+        bind_to_all(main_states, self.config.refresh, self.sync_player_state)
+
+        def current_artist():
+            entry = self.currently_playing_track
+            if entry:
+                artists = entry['artists']
+                if len(artists) == 1:
+                    self._set_artist(artists[0])
+                else:
+                    self._choose_artist(artists)
+        bind_to_all(main_states, self.config.current_artist, current_artist)
+
+        def current_album():
+            entry = self.currently_playing_track
+            if entry:
+                album = entry['album']
+                self._set_album(album)
+        bind_to_all(main_states, self.config.current_album, current_album)
+
+        def current_context():
+            state = self.api.get_player_state()
+            if state:
+                context = state['context']
+                self._set_context(context)
+        bind_to_all(main_states, self.config.current_context, current_context)
+
+        def all_tracks():
+            if self.current_context:
+                if common.is_all_tracks_context(self.current_context):
+                    artist = self.current_context['artist']
+                    self._set_artist(artist)
+                elif self.current_context.get("type") == "artist":
+                    self._set_artist_all_tracks(self.current_context)
+        bind_to_all(main_states, ord('\t'), all_tracks)
+
+        bind_to_all(main_states, self.config.play, self._toggle_play)
+        bind_to_all(main_states, self.config.next_track, self._play_next)
+        bind_to_all(main_states, self.config.previous_track, self._play_previous)
+
+        def volume():
+            config_param = self.config.get_config_param(key)
+            volume = 10*int(config_param.split("_")[1])
+            self._process_command("volume {}".format(volume))
+        #TODO: fix
+        #bind_to_all(main_states, self.config.volume_keys, volume)
+
+        def volume_down():
+            self._process_command("volume {}".format(self.volume - 5))
+        def volume_up():
+            self._process_command("volume {}".format(self.volume + 5))
+        bind_to_all(main_states, self.config.volume_down, volume_down)
+        bind_to_all(main_states, self.config.volume_up, volume_up)
+
+        #
+        # Loading State - The loading state when the program is making a long query
+        #
+        loading_state = State("loading")
+
+        def loading():
+            # Get the current Future.
+            future = self.futures[0]
+
+            # If it's done, leave the loading_state.
+            # But if there are more Futures to execute, continue to run them.
+            if future.is_done():
+                self.futures.pop(0)
+                if self.futures:
+                    self.futures[0].run()
+        loading_state.set_default_action(loading)
+        self.loading_state = loading_state
+
+
+        #
+        # Adding to Playlist - The collection of states that handle adding a new song to a playlist
+        #
+        # State for selecting which playing to add the track
+        a2p_select_state = State("a2p_select", self.user_list)
+        a2p_select_state.bind_key(uc.KEY_UP, move_up_current_list)
+        a2p_select_state.bind_key(uc.KEY_DOWN, move_down_current_list)
+
+        def cancel():
+            self.track_to_add = None
+            self.playlist_to_add = None
+            switch_to_tracks_state()
+        a2p_select_state.bind_key(self.CANCEL_KEYS, cancel)
+
+        def enter():
+            self.playlist_to_add = self.user_list.get_current_entry()
+            self.swtch_to_player_state(self.a2p_confirm_state)
+        a2p_select_state.bind_key(self.ENTER_KEYS, enter)
+        self.a2p_select_state = a2p_select_state
+
+        # State for confirming yes or no
+        a2p_confirm_state = State("a2p_confirm", self.confirm_list)
+        a2p_confirm_state.bind_key(uc.KEY_UP, move_up_current_list)
+        a2p_confirm_state.bind_key(uc.KEY_DOWN, move_down_current_list)
+        a2p_confirm_state.bind_key(self.CANCEL_KEYS, cancel)
+
+        def enter():
+            entry = self.confirm_list.get_current_entry()
+            if entry.get().lower() == "yes":
+                self._add_track_to_playlist(self.track_to_add, self.playlist_to_add)
+            else:
+                self.track_to_add = None
+                self.playlist_to_add = None
+            switch_to_tracks_state()
+        a2p_confirm_state.bind_key(self.ENTER_KEYS, enter)
+        self.a2p_confirm_state = a2p_confirm_state
+
+        #
+        # Select Artist - State for chossing an artist when there are multiple artist for a track
+        #
+        select_artist_state = State("select_artist", self.artist_list)
+        select_artist_state.bind_key(uc.KEY_UP, move_up_current_list)
+        select_artist_state.bind_key(uc.KEY_DOWN, move_down_current_list)
+        select_artist_state.bind_key(self.CANCEL_KEYS, switch_to_prev_state)
+
+        def enter():
+            artist = self.artist_list.get_current_entry()
+            if artist:
+                self._set_artist(artist)
+                switch_to_prev_state()
+        select_artist_state.bind_key(self.ENTER_KEYS, enter)
+        self.select_artist_state = select_artist_state
+
+        #
+        # Exit State - Does nothing, indicates program should exit.
+        #
+        self.exit_state = State("exit")
+
+        # Let's always start in the tracks_state.
+        return tracks_state
 
 
 class List(object):
@@ -1022,7 +1068,7 @@ class List(object):
         self.list = tuple()
         """List of entries."""
 
-        self.name = name
+        self.name = name or "None"
         """Name of List."""
 
         self.header = header
@@ -1039,7 +1085,7 @@ class List(object):
             self.i = 0
         self.set_index(self.i)
 
-    def current_entry(self):
+    def get_current_entry(self):
         """Return the currently selected entry.
 
         Returns:
@@ -1071,10 +1117,10 @@ class List(object):
         """
         self.set_index(self.i + delta)
 
-    def increment_index(self, amount=None):
+    def increment(self, amount=None):
         self.update_index(amount or 1)
 
-    def decrement_index(self, amount=None):
+    def decrement(self, amount=None):
         self.update_index((-amount if amount else None) or -1)
 
     def __len__(self):
@@ -1093,69 +1139,13 @@ class List(object):
         return self.name == other_list.name
 
 
-class ListCollection(object):
-    """A collection of Lists."""
-
-    def __init__(self, name, lists):
-        self.name = name
-        self.ordered_lists = lists
-        self.lists = {l.name: l for l in lists}
-        self.list_i = 0
-
-    def decrement_list(self):
-        """Decrement the currently List."""
-        self.list_i = common.clamp(self.list_i - 1, 0, len(self.ordered_lists) - 1)
-
-    def increment_list(self):
-        """Increment the currently List."""
-        self.list_i = common.clamp(self.list_i + 1, 0, len(self.ordered_lists) - 1)
-
-    def get_current_list(self):
-        """Get the currently selected List.
-
-        Returns:
-            List: The current List.
-        """
-        return self.ordered_lists[self.list_i]
-
-    def get_current_list_entry(self):
-        """Return the current entry of the current list.
-
-        Returns:
-            object: The current entry.
-        """
-        return self.get_current_list().current_entry()
-
-    def get_list(self, list_name):
-        """Return a list byu its name.
-
-        Args:
-            list_name (str): The name of the list.
-
-        Returns:
-            List: The List with the requested name.
-        """
-        return self.lists[list_name]
-
-    def set_current_list(self, list_name):
-        """Set the current List by its name.
-
-        Args:
-            list_name (str): The name of the List to set.
-        """
-        self.list_i = self.ordered_lists.index(self.lists[list_name])
-
-    def __getitem__(self, key):
-        return self.lists[key]
-
-
 class Future(object):
     """Execute a function asynchronously then execute the callback when done.
 
     Also has information about the progress of the call.
     """
 
-    def __init__(self, target, result=(), end_state=None, progress=True):
+    def __init__(self, target, result=(), progress=True):
         """Constructor.
 
         Args:
@@ -1163,7 +1153,6 @@ class Future(object):
                 The target function must accept a keyword argument 'progress'
                 that is a Progress object.
             result (tuple): Contains the result function, args and kwargs.
-            end_state (int): The end state to return to after completing the call.
         """
         def to_iter(obj):
             if isinstance(obj, (tuple, list)):
@@ -1192,9 +1181,6 @@ class Future(object):
 
         self.result_kwargs = result[2] if len(result) > 2 else {}
         """The target kwargs."""
-
-        self.end_state = end_state
-        """The end state."""
 
         self.event = Event()
         """An Event for the Future to signal when it's done."""
@@ -1233,9 +1219,6 @@ class Future(object):
 
     def wait(self):
         self.event.wait()
-
-    def get_end_state(self):
-        return self.end_state
 
     def get_progress(self):
         return self.progress.get_percent()
@@ -1433,3 +1416,90 @@ class Config(object):
         msg = msg + "Example:\n next_track: 67\n\n"
 
         return msg
+
+
+def bind_to_all(states, key, func):
+    """Bind a a key or keys to a function for a given set of states.
+
+    Args:
+        states (list): The list of States.
+        key (int, list): The key or keys.
+        func (callable): The callable to bind.
+    """
+    for state in states:
+        state.bind_key(key, func)
+
+
+class Action(object):
+    def __init__(self, func, desc):
+        self.func = func
+        """The function to call."""
+
+        self.desc = desc
+        """A description of the action."""
+
+    def __call__(self, *args, **kwargs):
+        self.func(*args, **kwargs)
+
+
+class State(object):
+    """Base class for a state in the program.
+
+    A State manages any logic for when a key is pressed and manages a List.
+    """
+
+    def __init__(self, name, state_list=None):
+        self._name = name
+        """Name of this state."""
+
+        self._actions = {}
+        """Mapping of keys to Actions."""
+
+        self._default_action = None
+        """The default action if nothing is found."""
+
+        self._list = state_list if state_list is not None else List()
+        """The List that this state manages."""
+
+    def set_default_action(self, func, desc=None):
+        """Sets the default action of this state.
+
+        Args:
+            action (Action): The default Action.
+        """
+        self._default_action = Action(func, desc)
+
+    def bind_key(self, key, func, desc=None):
+        """Bind a key or ketys to a function.
+
+        Args:
+            key (int, collection): The key orkeys to bind.
+            func (callable): The callable to bind to.
+            desc (str): The description (optional).
+        """
+        if not isinstance(key, (list, tuple)):
+            key = [key]
+        for k in key:
+            self._actions[k] = Action(func, desc)
+
+    def process_key(self, key):
+        """Process a key that was pressed.
+
+        Args:
+            key (int): The key that was pressed.
+
+        Returns:
+            Action: The action to call based on the key.
+        """
+        return self._actions.get(key, self._default_action)
+
+    def get_list(self):
+        """Return the List that this State manages.
+
+        Returns:
+            List: The List that this state manages.
+        """
+        return self._list
+
+    def __str__(self):
+        return self._name
