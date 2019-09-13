@@ -5,6 +5,7 @@ import time
 from threading import Lock, Thread, Event
 
 import unicurses as uc
+from command import CommandProcessor, TextQuery
 from model import (
     UnableToFindDevice,
     NoneTrack,
@@ -27,7 +28,7 @@ class SpotifyState(object):
     """
     # Attributes to save between runs.
     PICKLE_ATTRS = [
-        "command_history",
+        #"command_history",
         "previous_tracks",
         "current_context",
         "current_device"
@@ -61,18 +62,22 @@ class SpotifyState(object):
         self.config = config
         """The Config parameters."""
 
-        self.sync_period = common.PeriodicCallback(self.SYNC_PLAYER_PERIOD,
+        self.sync_player = common.PeriodicCallback(self.SYNC_PLAYER_PERIOD,
                                                    self.sync_player_state)
         """Periodic for syncing the player."""
 
         self.sync_devices = common.PeriodicCallback(self.SYNC_DEVICES_PERIOD,
-                                                    self.sync_available_devices,
+                                                    self.periodic_sync_devices,
                                                     active=False)
         """Periodic for syncing the available devices."""
 
+        self.sync_progress = common.PeriodicCallback(1, self.calculate_track_progress)
+        """Periodic for calculating track progress."""
+
         self.periodics = [
-            self.sync_period,
-            self.sync_devices
+            self.sync_player,
+            self.sync_devices,
+            self.sync_progress
         ]
         """All Periodics."""
 
@@ -83,6 +88,7 @@ class SpotifyState(object):
         self.device_list = List("devices")
         self.confirm_list = List("confirm", header="Are you sure?")
         self.artist_list = List("artists", header="Select an artist")
+        """The program state is built around Lists and manipulating them."""
 
         self.previous_tracks = []
         """Keeps track of previously displayed Tracks."""
@@ -97,7 +103,7 @@ class SpotifyState(object):
         """The list of available devices."""
 
         self.playing = False
-        """Whether the play is playing or not."""
+        """Whether the player is playing or not."""
 
         self.progress = None
         """Progress into the track."""
@@ -114,23 +120,10 @@ class SpotifyState(object):
         self.currently_playing_track = NoneTrack
         """The currently playing track."""
 
-        self.command_cursor_i = 0
-        """The cursor location of the command."""
-
-        self.command_query = []
-        """The command being typed."""
-
-        self.command_history = []
-        self.command_history_i = 0
-        """History of commands."""
-
-        self.prev_command = ["exit"]
-        """The previous command that was executed."""
-
         self.running = True
         """Whether we're running or not."""
 
-        self.commands = {
+        self.cmd = CommandProcessor(":", {
             "search": self._execute_search,
             "find": self._execute_find,
             "volume": self._execute_volume,
@@ -139,8 +132,16 @@ class SpotifyState(object):
             "shuffle": self._execute_shuffle,
             "repeat": self._execute_repeat,
             "exit": self._execute_exit
-        }
-        """Dictionary of commands and their execution functions."""
+        })
+        """Processes commands."""
+
+        # Bind useful shorthand commands.
+        self.cmd.bind('q', 'exit')
+        self.cmd.bind_trigger('/', 'find 0')
+        self.cmd.bind_trigger(['#'], 'search')
+
+        self.text_query = TextQuery()
+        """A TextQuery for commands."""
 
         self.current_state = None
         """Current state of the applicaiton."""
@@ -151,12 +152,12 @@ class SpotifyState(object):
         self.futures = []
         """List of futures to execute."""
 
-        self.last_update_time = time.time()
+        self.track_progress_last_update_time = time.time()
         """The last time we were called to update."""
 
         # Build the state machine and transition to the first state.
         start_state = self.build_state_machine()
-        self.switch_to_state(self.build_state_machine())
+        self.switch_to_state(start_state)
 
     def switch_to_state(self, new_state):
         """Transition to a new State.
@@ -167,28 +168,6 @@ class SpotifyState(object):
         logger.debug("State transition: %s -> %s", self.current_state, new_state)
         self.prev_state = self.current_state
         self.current_state = new_state
-
-    def save_state(self):
-        """Save the state to disk."""
-        ps = {
-            attr_name: getattr(self, attr_name)
-            for attr_name in self.PICKLE_ATTRS
-        }
-        state_filename = common.get_file_from_cache(self.api.get_username(), "state")
-        with open(state_filename, "wb") as file:
-            logger.debug("Saving %s state", self.api.get_username())
-            pickle.dump(ps, file)
-
-    def load_state(self):
-        """Load part of the state from disk."""
-        state_filename = common.get_file_from_cache(self.api.get_username(), "state")
-        if os.path.isfile(state_filename):
-            with open(state_filename, "rb") as file:
-                logger.debug("Loading %s state", self.api.get_username())
-                ps = pickle.load(file)
-
-            for attr in self.PICKLE_ATTRS:
-                setattr(self, attr, ps[attr])
 
     def init(self):
         # Get the User info.
@@ -234,8 +213,7 @@ class SpotifyState(object):
 
         # Initialize track list.
         if player_state:
-            context = player_state['context']
-            self._set_context(context)
+            self._set_context(player_state['context'])
         else:
             if not self.restore_previous_tracks(0):
                 logger.debug("Loading the Saved track list")
@@ -244,13 +222,11 @@ class SpotifyState(object):
     def sync_player_state(self):
         player_state = self.api.get_player_state()
         if player_state:
-            self.currently_playing_track = Track(player_state['item']) \
-                if player_state['item'] else NoneTrack
+            track = player_state['item']
+            self.currently_playing_track = Track(track) if track else NoneTrack
             self.playing = player_state['is_playing']
-
             self.current_device = Device(player_state['device'])
             self.volume = self.current_device['volume_percent']
-
             self._set_player_repeat(player_state['repeat_state'])
             self._set_player_shuffle(player_state['shuffle_state'])
 
@@ -264,7 +240,7 @@ class SpotifyState(object):
             self.currently_playing_track = NoneTrack
             self.current_device = UnableToFindDevice
 
-    def sync_available_devices(self):
+    def periodic_sync_devices(self):
         self.available_devices = self.api.get_devices()
         self.device_list.update_list(self.available_devices,
                                      reset_index=False)
@@ -282,20 +258,6 @@ class SpotifyState(object):
         if key is not None and action is None:
             logger.info("Unrecognized key: %d", key)
 
-        self._run_calcs()
-
-        # We probably just selected a Track, let's plan
-        # to re-sync in 5s.
-        if key in self.ENTER_KEYS:
-            self.sync_period.call_in(5)
-
-    def _run_calcs(self):
-        """Run any calculations that we need to do at the end of the update."""
-        #TODO: Should be handled in the CommandProcessor
-        self.command_cursor_i = common.clamp(self.command_cursor_i,
-                                             0,
-                                             len(self.get_command_query()))
-
         # Run all Periodics.
         for periodic in self.periodics:
             periodic.update(time.time())
@@ -306,91 +268,72 @@ class SpotifyState(object):
             if self.sync_devices.is_active():
                 self.sync_devices.deactivate()
 
+        # We probably just selected a Track, let's plan
+        # to re-sync in 5s.
+        if key in self.ENTER_KEYS:
+            self.sync_player.call_in(5)
+
+    def calculate_track_progress(self):
         # Calculate track progress.
-        time_delta = 1000*(time.time() - self.last_update_time)
+        time_delta = 1000*(time.time() - self.track_progress_last_update_time)
         if self.progress and self.playing:
             self.progress[0] = self.progress[0] + time_delta
+            logger.debug(self.progress)
 
-            # Song is done. Let's plan to re-sync in 1 second.
+            # If song is done. Let's plan to re-sync in 1 second.
             percent = float(self.progress[0])/self.progress[1]
             if percent > 1.0:
                 logger.debug("Reached end of song. Re-syncing in 2s.")
-                self.sync_period.call_in(2)
+                self.sync_player.call_in(2)
                 self.progress = None
 
         # Save off this last time.
-        self.last_update_time = time.time()
+        self.track_progress_last_update_time = time.time()
 
-    def _process_command(self, command_input):
-        logger.debug("Processing command: %s", command_input)
+    def save_state(self):
+        """Save the state to disk."""
+        ps = {
+            attr_name: getattr(self, attr_name)
+            for attr_name in self.PICKLE_ATTRS
+        }
+        state_filename = common.get_file_from_cache(self.api.get_username(), "state")
+        with open(state_filename, "wb") as file:
+            logger.debug("Saving %s state", self.api.get_username())
+            pickle.dump(ps, file)
 
-        # Convert everything to string first
-        if not isinstance(command_input, str):
-            command_input = "".join(command_input).strip()
+    def load_state(self):
+        """Load part of the state from disk."""
+        state_filename = common.get_file_from_cache(self.api.get_username(), "state")
+        if os.path.isfile(state_filename):
+            with open(state_filename, "rb") as file:
+                logger.debug("Loading %s state", self.api.get_username())
+                ps = pickle.load(file)
 
-        if not command_input:
-            return
+            for attr in self.PICKLE_ATTRS:
+                setattr(self, attr, ps[attr])
 
-        # Convert special commands.
-        if command_input[0] == ":":
-            if command_input == ":":
-                return
-            elif command_input.lower().startswith(":q"):
-                command_string = "exit"
-            else:
-                command_string = command_input[1::]
-        elif command_input[0] == '"':
-            if command_input == '"' or command_input == '""':
-                return
-            else:
-                command_string = "search {}".format(command_input[1::])
-                if command_string[-1] == '"':
-                    command_string = command_string[:-1]
-        elif command_input[0] == "/":
-            command_string = "find 0 {}".format(command_input[1::])
-        else:
-            command_string = command_input
+    def _execute_search(self, query):
+        query = str(query)
 
-        # Get tokens
-        toks = command_string.split()
-
-        # Get the command.
-        command = toks[0]
-
-        # Execute the command if it exists.
-        if command not in self.commands:
-            logger.debug("%s is not a valid command", command)
-        else:
-            logger.debug("Final command: %s", toks)
-            # Get the arguments for the command.
-            command_args = toks[1::] if len(toks) > 1 else []
-
-            # Save as the last command.
-            self.prev_command = toks
-
-            # Execute the appropriate command.
-            self.commands[command](*command_args)
-
-        self.command_history.append(command_input)
-        self.command_history_i = len(self.command_history)
-
-    def _execute_search(self, *query):
-        query = " ".join(query)
-        logger.debug("search %s", query)
         results = self.api.search(("artist", "album", "track"), query)
         if results:
-            self.search_menu["search_results"].update_list(results)
-            self.search_menu["search_results"].header = "Search results for \"{}\"".format(query)
+            self.search_list.update_list(results)
+            self.search_list.header = "Search results for \"{}\"".format(query)
         else:
-            self.search_menu["search_results"].update_list([])
-            self.search_menu["search_results"].header = "No results found for \"{}\"".format(query)
+            self.search_list.update_list([])
+            self.search_list.header = "No results found for \"{}\"".format(query)
 
         self.switch_to_state(self.search_state)
 
     def _execute_find(self, i, *query):
         query = " ".join(query)
-        logger.debug("find:%s", query)
-        search_list = self.prev_state.get_list()
+
+        # Find the right state to do the 'find'.
+        state = self.current_state
+        if self.current_state == self.creating_command_state:
+            state = self.prev_state
+
+        search_list = state.get_list()
 
         found = []
         for index, item in enumerate(search_list):
@@ -400,7 +343,8 @@ class SpotifyState(object):
         if found:
            search_list.set_index(found[int(i) % len(found)])
 
-        self.switch_to_state(self.prev_state)
+        if self.current_state == self.creating_command_state:
+            self.switch_to_state(state)
 
     def _execute_shuffle(self, state):
         state = state.lower().strip()
@@ -491,23 +435,23 @@ class SpotifyState(object):
 
     def _toggle_play(self):
         if self.playing:
-            self._process_command("pause")
+            self.cmd.process_command("pause")
         else:
-            self._process_command("play")
+            self.cmd.process_command("play")
 
     def _toggle_shuffle(self):
-        self._process_command("shuffle {}".format(not self.shuffle))
+        self.cmd.process_command("shuffle {}".format(not self.shuffle))
 
     def _toggle_repeat(self):
-        self._process_command("repeat {}".format(
+        self.cmd.process_command("repeat {}".format(
             ['off', 'context', 'track'][(self.repeat + 1) % 3]
         ))
 
     def _decrease_volume(self):
-        self._process_command("volume {}".format(self.volume - 5))
+        self.cmd.process_command("volume {}".format(self.volume - 5))
 
     def _increase_volume(self):
-        self._process_command("volume {}".format(self.volume + 5))
+        self.cmd.process_command("volume {}".format(self.volume + 5))
 
     def _get_repeat_enum(self, repeat):
         return {"off": self.REPEAT_OFF,
@@ -585,7 +529,7 @@ class SpotifyState(object):
         self.api.transfer_playback(new_device, play)
 
     def _set_command_query(self, text):
-        self.command_query = list(text)
+        self.text_query = TextQuery(text)
 
     def _set_player_repeat(self, state):
         self.repeat = self._get_repeat_enum(state)
@@ -635,14 +579,11 @@ class SpotifyState(object):
     def is_in_state(self, *states):
         return self.current_state in states
 
-    def get_cursor_i(self):
-        return self.command_cursor_i
-
     def get_display_name(self):
         return self.api.get_display_name()
 
     def get_command_query(self):
-        return self.command_query
+        return self.text_query
 
     def get_currently_playing_track(self):
         return self.currently_playing_track
@@ -779,50 +720,43 @@ class SpotifyState(object):
 
         self.player_state = player_state
 
-
         #
         # Creaintg Command State - Handles commands while user is typing in a command
         #
         creating_command_state = State("creating_command")
+
         def left():
-            self.command_cursor_i -= 1
-        def right():
-            self.command_cursor_i += 1
+            self.text_query.cursor_left()
         creating_command_state.bind_key(uc.KEY_LEFT, left)
+
+        def right():
+            self.text_query.cursor_right()
         creating_command_state.bind_key(uc.KEY_RIGHT, right)
 
         def up():
-            if self.command_history:
-                self.command_history_i = common.clamp(self.command_history_i-1,
-                                                      0,
-                                                      len(self.command_history)-1)
-                self._set_command_query(self.command_history[self.command_history_i])
+            self.cmd.back()
+            self.text_query = TextQuery(self.cmd.get_command())
         creating_command_state.bind_key(uc.KEY_UP, up)
 
         def down():
-            if self.command_history:
-                self.command_history_i = common.clamp(self.command_history_i+1,
-                                                      0,
-                                                      len(self.command_history)-1)
-                self._set_command_query(self.command_history[self.command_history_i])
+            self.cmd.forward()
+            self.text_query = TextQuery(self.cmd.get_command())
         creating_command_state.bind_key(uc.KEY_DOWN, down)
 
         def backspace():
-            if self.command_cursor_i > 0:
-                self.get_command_query().pop(self.command_cursor_i - 1)
-                self.command_cursor_i -= 1
+            if not self.text_query.empty():
+                self.text_query.delete()
             else:
-                switch_to_prev_state()
+                self.switch_to_state(self.tracks_state)
         creating_command_state.bind_key(self.BACKSPACE_KEYS, backspace)
 
         def ascii_key(key):
             char = chr(key)
-            self.get_command_query().insert(self.command_cursor_i, char)
-            self.command_cursor_i += 1
+            self.text_query.insert(char)
         creating_command_state.bind_key(list(range(32, 128)), ascii_key)
 
         def enter():
-            self._process_command(self.get_command_query())
+            self.cmd.process_command(self.text_query)
         creating_command_state.bind_key(self.ENTER_KEYS, enter)
 
         creating_command_state.bind_key([uc.KEY_EXIT, 27], switch_to_prev_state)
@@ -882,37 +816,33 @@ class SpotifyState(object):
         #
         # Command commands for all of the main states
         #
-        main_states = [user_state, tracks_state, player_state]
+        main_states = [user_state, tracks_state, player_state, search_state]
 
         bind_to_all(main_states, self.BACKSPACE_KEYS, self.restore_previous_tracks)
 
-        def start_generic_command(key):
+        def start_command(key):
             char = chr(key)
             self._set_command_query(char)
-            self.command_cursor_i = 1
             self.switch_to_state(self.creating_command_state)
-        bind_to_all(main_states, [ord('/'), ord(':')], start_generic_command)
 
-        def start_search_command():
-            self._set_command_query("\"\"")
-            self.command_cursor_i = 1
-            self.switch_to_state(self.creating_command_state)
-        bind_to_all(main_states, ord('"'), start_search_command)
+        bind_to_all(main_states, [ord(c) for c in self.cmd.get_triggers()], start_command)
 
         def find_next():
-            if self.prev_command[0] in ["find"]:
-                i = int(self.prev_command[1])
-                command = self.prev_command
+            toks = self.cmd.get_prev_cmd_toks()
+            if toks[0] in ["find"]:
+                i = int(toks[1])
+                command = toks
                 command[1] = str(i + 1)
-                self._process_command(" ".join(command))
+                self.cmd.process_command(" ".join(command))
         bind_to_all(main_states, self.config.find_next, find_next)
 
         def find_prev():
-            if self.prev_command[0] in ["find"]:
-                i = int(self.prev_command[1])
-                command = self.prev_command
+            toks = self.cmd.get_prev_cmd_toks()
+            if toks[0] in ["find"]:
+                i = int(toks[1])
+                command = toks
                 command[1] = str(i - 1)
-                self._process_command(" ".join(command))
+                self.cmd.process_command(" ".join(command))
         bind_to_all(main_states, self.config.find_previous, find_prev)
 
         def show_devices():
@@ -962,14 +892,14 @@ class SpotifyState(object):
         def volume():
             config_param = self.config.get_config_param(key)
             volume = 10*int(config_param.split("_")[1])
-            self._process_command("volume {}".format(volume))
+            self.cmd.process_command("volume {}".format(volume))
         #TODO: fix
         #bind_to_all(main_states, self.config.volume_keys, volume)
 
         def volume_down():
-            self._process_command("volume {}".format(self.volume - 5))
+            self.cmd.process_command("volume {}".format(self.volume - 5))
         def volume_up():
-            self._process_command("volume {}".format(self.volume + 5))
+            self.cmd.process_command("volume {}".format(self.volume + 5))
         bind_to_all(main_states, self.config.volume_down, volume_down)
         bind_to_all(main_states, self.config.volume_up, volume_up)
 

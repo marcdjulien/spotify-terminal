@@ -317,11 +317,12 @@ class CursesDisplay(object):
 
         elif self.state.is_creating_command():
             start_col = 1
-            text = "".join(self.state.get_command_query()) + " "
+            query = self.state.get_command_query()
+            text = str(query) + " "
             uc.mvwaddstr(self.stdscr, self._rows-1, start_col, text)
             uc.mvwaddstr(self.stdscr,
-                         self._rows-1, start_col+self.state.get_cursor_i(),
-                         text[self.state.get_cursor_i()],
+                         self._rows-1, start_col+query.get_cursor_index(),
+                         query.get_current_index() or " ",
                          uc.A_STANDOUT)
         else:
             entry = self.state.current_state.get_list().get_current_entry()
