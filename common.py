@@ -47,10 +47,18 @@ def is_linux():
     return platform.system() == "Linux"
 
 
+def is_mac(): 
+    return platform.system() == 'Darwin'
+
+
 def clear():
     """Clear the terminal."""
     if is_windows():
         os.system('cls')
+    elif is_linux():
+        os.system("reset")
+    elif is_mac():
+        os.system('reset')
     elif is_linux():
         os.system("reset")
 
