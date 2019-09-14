@@ -54,11 +54,16 @@ class CommandProcessor(object):
         """Bind a shorthand command to a command.
 
         Args:
-            shorthand (str): The short hand char.
+            shorthand (str, list): The short hand char or chars.
             command (str): The command to bind to.
         """
         assert command in self.commands
-        self.shorthand_commands[shorthand] = command
+        
+        if isinstance(shorthand, str):
+            shorthand = [shorthand]
+
+        for sh in shorthand:
+            self.shorthand_commands[sh] = command
 
     def process_command(self, command_input):
         logger.debug("Pre-processing command: %s", command_input)

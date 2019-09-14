@@ -21,6 +21,19 @@ import common
 logger = common.logging.getLogger(__name__)
 
 
+global_lock = Lock()
+
+
+def with_global_lock(func):
+    """Execute function with a global lock."""
+
+    def global_lock_wrapper(*args, **kwargs):
+        with global_lock:
+            return func(*args, **kwargs)
+
+    return global_lock_wrapper
+
+
 class SpotifyState(object):
     """Represents the programs internal state of Spotify and menus.
 
@@ -53,9 +66,6 @@ class SpotifyState(object):
     SYNC_DEVICES_PERIOD = 1
 
     def __init__(self, api, config):
-        self.lock = Lock()
-        """Lock for the class."""
-
         self.api = api
         """SpotifyApi object to make Spotify API calls."""
 
@@ -136,7 +146,7 @@ class SpotifyState(object):
         """Processes commands."""
 
         # Bind useful shorthand commands.
-        self.cmd.bind('q', 'exit')
+        self.cmd.bind(['q', 'Q'], 'exit')
         self.cmd.bind_trigger('/', 'find 0')
         self.cmd.bind_trigger(['#'], 'search')
 
@@ -245,6 +255,7 @@ class SpotifyState(object):
         self.device_list.update_list(self.available_devices,
                                      reset_index=False)
 
+    @with_global_lock
     def process_key(self, key):
         action = self.current_state.process_key(key)
         if action:
@@ -278,7 +289,6 @@ class SpotifyState(object):
         time_delta = 1000*(time.time() - self.track_progress_last_update_time)
         if self.progress and self.playing:
             self.progress[0] = self.progress[0] + time_delta
-            logger.debug(self.progress)
 
             # If song is done. Let's plan to re-sync in 1 second.
             percent = float(self.progress[0])/self.progress[1]
@@ -505,22 +515,21 @@ class SpotifyState(object):
         self.execute_future(future)
 
     def _choose_tracks(self, tracks, context, header):
-        with self.lock:
-            # Save the track listing.
-            self.previous_tracks.append((tracks, context, header))
+        # Save the track listing.
+        self.previous_tracks.append((tracks, context, header))
 
-            # Set the new track listing.
-            self.current_context = context
-            self.tracks_list.update_list(tracks)
-            self.tracks_list.header = header
+        # Set the new track listing.
+        self.current_context = context
+        self.tracks_list.update_list(tracks)
+        self.tracks_list.header = header
 
-            # Go to the tracks pane.
-            self.tracks_list.set_index(0)
-            self.switch_to_state(self.tracks_state)
+        # Go to the tracks pane.
+        self.tracks_list.set_index(0)
+        self.switch_to_state(self.tracks_state)
 
     def _choose_artist(self, artists):
-        self.artist_menu["artists"].update_list(artists)
-        self.artist_menu["artists"].set_index(0)
+        self.artist_list.update_list(artists)
+        self.artist_list.set_index(0)
         self.switch_to_state(self.select_artist_state)
 
     def _set_player_device(self, new_device, play):
@@ -620,7 +629,7 @@ class SpotifyState(object):
         def switch_to_tracks_state():
             self.switch_to_state(self.tracks_state)
 
-        def swtch_to_player_state():
+        def switch_to_player_state():
             self.switch_to_state(self.player_state)
 
         def switch_to_user_state():
@@ -652,7 +661,7 @@ class SpotifyState(object):
         tracks_state.bind_key(uc.KEY_UP, move_up_current_list)
         tracks_state.bind_key(uc.KEY_DOWN, move_down_current_list)
         tracks_state.bind_key(uc.KEY_LEFT, switch_to_user_state)
-        tracks_state.bind_key(uc.KEY_RIGHT, swtch_to_player_state)
+        tracks_state.bind_key(uc.KEY_RIGHT, switch_to_player_state)
 
         def dec():
             self.tracks_list.decrement(15)
@@ -918,6 +927,9 @@ class SpotifyState(object):
                 self.futures.pop(0)
                 if self.futures:
                     self.futures[0].run()
+
+            logger.info(self.futures)
+
         loading_state.set_default_action(loading)
         self.loading_state = loading_state
 
@@ -938,7 +950,7 @@ class SpotifyState(object):
 
         def enter():
             self.playlist_to_add = self.user_list.get_current_entry()
-            self.swtch_to_player_state(self.a2p_confirm_state)
+            self.switch_to_state(self.a2p_confirm_state)
         a2p_select_state.bind_key(self.ENTER_KEYS, enter)
         self.a2p_select_state = a2p_select_state
 
@@ -1125,6 +1137,7 @@ class Future(object):
         Thread(target=self.execute).start()
 
     @common.catch_exceptions
+    @with_global_lock
     def execute(self):
         # Make the main call.
         logger.debug(
