@@ -15,13 +15,26 @@ class Window(object):
 
 
 class CursesDisplay(object):
-    # How often to run the program loop.
+    # Max amount of time to dispatch each cycle when the program is active.
+    ACTIVE_PROGRAM_DISPATCH_TIME = 0.02
+
+    # Max amount of time to dispatch each cycle when the program is idle.
+    IDLE_PROGRAM_DISPATCH_TIME = 0.1
+
+    # Max amount of time to dispatch each cycle when the program is sleeping.
+    SLEEP_PROGRAM_DISPATCH_TIME = 1
+
+    # How long to wait before declaring the program is not active and is idle.
+    IDLE_TIMEOUT = 0.5
+
+    # How long to wait before declaring the program is not idle and is sleeping.
+    SLEEP_TIMEOUT = 60
+
+    # How often to run the program loop when the user is actively using it.
     PROGRAM_PERIOD = 0.01
 
     # How often to re-render.
-    # For now, this is the same as the program loop.
-    # Will need to investigate the performance impact of this.
-    RENDER_PERIOD = PROGRAM_PERIOD
+    RENDER_PERIOD = 0.01
 
     # How often to clear the screen.
     CLEAR_PERIOD = 60 * 15
@@ -53,13 +66,18 @@ class CursesDisplay(object):
         self._register_window("player", self._window_sizes["player"])
 
         self.periodics = [
+            common.PeriodicCallback(self.PROGRAM_PERIOD, self.dispatch),
             common.PeriodicCallback(self.RENDER_PERIOD, self.render),
-            common.PeriodicCallback(self.CLEAR_PERIOD, self.clear),
+            common.PeriodicCallback(self.CLEAR_PERIOD, self.clear)
         ]
+
+        self.dispatch_time = self.ACTIVE_PROGRAM_DISPATCH_TIME
 
         # This increments each control loop. A value of -50 means that we'll have
         # 2s (200 * PROGRAM_LOOP) until the footer begins to roll.
         self._footer_roll_index = -200
+
+        self.last_pressed_time = time.time()
 
         # Initialize the display.
         self._init_curses()
@@ -108,31 +126,27 @@ class CursesDisplay(object):
         self.render()
 
         while self._running:
-            # Time how long it takes to process input
-            # and render the screen.
             with common.ContextDuration() as t:
-                # Handle user input.
-                self.process_input()
-
-                # Do any calculations related to rendering.
-                self.render_calcs()
-
-                # Execute the periodic call backs.
                 for periodic in self.periodics:
                     periodic.update(time.time())
 
-            # Are we still running?
-            self._running = self.state.is_running()
-
-            # Sleep for an amount of time.
-            sleep_time = self.PROGRAM_PERIOD - t.duration
-            if sleep_time > 0:
-                time.sleep(sleep_time)
+            time.sleep(max(0, self.dispatch_time - t.duration))
 
         # Tear down the display.
         logger.debug("Tearing down curses display")
         uc.endwin()
         common.clear()
+
+    def dispatch(self):
+        """Dispatch main program logic."""
+        # Handle user input.
+        self.process_input()
+
+        # Do any calculations related to rendering.
+        self.render_calcs()
+
+        # Are we still running?
+        self._running = self.state.is_running()
 
     def process_input(self):
         """Process all keyboard input."""
@@ -141,6 +155,7 @@ class CursesDisplay(object):
             key = uc.wgetch(win)
             if key != -1:
                 key_pressed = True
+                self.last_pressed_time = time.time()
                 self.state.process_key(key)
 
         # If we didn't press a key, kick the state anyway.
@@ -149,6 +164,14 @@ class CursesDisplay(object):
 
     def render_calcs(self):
         """Perform any calculations related to rendering."""
+        key_timeout = time.time() - self.last_pressed_time
+
+        if key_timeout <= self.IDLE_TIMEOUT:
+            self.dispatch_time = self.ACTIVE_PROGRAM_DISPATCH_TIME
+        elif self.IDLE_TIMEOUT < key_timeout and key_timeout <= self.SLEEP_TIMEOUT:
+            self.dispatch_time = self.IDLE_PROGRAM_DISPATCH_TIME
+        elif self.SLEEP_TIMEOUT < key_timeout:
+            self.dispatch_time = self.SLEEP_PROGRAM_DISPATCH_TIME
 
     def render(self):
         # Set the panel order based on what action is going on.
