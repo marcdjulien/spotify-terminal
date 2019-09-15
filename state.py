@@ -44,7 +44,6 @@ class SpotifyState(object):
     """
     # Attributes to save between runs.
     PICKLE_ATTRS = [
-        #"command_history",
         "previous_tracks",
         "current_context",
         "current_device"
@@ -471,9 +470,13 @@ class SpotifyState(object):
                 "context": self.REPEAT_CONTEXT}[repeat]
 
     def _add_track_to_playlist(self, track, playlist):
-        self.api.add_track_to_playlist(track, playlist)
         self.track_to_add = None
         self.playlist_to_add = None
+        return self.api.add_track_to_playlist(track, playlist)
+
+    def _remove_track_from_playlist(self, track, playlist):
+        self.track_to_remove = None
+        return self.api.remove_track_from_playlist(track, playlist)
 
     def _set_playlist(self, playlist):
         future = Future(target=(self.api.get_tracks_from_playlist, playlist),
@@ -689,6 +692,13 @@ class SpotifyState(object):
                 self.switch_to_state(self.a2p_select_state)
         tracks_state.bind_key(self.config.add_track, add_to_playlist)
 
+        def remove_from_playlist():
+            entry = self.tracks_list.get_current_entry()
+            if entry['type'] == 'track':
+                self.track_to_remove = entry
+                self.switch_to_state(self.remove_track_confirm_state)
+        tracks_state.bind_key(self.config.remove_track, remove_from_playlist)
+
         def goto_artist():
             entry = self.tracks_list.get_current_entry()
             if entry['type'] == 'track':
@@ -709,6 +719,29 @@ class SpotifyState(object):
         tracks_state.bind_key(self.config.goto_album, goto_album)
 
         self.tracks_state = tracks_state
+
+        #
+        # Remove Track State - Handles removing a track from a playlist
+        #
+        remove_track_confirm_state = State("remove_track_confirm", self.confirm_list)
+        remove_track_confirm_state.bind_key(uc.KEY_UP, move_up_current_list)
+        remove_track_confirm_state.bind_key(uc.KEY_DOWN, move_down_current_list)
+
+        def cancel():
+            self.track_to_remove = None
+            switch_to_tracks_state()
+        remove_track_confirm_state.bind_key(self.CANCEL_KEYS, cancel)
+
+        def enter():
+            entry = self.confirm_list.get_current_entry()
+            if entry.get().lower() == "yes":
+                new_tracks = self._remove_track_from_playlist(self.track_to_remove, self.current_context)
+                self.tracks_list.update_list(new_tracks)
+            else:
+                self.track_to_remove = None
+            switch_to_tracks_state()
+        remove_track_confirm_state.bind_key(self.ENTER_KEYS, enter)
+        self.remove_track_confirm_state = remove_track_confirm_state
 
         #
         # Player State - Handles commands while in the player pane
@@ -931,7 +964,6 @@ class SpotifyState(object):
         loading_state.set_default_action(loading)
         self.loading_state = loading_state
 
-
         #
         # Adding to Playlist - The collection of states that handle adding a new song to a playlist
         #
@@ -984,6 +1016,7 @@ class SpotifyState(object):
                 switch_to_prev_state()
         select_artist_state.bind_key(self.ENTER_KEYS, enter)
         self.select_artist_state = select_artist_state
+
 
         #
         # Exit State - Does nothing, indicates program should exit.
@@ -1213,6 +1246,9 @@ class Action(object):
     def __call__(self, *args, **kwargs):
         self.func(*args, **kwargs)
 
+    def __str__(self):
+        return self.desc
+
 
 class State(object):
     """Base class for a state in the program.
@@ -1233,7 +1269,7 @@ class State(object):
         self._list = state_list if state_list is not None else List()
         """The List that this state manages."""
 
-    def set_default_action(self, func, desc=None):
+    def set_default_action(self, func, desc=""):
         """Sets the default action of this state.
 
         Args:
@@ -1241,7 +1277,7 @@ class State(object):
         """
         self._default_action = Action(func, desc)
 
-    def bind_key(self, key, func, desc=None):
+    def bind_key(self, key, func, desc=""):
         """Bind a key or ketys to a function.
 
         Args:
@@ -1272,6 +1308,9 @@ class State(object):
             List: The List that this state manages.
         """
         return self._list
+
+    def get_actions(self):
+        return self._actions
 
     def __str__(self):
         return self._name

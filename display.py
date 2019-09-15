@@ -308,14 +308,12 @@ class CursesDisplay(object):
     def render_footer(self):
         if self.state.is_loading():
             percent = self.state.get_loading_progress()
-            logger.info(percent)
-            text = " " * int(self._cols * percent)
-            uc.mvwaddstr(self.stdscr, self._rows-1, 0, text, uc.A_STANDOUT)
-
+            if percent is not None:
+                text = " " * int(self._cols * percent)
+                uc.mvwaddstr(self.stdscr, self._rows-1, 0, text, uc.A_STANDOUT)
         elif self.state.is_adding_track_to_playlist():
             text = "Select a playlist to add this track"
             uc.mvwaddstr(self.stdscr, self._rows-1, 0, text, uc.A_BOLD)
-
         elif self.state.is_creating_command():
             start_col = 1
             query = self.state.get_command_query()
@@ -329,8 +327,8 @@ class CursesDisplay(object):
             entry = self.state.current_state.get_list().get_current_entry()
             if entry:
                 ncols = self._cols-1
-                short_str = entry.str(ncols)
                 long_str = str(entry)
+                short_str = entry.str(ncols) if hasattr(entry, "str") else long_str
 
                 # Check if we need to scroll or not.
                 if "".join(short_str.split()) == "".join(long_str.split()):
@@ -457,8 +455,10 @@ class CursesDisplay(object):
             return window_name == "search_results"
         elif self.state.in_select_device_menu():
             return window_name == "select_device"
-        elif self.state.is_in_state(self.state.a2p_confirm_state) or \
-                self.state.is_selecting_artist():
+        # TODO: This sucks, make it better.
+        elif (self.state.is_in_state(self.state.a2p_confirm_state) 
+              or self.state.is_selecting_artist()
+              or self.state.is_in_state(self.state.remove_track_confirm_state)):
             return window_name == "popup"
         else:
             return self.state.current_state.get_list().name == window_name

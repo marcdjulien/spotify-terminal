@@ -1,9 +1,13 @@
+import unicurses as uc
+
+
 class Config(object):
     """Read and store config parameters."""
     default = {
         "find_next": ord("n"),
         "find_previous": ord("p"),
         "add_track": ord("P"),
+        "remove_track": uc.KEY_DC,
         "show_devices": ord("W"),
         "refresh": ord("R"),
         "goto_artist": ord("D"),
@@ -128,6 +132,7 @@ class Config(object):
             ("find_next", "Find the next entry matching the previous expression."),
             ("find_previous", "Find the previous entry matching the previous expression."),
             ("add_track", "Add a track to a playlist."),
+            ("remove_track", "Remove a track from a playlist."),
             ("show_devices", "Show available devices"),
             ("refresh", "Refresh the player."),
             ("goto_artist", "Go to the artist page of the highlighted track."),

@@ -561,6 +561,29 @@ class SpotifyApi(object):
         # Clear out current Cache.
         return self.get_tracks_from_playlist(playlist, force_clear=True)
 
+    def remove_track_from_playlist(self, track, playlist):
+        """Remove a Track from a Playlist.
+
+        Args:
+            track (Track): The Track to remove.
+            playlist (Playlist): The Playlist to remove the Track from.
+
+        Returns:
+            tuple: The new set of Tracks with the new Track removed.
+        """
+        # Add the track.
+        if playlist['uri'] == common.SAVED_TRACKS_CONTEXT_URI:
+            q = {"ids": [track['id']]}
+            url = "me/tracks"
+            self.delete_api_v1(url, data=q)
+        else:
+            q = {"uris": [track['uri']]}
+            url = "playlists/{}/tracks".format(playlist['id'])
+            self.delete_api_v1(url, data=q)
+
+        # Clear out current Cache.
+        return self.get_tracks_from_playlist(playlist, force_clear=True)
+
     def _get_saved_tracks(self, progress=None):
         """Get the Tracks from the "Saved" songs.
 
@@ -671,6 +694,25 @@ class SpotifyApi(object):
                    "Content-Type": "application/json"}
         api_url = "https://api.spotify.com/v1/{}".format(endpoint)
         resp = requests.put(api_url, headers=headers, params=params, json=data)
+        resp.raise_for_status()
+        return resp
+
+    @needs_authentication
+    def delete_api_v1(self, endpoint, params=None, data=None):
+        """Spotify v1 DELTE request.
+
+        Args:
+            endpoint (str): The API endpoint.
+            params (dict): Query parameters (Default is None).
+            data (dict): Body data (Default is None).
+
+        Returns:
+            Reponse: The HTTP Reponse.
+        """
+        headers = {"Authorization": "%s %s" % (self.auth.token_type, self.auth.access_token),
+                   "Content-Type": "application/json"}
+        api_url = "https://api.spotify.com/v1/{}".format(endpoint)
+        resp = requests.delete(api_url, headers=headers, params=params, json=data)
         resp.raise_for_status()
         return resp
 
