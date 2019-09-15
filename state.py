@@ -2,10 +2,11 @@ import os
 import pickle
 import re
 import time
-from threading import Lock, Thread, Event
+from threading import RLock, Thread, Event
 
 import unicurses as uc
 from command import CommandProcessor, TextQuery
+from config import Config
 from model import (
     UnableToFindDevice,
     NoneTrack,
@@ -21,17 +22,19 @@ import common
 logger = common.logging.getLogger(__name__)
 
 
-global_lock = Lock()
+future_lock = RLock()
 
 
-def with_global_lock(func):
-    """Execute function with a global lock."""
+def with_future_lock(func):
+    """Execute function with the future lock."""
 
-    def global_lock_wrapper(*args, **kwargs):
-        with global_lock:
+    def future_lock_wrapper(*args, **kwargs):
+        logger.info("Waiting for lock:%s", func.__name__)
+        with future_lock:
+            logger.info("Acquired lock:%s", func.__name__)
             return func(*args, **kwargs)
 
-    return global_lock_wrapper
+    return future_lock_wrapper
 
 
 class SpotifyState(object):
@@ -169,16 +172,6 @@ class SpotifyState(object):
         start_state = self.build_state_machine()
         self.switch_to_state(start_state)
 
-    def switch_to_state(self, new_state):
-        """Transition to a new State.
-
-        Args:
-            new_state (State): The new State to transition to.
-        """
-        logger.debug("State transition: %s -> %s", self.current_state, new_state)
-        self.prev_state = self.current_state
-        self.current_state = new_state
-
     def init(self):
         # Get the User info.
         self.user = self.api.get_user()
@@ -225,7 +218,7 @@ class SpotifyState(object):
         if player_state:
             self._set_context(player_state['context'])
         else:
-            if not self.restore_previous_tracks(0):
+            if not self.restore_previous_tracks():
                 logger.debug("Loading the Saved track list")
                 self._set_playlist(self.user_list[0])
 
@@ -255,7 +248,6 @@ class SpotifyState(object):
         self.device_list.update_list(self.available_devices,
                                      reset_index=False)
 
-    @with_global_lock
     def process_key(self, key):
         action = self.current_state.process_key(key)
         if action:
@@ -299,6 +291,16 @@ class SpotifyState(object):
 
         # Save off this last time.
         self.track_progress_last_update_time = time.time()
+
+    def switch_to_state(self, new_state):
+        """Transition to a new State.
+
+        Args:
+            new_state (State): The new State to transition to.
+        """
+        logger.debug("State transition: %s -> %s", self.current_state, new_state)
+        self.prev_state = self.current_state
+        self.current_state = new_state
 
     def save_state(self):
         """Save the state to disk."""
@@ -550,13 +552,10 @@ class SpotifyState(object):
             {True: "S", False: "s"}[self.shuffle]
         )
 
-    def restore_previous_tracks(self, i=1):
-        if len(self.previous_tracks) > i:
-            last = None
-            for _ in range(i+1):
-                last = self.previous_tracks.pop()
-
-            self._choose_tracks(*last)
+    def restore_previous_tracks(self):
+        if len(self.previous_tracks) >= 2:
+            self.previous_tracks.pop()
+            self._choose_tracks(*self.previous_tracks.pop())
             return True
         else:
             return False
@@ -597,6 +596,7 @@ class SpotifyState(object):
     def get_currently_playing_track(self):
         return self.currently_playing_track
 
+    @with_future_lock
     def execute_future(self, future):
         # If we're not already executing one, run it.
         # Otherwise, it will be added to the queue and executed later.
@@ -898,12 +898,11 @@ class SpotifyState(object):
         bind_to_all(main_states, self.config.next_track, self._play_next)
         bind_to_all(main_states, self.config.previous_track, self._play_previous)
 
-        def volume():
+        def volume(key):
             config_param = self.config.get_config_param(key)
-            volume = 10*int(config_param.split("_")[1])
+            volume = 10 * int(config_param.split("_")[1])
             self.cmd.process_command("volume {}".format(volume))
-        #TODO: fix
-        #bind_to_all(main_states, self.config.volume_keys, volume)
+        bind_to_all(main_states, self.config.get_volume_keys(), volume)
 
         def volume_down():
             self.cmd.process_command("volume {}".format(self.volume - 5))
@@ -924,11 +923,10 @@ class SpotifyState(object):
             # If it's done, leave the loading_state.
             # But if there are more Futures to execute, continue to run them.
             if future.is_done():
-                self.futures.pop(0)
-                if self.futures:
-                    self.futures[0].run()
-
-            logger.info(self.futures)
+                with future_lock:
+                    self.futures.pop(0)
+                    if self.futures:
+                        self.futures[0].run()
 
         loading_state.set_default_action(loading)
         self.loading_state = loading_state
@@ -1137,7 +1135,6 @@ class Future(object):
         Thread(target=self.execute).start()
 
     @common.catch_exceptions
-    @with_global_lock
     def execute(self):
         # Make the main call.
         logger.debug(
@@ -1170,7 +1167,7 @@ class Future(object):
         return self.event.is_set()
 
     def __str__(self):
-        return str((self.target_func.__name__, self.target_args, self.target_kwargs)) + \
+        return str((self.target_func.__name__, self.target_args, self.target_kwargs)) + " -> " +\
             str((self.result_func.__name__, self.result_args, self.result_kwargs))
 
 
@@ -1182,7 +1179,7 @@ class Progress(object):
         self.percent_done = 0.0
         """The amount done."""
 
-        self.lock = Lock()
+        self.lock = RLock()
         """A lock for the object."""
 
     def set_percent(self, percent):
@@ -1190,175 +1187,7 @@ class Progress(object):
             self.percent_done = percent
 
     def get_percent(self):
-        with self.lock:
-            return self.percent_done
-
-
-class Config(object):
-    """Read and store config parameters."""
-    default = {
-        "find_next": ord("n"),
-        "find_previous": ord("p"),
-        "add_track": ord("P"),
-        "show_devices": ord("W"),
-        "refresh": ord("R"),
-        "goto_artist": ord("D"),
-        "goto_album": ord("S"),
-        "current_artist": ord("C"),
-        "current_album": ord("X"),
-        "current_context": ord("?"),
-        "next_track": ord(">"),
-        "previous_track": ord("<"),
-        "play": ord(" "),
-        "volume_0": ord("~"),
-        "volume_1": ord("!"),
-        "volume_2": ord("@"),
-        "volume_3": ord("#"),
-        "volume_4": ord("$"),
-        "volume_5": ord("%"),
-        "volume_6": ord("^"),
-        "volume_7": ord("&"),
-        "volume_8": ord("*"),
-        "volume_9": ord("("),
-        "volume_10": ord(")"),
-        "volume_up": ord("+"),
-        "volume_down": ord("_")
-    }
-
-    def __init__(self, config_filename=None):
-        self.config_filename = config_filename
-        """The full path to the config file."""
-
-        self.keys = {}
-        """Mapping of config keys to key codes and the reverse."""
-
-        if self.config_filename:
-            if not self._parse_and_validate_config_file():
-                raise RuntimeError("Unable to parse config file. See above for details.")
-
-            logger.debug("The following config parameters are being used:")
-            for param, key in self.keys.items():
-                if isinstance(param, str):
-                    try:
-                        logger.debug("\t%s: %s (%s)", param, chr(key), key)
-                    except:
-                        logger.debug("\t%s: %s", param, key)
-        else:
-            self.keys = self.default
-
-        # Reverse map the params and keys.
-        for key, value in list(self.keys.items()):
-            self.keys[value] = key
-
-    def is_volume_key(self, key):
-        return bool(re.match(r"volume_[0-9]+", self.get_config_param(key)))
-
-    def get_config_param(self, key):
-        return self.keys.get(key, "")
-
-    def __getattr__(self, attr):
-        return self.keys[attr]
-
-    def __contains__(self, key):
-        return key in self.keys
-
-    def _parse_and_validate_config_file(self):
-        """Initializes the users settings based on the config file."""
-        rc_file = open(self.config_filename, "r")
-
-        new_keys = {}
-
-        for line in rc_file:
-            # Strip whitespace and comments.
-            line = line.strip()
-            line = line.split("#")[0]
-            try:
-                param, code = line.split(":")
-                code = code.strip()
-                if common.is_int(code):
-                    code = int(code)
-                else:
-                    code = ord(eval(code))
-
-                # Make sure this is a valid config param.
-                if param not in self.default:
-                    print("The following parameter is not recognized: {}".format(param))
-
-                # Make sure this param wasn't defined twice.
-                if param in new_keys:
-                    print("The following line is redefining a param:")
-                    print(line)
-                    return False
-
-                # Make sure this code wasn't defined twice.
-                if code in new_keys.values():
-                    print("The following line is redefining a key code:")
-                    print(line)
-                    return False
-
-                new_keys[param] = code
-            except:
-                print("The following line is not formatted properly:")
-                print(line)
-                return False
-
-        # Copy over the defaults.
-        for param in set(self.default.keys()) - set(new_keys.keys()):
-            new_keys[param] = self.default[param]
-
-        # Make sure there's no collision.
-        if len(set(new_keys.values())) != len(new_keys):
-            print("A conflicting parameter was found with the default configuration!")
-            print("Check the help message (-h) for the defaults and make sure")
-            print("you aren't using the same keys.")
-            return False
-
-        # Success!
-        self.keys = new_keys
-
-        return True
-
-    @staticmethod
-    def help():
-        key_help = [
-            ("find_next", "Find the next entry matching the previous expression."),
-            ("find_previous", "Find the previous entry matching the previous expression."),
-            ("add_track", "Add a track to a playlist."),
-            ("show_devices", "Show available devices"),
-            ("refresh", "Refresh the player."),
-            ("goto_artist", "Go to the artist page of the highlighted track."),
-            ("goto_album", "Go to the album page of the highlighted track."),
-            ("current_artist", "Go to the artist page of the currently playing track."),
-            ("current_album", "Go to the album page of the currently playing track."),
-            ("current_context", "Go to the currently playing context."),
-            ("next_track", "Play the next track."),
-            ("previous_track", "Play the previous track."),
-            ("play", "Toggle play/pause."),
-            ("volume_0", "Mute volume."),
-            ("volume_1", "Set volume to 10%."),
-            ("volume_2", "Set volume to 20%."),
-            ("volume_3", "Set volume to 30%."),
-            ("volume_4", "Set volume to 40%."),
-            ("volume_5", "Set volume to 50%."),
-            ("volume_6", "Set volume to 60%."),
-            ("volume_7", "Set volume to 70%."),
-            ("volume_8", "Set volume to 80%."),
-            ("volume_9", "Set volume to 90%."),
-            ("volume_10", "Set volume to 100%."),
-            ("volume_up", "Increase volume by 5%."),
-            ("volume_down", "Decrease volume by 5%.")
-        ]
-
-        msg = "The following keys can be specified in the config file:\n\n"
-        for key, help_msg in key_help:
-            msg = msg + "%20s - %s (Default=\"%s\")\n" % (key, help_msg, chr(Config.default[key]))
-
-        msg = msg + "\nEach key should be defined by a single character in quotes.\n"
-        msg = msg + "Example:\n next_track: \">\"\n\n"
-        msg = msg + "Alternatively, you can define a special key code not in quotes.\n"
-        msg = msg + "Example:\n next_track: 67\n\n"
-
-        return msg
+        return self.percent_done
 
 
 def bind_to_all(states, key, func):

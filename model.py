@@ -12,7 +12,11 @@ class SpotifyObject(object):
         self.info = copy.deepcopy(info)
 
     def __getitem__(self, key):
-        return self.info[key]
+        item = self.info[key]
+        if isinstance(item, str):
+            return item or "[Unable to Render]"
+        else:
+            return item
 
     def __setitem__(self, key, value):
         self.info[key] = value

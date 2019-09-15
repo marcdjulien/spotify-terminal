@@ -308,6 +308,7 @@ class CursesDisplay(object):
     def render_footer(self):
         if self.state.is_loading():
             percent = self.state.get_loading_progress()
+            logger.info(percent)
             text = " " * int(self._cols * percent)
             uc.mvwaddstr(self.stdscr, self._rows-1, 0, text, uc.A_STANDOUT)
 
