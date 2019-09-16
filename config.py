@@ -14,7 +14,7 @@ class Config(object):
         "goto_album": ord("S"),
         "current_artist": ord("C"),
         "current_album": ord("X"),
-        "current_context": ord("?"),
+        "current_context": ord("|"),
         "next_track": ord(">"),
         "previous_track": ord("<"),
         "play": ord(" "),

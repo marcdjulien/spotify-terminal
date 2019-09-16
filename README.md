@@ -27,7 +27,7 @@ Use --help or -h to see more options.
 Where ```username``` is either the email associated with your Spotify account or the user id.
 
 # " Search
-By typing ```"``` you can begin a search. You may optionally the search with an end ".
+By typing ```?``` you can begin a search..
 
 # : Commands
 By typing ```:``` you can enter commands. The following is a list of all commands:
@@ -61,7 +61,7 @@ By typing ```:``` you can enter commands. The following is a list of all command
 
 ```Shift + D``` on any track to immediately go to the artist page.
 
-```Shift + ?``` to immediately go to the context of the currently playing song.
+```Shift + |``` to immediately go to the context of the currently playing song.
 
 ```Shift + X``` to immediately go to the album page of the currently playing song.
 

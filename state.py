@@ -150,7 +150,7 @@ class SpotifyState(object):
         # Bind useful shorthand commands.
         self.cmd.bind(['q', 'Q'], 'exit')
         self.cmd.bind_trigger('/', 'find 0')
-        self.cmd.bind_trigger(['#'], 'search')
+        self.cmd.bind_trigger(['?'], 'search')
 
         self.text_query = TextQuery()
         """A TextQuery for commands."""
@@ -323,8 +323,8 @@ class SpotifyState(object):
             for attr in self.PICKLE_ATTRS:
                 setattr(self, attr, ps[attr])
 
-    def _execute_search(self, query):
-        query = str(query)
+    def _execute_search(self, *query):
+        query = " ".join(query)
 
         results = self.api.search(("artist", "album", "track"), query)
         if results:
