@@ -2,9 +2,10 @@ import os
 import pickle
 import re
 import time
+import unicurses as uc
 from threading import RLock, Thread, Event
 
-import unicurses as uc
+import common
 from command import CommandProcessor, TextQuery
 from config import Config
 from model import (
@@ -16,7 +17,7 @@ from model import (
     Device,
     Option
 )
-import common
+from periodic import PeriodicCallback, PeriodicDispatcher
 
 
 logger = common.logging.getLogger(__name__)
@@ -74,23 +75,23 @@ class SpotifyState(object):
         self.config = config
         """The Config parameters."""
 
-        self.sync_player = common.PeriodicCallback(self.SYNC_PLAYER_PERIOD,
+        self.sync_player = PeriodicCallback(self.SYNC_PLAYER_PERIOD,
                                                    self.sync_player_state)
         """Periodic for syncing the player."""
 
-        self.sync_devices = common.PeriodicCallback(self.SYNC_DEVICES_PERIOD,
+        self.sync_devices = PeriodicCallback(self.SYNC_DEVICES_PERIOD,
                                                     self.periodic_sync_devices,
                                                     active=False)
         """Periodic for syncing the available devices."""
 
-        self.sync_progress = common.PeriodicCallback(1, self.calculate_track_progress)
+        self.sync_progress = PeriodicCallback(1, self.calculate_track_progress)
         """Periodic for calculating track progress."""
 
-        self.periodics = [
+        self.dispatcher = PeriodicDispatcher([
             self.sync_player,
             self.sync_devices,
             self.sync_progress
-        ]
+        ])
         """All Periodics."""
 
         self.user_list = List("user")
@@ -261,8 +262,7 @@ class SpotifyState(object):
             logger.info("Unrecognized key: %d", key)
 
         # Run all Periodics.
-        for periodic in self.periodics:
-            periodic.update(time.time())
+        self.dispatcher.dispatch()
 
         # Make sure sync_devices is only active when selecting a device.
         # TODO: Should be handled on state changes

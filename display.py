@@ -2,6 +2,8 @@ import time
 import unicurses as uc
 
 import common
+from periodic import PeriodicCallback, PeriodicDispatcher
+
 
 logger = common.logging.getLogger(__name__)
 
@@ -65,11 +67,11 @@ class CursesDisplay(object):
         self._register_window("tracks", self._window_sizes["tracks"])
         self._register_window("player", self._window_sizes["player"])
 
-        self.periodics = [
-            common.PeriodicCallback(self.PROGRAM_PERIOD, self.dispatch),
-            common.PeriodicCallback(self.RENDER_PERIOD, self.render),
-            common.PeriodicCallback(self.CLEAR_PERIOD, self.clear)
-        ]
+        self.periodic_dispatcher = PeriodicDispatcher([
+            PeriodicCallback(self.PROGRAM_PERIOD, self.dispatch),
+            PeriodicCallback(self.RENDER_PERIOD, self.render),
+            PeriodicCallback(self.CLEAR_PERIOD, self.clear)
+        ])
 
         self.dispatch_time = self.ACTIVE_PROGRAM_DISPATCH_TIME
 
@@ -127,8 +129,7 @@ class CursesDisplay(object):
 
         while self._running:
             with common.ContextDuration() as t:
-                for periodic in self.periodics:
-                    periodic.update(time.time())
+                self.periodic_dispatcher.dispatch()
 
             time.sleep(max(0, self.dispatch_time - t.duration))
 
