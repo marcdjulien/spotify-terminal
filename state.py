@@ -1351,8 +1351,10 @@ class Alert(object):
 
     def __init__(self):
         self.message = ""
+        """The message to displaty."""
 
         self.time_left = 0
+        """The amount of time left to display the message."""
 
     def warn(self, message, timeout):
         """Set an alert for the user.
@@ -1365,13 +1367,22 @@ class Alert(object):
         self.time_left = timeout
 
     def get_message(self):
-        """Get the current message."""
+        """Get the current message.
+
+        Returns the current message if the Alert is active.
+
+        Returns:
+            str: The message. None if the Alert is not active.    
+        """
         return self.message if self.is_active() else None
 
     def is_active(self):
         """If the Alert is active.
 
         An Alert is active if there is still time remaining.
+        
+        Returns:
+            bool: True if there is time left in the Alert.
         """
         return self.time_left > 0
 
