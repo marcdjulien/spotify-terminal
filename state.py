@@ -90,7 +90,8 @@ class SpotifyState(object):
         self.dispatcher = PeriodicDispatcher([
             self.sync_player,
             self.sync_devices,
-            self.sync_progress
+            self.sync_progress,
+            PeriodicCallback(1, self.calculate_alert_timeout)
         ])
         """All Periodics."""
 
@@ -156,6 +157,9 @@ class SpotifyState(object):
         self.text_query = TextQuery()
         """A TextQuery for commands."""
 
+        self.alert = Alert()
+        """Current Alert."""
+
         self.current_state = None
         """Current state of the applicaiton."""
 
@@ -165,7 +169,9 @@ class SpotifyState(object):
         self.futures = []
         """List of futures to execute."""
 
+        # Todo: Figure out a better way for periodics to handle their time
         self.track_progress_last_update_time = time.time()
+        self.alert_last_update_time = time.time()
         """The last time we were called to update."""
 
         # Build the state machine and transition to the first state.
@@ -270,8 +276,7 @@ class SpotifyState(object):
             if self.sync_devices.is_active():
                 self.sync_devices.deactivate()
 
-        play_icon = "||" if self.playing else "|>"
-        self.player_list[2].title = play_icon
+        self._set_player_icons()
 
         # We probably just selected a Track, let's plan
         # to re-sync in 5s.
@@ -293,6 +298,11 @@ class SpotifyState(object):
 
         # Save off this last time.
         self.track_progress_last_update_time = time.time()
+
+    def calculate_alert_timeout(self):
+        time_delta = time.time() - self.alert_last_update_time
+        self.alert.dec_time(time_delta)
+        self.alert_last_update_time = time.time()
 
     def switch_to_state(self, new_state):
         """Transition to a new State.
@@ -392,6 +402,18 @@ class SpotifyState(object):
         self.api.pause()
 
     def _play(self, track, context):
+        # Make sure there is a device to play.
+        if self.current_device is UnableToFindDevice:
+            key_ord = self.config.show_devices
+            key_chr = str(key_ord)
+            try: 
+                key_chr = chr(self.config.show_devices)
+            except:
+                pass
+            message = "No device is selected! Press '{}' ({}) to open the Devices menu."
+            self.alert.warn(message.format(key_chr, key_ord), 10)
+            return
+
         self.playing = True
 
         context_uri = None
@@ -487,23 +509,23 @@ class SpotifyState(object):
 
     def _set_playlist(self, playlist):
         future = Future(target=(self.api.get_tracks_from_playlist, playlist),
-                        result=(self._choose_tracks, (playlist, playlist['name'])))
+                        result=(self._update_track_list, (playlist, playlist['name'])))
         self.execute_future(future)
 
     def _set_artist(self, artist):
         future = Future(target=(self.api.get_selections_from_artist, artist),
-                        result=(self._choose_tracks, (artist, artist['name'])))
+                        result=(self._update_track_list, (artist, artist['name'])))
         self.execute_future(future)
 
     def _set_artist_all_tracks(self, artist):
         future = Future(target=(self.api.get_all_tracks_from_artist, artist),
-                        result=(self._choose_tracks, (common.get_all_tracks_context(artist),
+                        result=(self._update_track_list, (common.get_all_tracks_context(artist),
                                                    "All tracks from " + artist['name'])))
         self.execute_future(future)
 
     def _set_album(self, album):
         future = Future(target=(self.api.get_tracks_from_album, album),
-                        result=(self._choose_tracks, (album, album['name'])))
+                        result=(self._update_track_list, (album, album['name'])))
         self.execute_future(future)
 
     def _set_context(self, context):
@@ -523,10 +545,10 @@ class SpotifyState(object):
         context = self.api.convert_context(context)
 
         future = Future(target=(target_api_call, context),
-                        result=(self._choose_tracks, (context, context['name'])))
+                        result=(self._update_track_list, (context, context['name'])))
         self.execute_future(future)
 
-    def _choose_tracks(self, tracks, context, header):
+    def _update_track_list(self, tracks, context, header):
         # Save the track listing.
         self.previous_tracks.append((tracks, context, header))
 
@@ -539,7 +561,7 @@ class SpotifyState(object):
         self.tracks_list.set_index(0)
         self.switch_to_state(self.tracks_state)
 
-    def _choose_artist(self, artists):
+    def _update_artist_list(self, artists):
         self.artist_list.update_list(artists)
         self.artist_list.set_index(0)
         self.switch_to_state(self.select_artist_state)
@@ -554,18 +576,19 @@ class SpotifyState(object):
 
     def _set_player_repeat(self, state):
         self.repeat = self._get_repeat_enum(state)
-        self.player_list[4].title = "({})".format(['x', 'o', '1'][self.repeat])
 
     def _set_player_shuffle(self, state):
         self.shuffle = state
-        self.player_list[0].title = "({})".format(
-            {True: "S", False: "s"}[self.shuffle]
-        )
+
+    def _set_player_icons(self):
+        self.player_list[0].title = "({})".format('S' if self.shuffle else 's')
+        self.player_list[2].title = "||" if self.playing else "|>"
+        self.player_list[4].title = "({})".format(['x', 'o', '1'][self.repeat])
 
     def restore_previous_tracks(self):
         if len(self.previous_tracks) >= 2:
             self.previous_tracks.pop()
-            self._choose_tracks(*self.previous_tracks.pop())
+            self._update_track_list(*self.previous_tracks.pop())
             return True
         else:
             return False
@@ -713,7 +736,7 @@ class SpotifyState(object):
                 if len(artists) == 1:
                     self._set_artist(artists[0])
                 else:
-                    self._choose_artist(artists)
+                    self._update_artist_list(artists)
         tracks_state.bind_key(self.config.goto_artist, goto_artist)
 
         def goto_album():
@@ -908,7 +931,7 @@ class SpotifyState(object):
                 if len(artists) == 1:
                     self._set_artist(artists[0])
                 else:
-                    self._choose_artist(artists)
+                    self._update_artist_list(artists)
         bind_to_all(main_states, self.config.current_artist, current_artist)
 
         def current_album():
@@ -1321,3 +1344,41 @@ class State(object):
 
     def __str__(self):
         return self._name
+
+
+class Alert(object):
+    """Represents a informational warning to the user."""
+
+    def __init__(self):
+        self.message = ""
+
+        self.time_left = 0
+
+    def warn(self, message, timeout):
+        """Set an alert for the user.
+
+        Args:
+            message (str): The message to display.
+            timeout (float): How long to display the message.
+        """
+        self.message = message
+        self.time_left = timeout
+
+    def get_message(self):
+        """Get the current message."""
+        return self.message if self.is_active() else None
+
+    def is_active(self):
+        """If the Alert is active.
+
+        An Alert is active if there is still time remaining.
+        """
+        return self.time_left > 0
+
+    def dec_time(self, amount):
+        """Decrement the amount of time left in an Alert.
+
+        Args:
+            amount (float): How much time to decrement by.
+        """
+        self.time_left -= amount
