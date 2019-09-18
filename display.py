@@ -299,12 +299,15 @@ class CursesDisplay(object):
         device_info = "{} ({}%)".format(self.state.current_device, self.state.volume)
         self._render_text(win, 7, 2, device_info, cols-3, uc.A_NORMAL)
 
+        col = 2
         for i, action in enumerate(self.state.player_list):
             if (i == self.state.player_list.i) and self.is_active_window("player"):
                 style = uc.A_BOLD | uc.A_STANDOUT
             else:
                 style = uc.A_NORMAL
-            uc.mvwaddstr(win, 5, 2 + i*4, action.title, style)
+            icon = action.title
+            uc.mvwaddstr(win, 5, col, icon, style)
+            col += len(icon) + 2
 
     def render_footer(self):
         if self.state.is_loading():

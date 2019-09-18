@@ -183,12 +183,12 @@ class SpotifyState(object):
         # Initialize PlayerActions.
         self.player_list.update_list([
             PlayerAction("(S)", self._toggle_shuffle),
-            PlayerAction("<< ", self._play_previous),
-            PlayerAction("(P)", self._toggle_play),
-            PlayerAction(" >>", self._play_next),
+            PlayerAction("<<", self._play_previous),
+            PlayerAction("||", self._toggle_play),
+            PlayerAction(">>", self._play_next),
             PlayerAction("(R)", self._toggle_repeat),
-            PlayerAction(" --", self._decrease_volume),
-            PlayerAction(" ++", self._increase_volume),
+            PlayerAction("--", self._decrease_volume),
+            PlayerAction("++", self._increase_volume),
         ])
 
         self.confirm_list.update_list([Option("Yes"),
@@ -269,6 +269,9 @@ class SpotifyState(object):
         if not self.in_select_device_menu():
             if self.sync_devices.is_active():
                 self.sync_devices.deactivate()
+
+        play_icon = "||" if self.playing else "|>"
+        self.player_list[2].title = play_icon
 
         # We probably just selected a Track, let's plan
         # to re-sync in 5s.
@@ -376,17 +379,21 @@ class SpotifyState(object):
             self.api.volume(self.volume)
 
     def _execute_play(self):
-        self.playing = True
         self._play(None, None)
 
     def _execute_pause(self):
-        self.playing = False
-        self.api.pause()
+        self._pause()
 
     def _execute_exit(self):
         self.current_state = self.exit_state
 
+    def _pause(self):
+        self.playing = False
+        self.api.pause()
+
     def _play(self, track, context):
+        self.playing = True
+
         context_uri = None
         uris = None
         track_id = None
@@ -896,7 +903,7 @@ class SpotifyState(object):
 
         def current_artist():
             entry = self.currently_playing_track
-            if entry:
+            if entry is not NoneTrack:
                 artists = entry['artists']
                 if len(artists) == 1:
                     self._set_artist(artists[0])
@@ -906,7 +913,7 @@ class SpotifyState(object):
 
         def current_album():
             entry = self.currently_playing_track
-            if entry:
+            if entry is not NoneTrack:
                 album = entry['album']
                 self._set_album(album)
         bind_to_all(main_states, self.config.current_album, current_album)

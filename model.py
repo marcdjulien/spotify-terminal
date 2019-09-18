@@ -126,7 +126,7 @@ class Device(SpotifyObject):
 
 
 UnableToFindDevice = Device({"type": "Unable to find device",
-                             "name": "Press 'W' to see available players",
+                             "name": "Press show_devices key (Default: 'W') to see available players",
                              "id": None})
 
 
