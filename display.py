@@ -30,7 +30,7 @@ class CursesDisplay(object):
     IDLE_TIMEOUT = 0.5
 
     # How long to wait before declaring the program is not idle and is sleeping.
-    SLEEP_TIMEOUT = 60
+    SLEEP_TIMEOUT = 5 * 60
 
     # How often to run the program loop when the user is actively using it.
     PROGRAM_PERIOD = 0.01
