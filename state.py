@@ -635,7 +635,7 @@ class SpotifyState(object):
 
     def get_loading_progress(self):
         if self.futures:
-            return self.futures[0].get_progress()
+            return self.futures[0].get_progress() or 0.0
 
     def get_track_progress(self):
         return self.progress
@@ -977,16 +977,21 @@ class SpotifyState(object):
         loading_state = State("loading")
 
         def loading():
-            # Get the current Future.
-            future = self.futures[0]
+            # Nothing to do here, go back.
+            if not self.futures:
+                switch_to_prev_state()
+            else:
+                # Get the current Future.
+                future = self.futures[0]
 
-            # If it's done, leave the loading_state.
-            # But if there are more Futures to execute, continue to run them.
-            if future.is_done():
-                with future_lock:
-                    self.futures.pop(0)
-                    if self.futures:
-                        self.futures[0].run()
+                # If it's done, leave the loading_state.
+                # If this Future doesn't have progress information, don't wait for it.
+                # But if there are more Futures to execute, continue to run them.
+                if future.is_done() or future.get_progress() is None:
+                    with future_lock:
+                        self.futures.pop(0)
+                        if self.futures:
+                            self.futures[0].run()
 
         loading_state.set_default_action(loading)
         self.loading_state = loading_state
@@ -1153,6 +1158,8 @@ class Future(object):
                 The target function must accept a keyword argument 'progress'
                 that is a Progress object.
             result (tuple): Contains the result function, args and kwargs.
+            progress (bool): True if this Future operation has progress. If False,
+                the program will not wait on it or show progress information.
         """
         def to_iter(obj):
             if isinstance(obj, (tuple, list)):
@@ -1188,6 +1195,9 @@ class Future(object):
         self.progress = Progress()
         """Percent done."""
 
+        self.has_progress = progress
+        """True if this Future operation has progress."""
+
         if progress:
             self.target_kwargs['progress'] = self.progress
 
@@ -1221,7 +1231,7 @@ class Future(object):
         self.event.wait()
 
     def get_progress(self):
-        return self.progress.get_percent()
+        return self.progress.get_percent() if self.has_progress else None
 
     def is_done(self):
         return self.event.is_set()
