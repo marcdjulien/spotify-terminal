@@ -221,7 +221,7 @@ class SpotifyState(object):
         self.user_list.update_list(tuple(playlists))
 
         # Initialize track list.
-        if player_state:
+        if player_state and player_state["context"] is not None:
             self._set_context(player_state['context'])
         else:
             if not self.restore_previous_tracks():
@@ -411,7 +411,7 @@ class SpotifyState(object):
             except:
                 pass
             message = "No device is selected! Press '{}' ({}) to open the Devices menu."
-            self.alert.warn(message.format(key_chr, key_ord), 10)
+            self.alert.warn(message.format(key_chr, key_ord))
             return
 
         self.playing = True
@@ -529,12 +529,6 @@ class SpotifyState(object):
         self.execute_future(future)
 
     def _set_context(self, context):
-        if context is None:
-            context = {
-                "type":"playlist",
-                "uri": common.SAVED_TRACKS_CONTEXT_URI
-            }
-
         target_api_call = {
             "artist": self.api.get_selections_from_artist,
             "playlist": self.api.get_tracks_from_playlist,
@@ -945,7 +939,10 @@ class SpotifyState(object):
             state = self.api.get_player_state()
             if state:
                 context = state['context']
-                self._set_context(context)
+                if context is None:
+                    self.alert.warn("Unable to go to currently playing context!")
+                else:
+                    self._set_context(context)
         bind_to_all(main_states, self.config.current_context, current_context)
 
         def all_tracks():
@@ -1356,7 +1353,7 @@ class Alert(object):
         self.time_left = 0
         """The amount of time left to display the message."""
 
-    def warn(self, message, timeout):
+    def warn(self, message, timeout=10):
         """Set an alert for the user.
 
         Args:

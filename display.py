@@ -323,55 +323,56 @@ class CursesDisplay(object):
             col += len(icon) + 2
 
     def render_footer(self):
+        if self.state.is_loading():
+            percent = self.state.get_loading_progress()
+            if percent is not None:
+                text = " " * int(self._cols * percent)
+                uc.mvwaddstr(self.stdscr, self._rows-1, 0, text, uc.A_STANDOUT)
+        elif self.state.is_adding_track_to_playlist():
+            text = "Select a playlist to add this track"
+            uc.mvwaddstr(self.stdscr, self._rows-1, 0, text, uc.A_BOLD)
+        elif self.state.is_creating_command():
+            start_col = 1
+            query = self.state.get_command_query()
+            text = str(query) + " "
+            uc.mvwaddstr(self.stdscr, self._rows-1, start_col, text)
+            uc.mvwaddstr(self.stdscr,
+                         self._rows-1, start_col+query.get_cursor_index(),
+                         query.get_current_index() or " ",
+                         uc.A_STANDOUT)
+        else:
+            entry = self.state.current_state.get_list().get_current_entry()
+            if entry:
+                ncols = self._cols-1
+                long_str = str(entry)
+                short_str = entry.str(ncols) if hasattr(entry, "str") else long_str
+
+                # Check if we need to scroll or not.
+                if "".join(short_str.split()) == "".join(long_str.split()):
+                    uc.mvwaddstr(self.stdscr, self._rows-1, 0, short_str, uc.A_BOLD)
+                    # This ensures that we always start form the same position
+                    # when we go from a static footer to a long footer that needs rolling.
+                    self._footer_roll_index = -200
+                else:
+                    self._footer_roll_index += 1
+                    footer_roll_index = max(0, self._footer_roll_index)
+                    footer_roll_index //= 10
+                    # Double the string length so that we always uniformly roll
+                    # even in the case the entire string length is less than the terminal width.
+                    # Also, add a border to easily identify the end.
+                    long_str = 2 * (long_str + " | ")
+                    text = list(long_str)
+                    for _ in range(footer_roll_index):
+                        text.append(text.pop(0))
+                    text = "".join(text)
+                    text = text[0:ncols]
+                    uc.mvwaddstr(self.stdscr, self._rows-1, 0, text, uc.A_BOLD)
+        
         if self.state.alert.is_active():
             text = self.state.alert.get_message()
+            text = "[{}]".format(text)
             uc.mvwaddstr(self.stdscr, self._rows-1, 0, text, uc.A_STANDOUT)
-        else:
-            if self.state.is_loading():
-                percent = self.state.get_loading_progress()
-                if percent is not None:
-                    text = " " * int(self._cols * percent)
-                    uc.mvwaddstr(self.stdscr, self._rows-1, 0, text, uc.A_STANDOUT)
-            elif self.state.is_adding_track_to_playlist():
-                text = "Select a playlist to add this track"
-                uc.mvwaddstr(self.stdscr, self._rows-1, 0, text, uc.A_BOLD)
-            elif self.state.is_creating_command():
-                start_col = 1
-                query = self.state.get_command_query()
-                text = str(query) + " "
-                uc.mvwaddstr(self.stdscr, self._rows-1, start_col, text)
-                uc.mvwaddstr(self.stdscr,
-                             self._rows-1, start_col+query.get_cursor_index(),
-                             query.get_current_index() or " ",
-                             uc.A_STANDOUT)
-            else:
-                entry = self.state.current_state.get_list().get_current_entry()
-                if entry:
-                    ncols = self._cols-1
-                    long_str = str(entry)
-                    short_str = entry.str(ncols) if hasattr(entry, "str") else long_str
-
-                    # Check if we need to scroll or not.
-                    if "".join(short_str.split()) == "".join(long_str.split()):
-                        uc.mvwaddstr(self.stdscr, self._rows-1, 0, short_str, uc.A_BOLD)
-                        # This ensures that we always start form the same position
-                        # when we go from a static footer to a long footer that needs rolling.
-                        self._footer_roll_index = -200
-                    else:
-                        self._footer_roll_index += 1
-                        footer_roll_index = max(0, self._footer_roll_index)
-                        footer_roll_index //= 10
-                        # Double the string length so that we always uniformly roll
-                        # even in the case the entire string length is less than the terminal width.
-                        # Also, add a border to easily identify the end.
-                        long_str = 2 * (long_str + " | ")
-                        text = list(long_str)
-                        for _ in range(footer_roll_index):
-                            text.append(text.pop(0))
-                        text = "".join(text)
-                        text = text[0:ncols]
-                        uc.mvwaddstr(self.stdscr, self._rows-1, 0, text, uc.A_BOLD)
-
+        
         # Track progress bar
         progress = self.state.get_track_progress()
         if progress:
