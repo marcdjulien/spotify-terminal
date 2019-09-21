@@ -3,7 +3,7 @@ import pickle
 import re
 import time
 import unicurses as uc
-from threading import RLock, Thread, Event
+from threading import RLock, Thread, Event, current_thread, _MainThread
 
 import common
 from command import CommandProcessor, TextQuery
@@ -166,6 +166,9 @@ class SpotifyState(object):
         self.prev_state = None
         """Previous state of the applicaiton."""
 
+        self.next_future_state = None
+        """The next state to go to after all Futures are done."""
+
         self.futures = []
         """List of futures to execute."""
 
@@ -310,6 +313,10 @@ class SpotifyState(object):
         Args:
             new_state (State): The new State to transition to.
         """
+        if not isinstance(current_thread(), _MainThread):
+            self.logger.info("Only the MainThread can switch states!")
+            return
+
         logger.debug("State transition: %s -> %s", self.current_state, new_state)
         self.prev_state = self.current_state
         self.current_state = new_state
@@ -461,7 +468,7 @@ class SpotifyState(object):
         future = Future(target=self.api.next,
                         result=wait_and_sync,
                         progress=False)
-        self.execute_future(future)
+        self.execute_future(future, self.current_state)
 
     def _play_previous(self):
         def wait_and_sync():
@@ -471,7 +478,7 @@ class SpotifyState(object):
         future = Future(target=self.api.previous,
                         result=wait_and_sync,
                         progress=False)
-        self.execute_future(future)
+        self.execute_future(future, self.current_state)
 
     def _toggle_play(self):
         if self.playing:
@@ -510,23 +517,23 @@ class SpotifyState(object):
     def _set_playlist(self, playlist):
         future = Future(target=(self.api.get_tracks_from_playlist, playlist),
                         result=(self._update_track_list, (playlist, playlist['name'])))
-        self.execute_future(future)
+        self.execute_future(future, self.tracks_state)
 
     def _set_artist(self, artist):
         future = Future(target=(self.api.get_selections_from_artist, artist),
                         result=(self._update_track_list, (artist, artist['name'])))
-        self.execute_future(future)
+        self.execute_future(future, self.tracks_state)
 
     def _set_artist_all_tracks(self, artist):
         future = Future(target=(self.api.get_all_tracks_from_artist, artist),
                         result=(self._update_track_list, (common.get_all_tracks_context(artist),
                                                    "All tracks from " + artist['name'])))
-        self.execute_future(future)
+        self.execute_future(future, self.tracks_state)
 
     def _set_album(self, album):
         future = Future(target=(self.api.get_tracks_from_album, album),
                         result=(self._update_track_list, (album, album['name'])))
-        self.execute_future(future)
+        self.execute_future(future, self.tracks_state)
 
     def _set_context(self, context):
         target_api_call = {
@@ -540,7 +547,7 @@ class SpotifyState(object):
 
         future = Future(target=(target_api_call, context),
                         result=(self._update_track_list, (context, context['name'])))
-        self.execute_future(future)
+        self.execute_future(future, self.tracks_state)
 
     def _update_track_list(self, tracks, context, header):
         # Save the track listing.
@@ -553,7 +560,6 @@ class SpotifyState(object):
 
         # Go to the tracks pane.
         self.tracks_list.set_index(0)
-        self.switch_to_state(self.tracks_state)
 
     def _update_artist_list(self, artists):
         self.artist_list.update_list(artists)
@@ -624,7 +630,7 @@ class SpotifyState(object):
         return self.currently_playing_track
 
     @with_future_lock
-    def execute_future(self, future):
+    def execute_future(self, future, next_state):
         # If we're not already executing one, run it.
         # Otherwise, it will be added to the queue and executed later.
         logger.debug("Adding Future: %s", future)
@@ -632,6 +638,7 @@ class SpotifyState(object):
         if not self.is_loading():
             self.switch_to_state(self.loading_state)
             future.run()
+        self.next_future_state = next_state
 
     def get_loading_progress(self):
         if self.futures:
@@ -979,7 +986,12 @@ class SpotifyState(object):
         def loading():
             # Nothing to do here, go back.
             if not self.futures:
-                switch_to_prev_state()
+                if self.next_future_state is not None:
+                    self.switch_to_state(self.next_future_state)
+                    self.next_future_state = None
+                else:
+                    self.logger.info("Invalid next state, going to previous.")
+                    switch_to_prev_state()
             else:
                 # Get the current Future.
                 future = self.futures[0]
