@@ -22,7 +22,7 @@ class CursesDisplay(object):
     IDLE_PROGRAM_DISPATCH_TIME = 0.1
 
     # Max amount of time to dispatch each cycle when the program is sleeping.
-    SLEEP_PROGRAM_DISPATCH_TIME = 1
+    SLEEP_PROGRAM_DISPATCH_TIME = 0.4
 
     # How long to wait before declaring the program is not active and is idle.
     IDLE_TIMEOUT = 0.5
