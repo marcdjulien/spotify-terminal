@@ -711,9 +711,16 @@ class SpotifyState(object):
         #
         tracks_state = State("tracks", self.tracks_list)
         tracks_state.bind_key(uc.KEY_UP, move_up_current_list)
-        tracks_state.bind_key(uc.KEY_DOWN, move_down_current_list)
         tracks_state.bind_key(uc.KEY_LEFT, switch_to_user_state)
         tracks_state.bind_key(uc.KEY_RIGHT, switch_to_player_state)
+
+        def down():
+            cur_list = self.current_state.get_list()
+            if cur_list.i == len(cur_list)-1:
+                switch_to_player_state()
+            else:
+                move_down_current_list()
+        tracks_state.bind_key(uc.KEY_DOWN, down)
 
         def dec():
             self.tracks_list.decrement(15)
