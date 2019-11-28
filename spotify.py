@@ -6,7 +6,7 @@ import unicurses as uc
 
 import common
 from display import CursesDisplay
-from api import SpotifyApi
+from api import SpotifyApi, TestSpotifyApi
 from state import SpotifyState, Config
 
 
@@ -39,6 +39,11 @@ def get_args():
                         default=False,
                         dest="debug",
                         help="debug mode")
+    parser.add_argument("--test",
+                        action="store_true",
+                        default=False,
+                        dest="test",
+                        help="test mode")
     return parser.parse_args()
 
 
@@ -87,7 +92,8 @@ if __name__ == '__main__':
     config = Config(args.config_path)
 
     # Spotify API interface.
-    api = SpotifyApi(args.username)
+    ApiClass = TestSpotifyApi if args.test else SpotifyApi
+    api = ApiClass(args.username)
 
     # Display premium warning.
     if not api.user_is_premium():

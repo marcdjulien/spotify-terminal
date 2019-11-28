@@ -113,6 +113,9 @@ class SpotifyApi(object):
     DEFAULT_TIMEOUT = 10
     """The default timeout for any HTTP requests."""
 
+    API_URL = "https://api.spotify.com/v1"
+    """URL to make API requests."""
+
     def __init__(self, username):
         self.username = username
         """Email or user id."""
@@ -705,7 +708,7 @@ class SpotifyApi(object):
             dict: The JSON information.
         """
         headers = {"Authorization": "%s %s" % (self.auth.token_type, self.auth.access_token)}
-        url = "https://api.spotify.com/v1/{}".format(endpoint)
+        url = "{}/{}".format(self.API_URL, endpoint)
         resp = requests.get(url, params=params, headers=headers, timeout=self.DEFAULT_TIMEOUT)
         resp.raise_for_status()
 
@@ -729,7 +732,7 @@ class SpotifyApi(object):
         """
         headers = {"Authorization": "%s %s" % (self.auth.token_type, self.auth.access_token),
                    "Content-Type": "application/json"}
-        api_url = "https://api.spotify.com/v1/{}".format(endpoint)
+        api_url = "{}/{}".format(self.API_URL, endpoint)
         resp = requests.put(api_url, headers=headers, params=params, json=data, timeout=self.DEFAULT_TIMEOUT)
         resp.raise_for_status()
         return resp
@@ -748,7 +751,7 @@ class SpotifyApi(object):
         """
         headers = {"Authorization": "%s %s" % (self.auth.token_type, self.auth.access_token),
                    "Content-Type": "application/json"}
-        api_url = "https://api.spotify.com/v1/{}".format(endpoint)
+        api_url = "{}/{}".format(self.API_URL, endpoint)
         resp = requests.delete(api_url, headers=headers, params=params, json=data, timeout=self.DEFAULT_TIMEOUT)
         resp.raise_for_status()
         return resp
@@ -766,7 +769,12 @@ class SpotifyApi(object):
         """
         headers = {"Authorization": "%s %s" % (self.auth.token_type, self.auth.access_token),
                    "Content-Type": "application/json"}
-        api_url = "https://api.spotify.com/v1/{}".format(endpoint)
+        api_url = "{}/{}".format(self.API_URL, endpoint)
         resp = requests.post(api_url, headers=headers, params=params, timeout=self.DEFAULT_TIMEOUT)
         resp.raise_for_status()
         return common.ascii(resp.text)
+
+
+class TestSpotifyApi(SpotifyApi):
+    """Test version used for local testing."""
+    API_URL = "http://localhost:8000"
