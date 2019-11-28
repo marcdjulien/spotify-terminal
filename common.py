@@ -18,6 +18,9 @@ except:
 logger = None
 
 
+DEBUG = False
+
+
 def catch_exceptions(func):
     """Decorator to catch an exceptions and print it.
 
@@ -252,6 +255,7 @@ def clear_auth(username):
 def extract_version(stream):
     version = None
     for line in stream:
+        line = line.decode()
         if "." in line:
             version = line.strip()
             break
@@ -265,7 +269,10 @@ def get_version():
             os.path.dirname(os.path.abspath(__file__)),
             ".version"
         )
-        with open(version_file, "r") as f:
+        # Read in as bytes. extract_version will decode it.
+        # This maintains compatibility with get_master_version
+        # which relies on bytes from the Request response.
+        with open(version_file, "rb") as f:
             return extract_version(f)
     except BaseException as e:
         logger.info("Could not get current version %s", e)

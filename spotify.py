@@ -18,7 +18,8 @@ def get_args():
     parser = argparse.ArgumentParser(description="Terminal remote Spotify player.",
                                      epilog=Config.help(),
                                      formatter_class=argparse.RawTextHelpFormatter)
-    parser.add_argument("username", help="username associated with your spotify account (email or user id)")
+    parser.add_argument("username", 
+                        help="username associated with your spotify account (email or user id)")
     parser.add_argument("-c --clear_cache",
                         action="store_true",
                         default=False,
@@ -33,6 +34,11 @@ def get_args():
                         default=None,
                         dest="config_path",
                         help="pass a configuration file")
+    parser.add_argument("--debug",
+                        action="store_true",
+                        default=False,
+                        dest="debug",
+                        help="debug mode")
     return parser.parse_args()
 
 
@@ -57,6 +63,12 @@ if __name__ == '__main__':
     common.clear()
     print(common.TITLE)
 
+    if args.debug:
+        common.DEBUG = True
+
+    if common.DEBUG:
+        print("[!] Debug mode is on [!]\n")
+
     # Check the version we're running.
     check_version()
 
@@ -78,8 +90,8 @@ if __name__ == '__main__':
     api = SpotifyApi(args.username)
 
     # Display premium warning.
-    if not api.is_premium():
-        print("This is not a Premium account. Some features may not work.")
+    if not api.user_is_premium():
+        print("This is not a Premium account. Most features will not work!")
         time.sleep(3)
 
     # Create Spotify state.
@@ -104,6 +116,7 @@ if __name__ == '__main__':
         raise
 
     print(common.PEACE)
+    time.sleep(1)
 
     # Save the state.
     sp_state.save_state()

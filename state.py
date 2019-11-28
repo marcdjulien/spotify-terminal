@@ -76,12 +76,12 @@ class SpotifyState(object):
         """The Config parameters."""
 
         self.sync_player = PeriodicCallback(self.SYNC_PLAYER_PERIOD,
-                                                   self.sync_player_state)
+                                            self.sync_player_state)
         """Periodic for syncing the player."""
 
         self.sync_devices = PeriodicCallback(self.SYNC_DEVICES_PERIOD,
-                                                    self.periodic_sync_devices,
-                                                    active=False)
+                                             self.periodic_sync_devices,
+                                             active=False)
         """Periodic for syncing the available devices."""
 
         self.sync_progress = PeriodicCallback(1, self.calculate_track_progress)
@@ -183,10 +183,10 @@ class SpotifyState(object):
 
     def init(self):
         # Get the User info.
-        self.user = self.api.get_user()
+        user = self.api.get_user()
 
-        if not self.user:
-            print("Could not load user {}".format(self.api.get_username()))
+        if user is None:
+            print("Could not load user {}".format(self.api.user_username()))
             exit(1)
 
         # Initialize PlayerActions.
@@ -200,15 +200,14 @@ class SpotifyState(object):
             PlayerAction("++", self._increase_volume),
         ])
 
-        self.confirm_list.update_list([Option("Yes"),
-                                       Option("No")])
+        self.confirm_list.update_list([Option("Yes"), Option("No")])
 
-        # Get current player state.
-        player_state = self.sync_player_state()
+        # Sync current player state.
+        self.sync_player_state()
 
         # Get the users playlists.
-        playlists = self.api.get_user_playlists(self.user)
-        if not playlists:
+        playlists = self.api.get_user_playlists(user)
+        if playlists is None:
             print("Could not load playlists. Try again.")
             exit(1)
         playlists = list(playlists)
@@ -218,20 +217,23 @@ class SpotifyState(object):
             "name": "Saved",
             "uri": common.SAVED_TRACKS_CONTEXT_URI,
             "id": "",
-            "owner_id": self.api.get_id()
+            "owner_id": self.api.user_id()
         })
         playlists.insert(0, saved)
         self.user_list.update_list(tuple(playlists))
 
         # Initialize track list.
-        if player_state and player_state["context"] is not None:
-            self._set_context(player_state['context'])
+        if self.current_context is not None:
+            self._set_context(self.current_context)
         else:
             if not self.restore_previous_tracks():
                 logger.debug("Loading the Saved track list")
                 self._set_playlist(self.user_list[0])
 
+    @common.asynchronously
     def sync_player_state(self):
+        # Note: DO NOT set the current_context
+        # Otherwise, it will confused the state of things. 
         player_state = self.api.get_player_state()
         if player_state:
             track = player_state['item']
@@ -245,27 +247,38 @@ class SpotifyState(object):
             duration = player_state['progress_ms']
             if self.currently_playing_track and duration:
                 self.progress = [duration, self.currently_playing_track['duration_ms']]
-
-            return player_state
         else:
-            self.progress = None
             self.currently_playing_track = NoneTrack
+            self.playing = False
             self.current_device = UnableToFindDevice
+            self.volume = 0
+            # TODO: For now, always default to this.
+            self.progress = None
 
     def periodic_sync_devices(self):
         self.available_devices = self.api.get_devices()
-        self.device_list.update_list(self.available_devices,
-                                     reset_index=False)
+        if self.available_devices is None:
+            self.alert.warn("Could not find any devices")
+            return
+        
+        # Don't reset the index since this is called every 1s when the devices
+        # menu is open.
+        self.device_list.update_list(self.available_devices, reset_index=False)
 
     def process_key(self, key):
+        """Process a key.
+
+        Args:
+            key (int): The key that was pressed. Can also be None.
+        """
         action = self.current_state.process_key(key)
         if action:
             # Kinda gross, but easiest way to deal with passing in the key that was presed
             # and not forcing all functions to take in a positional argument.
             try:
-                action(key)
-            except TypeError:
                 action()
+            except TypeError:
+                action(key)
 
         if key is not None and action is None:
             logger.info("Unrecognized key: %d", key)
@@ -283,6 +296,7 @@ class SpotifyState(object):
 
         # We probably just selected a Track, let's plan
         # to re-sync in 5s.
+        # TODO: This should be handled by the state machine
         if key in self.ENTER_KEYS:
             self.sync_player.call_in(5)
 
@@ -327,17 +341,17 @@ class SpotifyState(object):
             attr_name: getattr(self, attr_name)
             for attr_name in self.PICKLE_ATTRS
         }
-        state_filename = common.get_file_from_cache(self.api.get_username(), "state")
+        state_filename = common.get_file_from_cache(self.api.user_username(), "state")
         with open(state_filename, "wb") as file:
-            logger.debug("Saving %s state", self.api.get_username())
+            logger.debug("Saving %s state", self.api.user_username())
             pickle.dump(ps, file)
 
     def load_state(self):
         """Load part of the state from disk."""
-        state_filename = common.get_file_from_cache(self.api.get_username(), "state")
+        state_filename = common.get_file_from_cache(self.api.user_username(), "state")
         if os.path.isfile(state_filename):
             with open(state_filename, "rb") as file:
-                logger.debug("Loading %s state", self.api.get_username())
+                logger.debug("Loading %s state", self.api.user_username())
                 ps = pickle.load(file)
 
             for attr in self.PICKLE_ATTRS:
@@ -345,7 +359,6 @@ class SpotifyState(object):
 
     def _execute_search(self, *query):
         query = " ".join(query)
-
         results = self.api.search(("artist", "album", "track"), query)
         if results:
             self.search_list.update_list(results)
@@ -353,18 +366,16 @@ class SpotifyState(object):
         else:
             self.search_list.update_list([])
             self.search_list.header = "No results found for \"{}\"".format(query)
-
         self.switch_to_state(self.search_state)
 
     def _execute_find(self, i, *query):
         query = " ".join(query)
-
-        # Find the right state to do the 'find'.
-        state = self.current_state
+        # Find the right state to search in.
+        state_to_search = self.current_state
         if self.current_state == self.creating_command_state:
-            state = self.prev_state
+            state_to_search = self.prev_state
 
-        search_list = state.get_list()
+        search_list = state_to_search.get_list()
 
         found = []
         for index, item in enumerate(search_list):
@@ -375,7 +386,7 @@ class SpotifyState(object):
            search_list.set_index(found[int(i) % len(found)])
 
         if self.current_state == self.creating_command_state:
-            self.switch_to_state(state)
+            self.switch_to_state(state_to_search)
 
     def _execute_shuffle(self, state):
         state = state.lower().strip()
@@ -391,9 +402,8 @@ class SpotifyState(object):
 
     def _execute_volume(self, volume):
         volume = common.clamp(int(volume), 0, 100)
-        if 0 <= volume and volume <= 100:
-            self.volume = volume
-            self.api.volume(self.volume)
+        self.volume = volume
+        self.api.volume(self.volume)
 
     def _execute_play(self):
         self._play(None, None)
@@ -432,19 +442,22 @@ class SpotifyState(object):
             self.progress = [0, track['duration_ms']]
             track_id = track['uri']
 
-        # The Saved Tracks playlist in Spotify doesn't have a Context.
-        # So we have to give the API a list of Tracks to play
-        # to mimic a context.
         if context:
+            # The Saved Tracks playlist in Spotify doesn't have a Context.
+            # So we have to give the API a list of Tracks to play
+            # to mimic a context.
             if context['uri'] == common.SAVED_TRACKS_CONTEXT_URI:
-                uris = [t['uri'] for t in
-                        self.api.get_tracks_from_playlist(self.user_list[0])]
-                track_id = self.tracks_list.i
+                tracks = self.api.get_tracks_from_playlist(self.user_list[0])
+                if tracks is not None:
+                    uris = [t['uri'] for t in tracks]
+                    track_id = self.tracks_list.i
+            # Mimic a context for the Artist page (i.e, top tracks)
             elif context.get('type') == 'artist':
-                uris = [s['uri']
-                        for s in self.api.get_selections_from_artist(self.current_context)
-                        if s['type'] == 'track']
-                track_id = self.tracks_list.i
+                selections = self.api.get_selections_from_artist(self.current_context)
+                if selections is not None:
+                    uris = [s['uri'] for s in selections if s['type'] == 'track']
+                    track_id = self.tracks_list.i
+            # Mimic the "all tracks" context
             elif common.is_all_tracks_context(context):
                 uris = [t['uri'] for t in self.tracks_list.list]
                 track_id = self.tracks_list.i
@@ -544,12 +557,18 @@ class SpotifyState(object):
         }[context["type"]]
 
         context = self.api.convert_context(context)
+        if context is None:
+            return
 
         future = Future(target=(target_api_call, context),
                         result=(self._update_track_list, (context, context['name'])))
         self.execute_future(future, self.tracks_state)
 
     def _update_track_list(self, tracks, context, header):
+        if not tracks:
+            self.alert.warn("Unable to get tracks from {}".format(header))
+            return
+            
         # Save the track listing.
         self.previous_tracks.append((tracks, context, header))
 
@@ -567,7 +586,6 @@ class SpotifyState(object):
         self.switch_to_state(self.select_artist_state)
 
     def _set_player_device(self, new_device, play):
-        self.sync_player_state()
         self.current_device = new_device
         self.api.transfer_playback(new_device, play)
 
@@ -621,7 +639,7 @@ class SpotifyState(object):
         return self.current_state in states
 
     def get_display_name(self):
-        return self.api.get_display_name()
+        return self.api.user_display_name()
 
     def get_command_query(self):
         return self.text_query
@@ -851,7 +869,7 @@ class SpotifyState(object):
                 self._set_album(entry)
             elif entry['type'] == 'artist':
                 albums = self.api.get_albums_from_artist(entry)
-                if albums:
+                if albums is not None:
                     self.search_menu['results'].update_list(albums)
         search_state.bind_key(uc.KEY_RIGHT, right)
 
@@ -944,7 +962,7 @@ class SpotifyState(object):
 
         def current_context():
             state = self.api.get_player_state()
-            if state:
+            if state is not None:
                 context = state['context']
                 if context is None:
                     self.alert.warn("Unable to go to currently playing context!")
@@ -1057,7 +1075,7 @@ class SpotifyState(object):
             artist = self.artist_list.get_current_entry()
             if artist:
                 self._set_artist(artist)
-                switch_to_prev_state()
+                switch_to_tracks_state()
         select_artist_state.bind_key(self.ENTER_KEYS, enter)
         self.select_artist_state = select_artist_state
 
