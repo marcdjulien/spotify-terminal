@@ -54,11 +54,7 @@ def needs_authentication(func):
     return wrapper
 
 def return_none_on_error(func):
-    """Catches errors and returns None.
-
-    TODO: In debug mode should raise the exception.
-    """
-
+    """Catches errors and returns None."""
     def wrapper(*args, **kwargs):
         try:
             return func(*args, **kwargs)
@@ -77,6 +73,8 @@ def uri_cache(func):
     @common.catch_exceptions
     def wrapper(self, obj, *args, **kwargs):
         """Use the cache to fetch the URI."""
+        # Keys are of the form: <function>:<uri>
+        # E.g, get_albums_from_artist:spotify:album:kjasg98qw35hg0
         key = func.__name__ + ":" + str(obj['uri'])
 
         # Get a fresh copy and clear the cache if requested to.
@@ -85,7 +83,7 @@ def uri_cache(func):
             self._uri_cache.clear(key)
 
         result = self._uri_cache.get(key)
-        if result:
+        if result is not None:
             return result
         else:
             logger.debug("Fetching data from the web...")

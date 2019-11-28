@@ -24,7 +24,7 @@ DEBUG = False
 def catch_exceptions(func):
     """Decorator to catch an exceptions and print it.
 
-    All threaded functions should be threaded with this,
+    All threaded functions should be decorated with this,
     otherwise exceptions will go uncaught.
     """
     def wrapper(*args, **kwargs):

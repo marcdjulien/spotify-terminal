@@ -178,6 +178,7 @@ class CursesDisplay(object):
 
     def render_calcs(self):
         """Perform any calculations related to rendering."""
+        # TODO: Make this state based?
         key_timeout = time.time() - self.last_pressed_time
 
         if key_timeout <= self.IDLE_TIMEOUT:
