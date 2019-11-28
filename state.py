@@ -927,7 +927,7 @@ class SpotifyState(object):
 
         def find_next():
             toks = self.cmd.get_prev_cmd_toks()
-            if toks[0] in ["find"]:
+            if toks[0] == "find":
                 i = int(toks[1])
                 command = toks
                 command[1] = str(i + 1)
@@ -936,7 +936,7 @@ class SpotifyState(object):
 
         def find_prev():
             toks = self.cmd.get_prev_cmd_toks()
-            if toks[0] in ["find"]:
+            if toks[0] == "find":
                 i = int(toks[1])
                 command = toks
                 command[1] = str(i - 1)

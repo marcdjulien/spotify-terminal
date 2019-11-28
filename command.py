@@ -32,8 +32,8 @@ class CommandProcessor(object):
         self.command_history_i = 0
         """History of commands."""
 
-        self.prev_command_toks = TextQuery()
-        """The previous command that was executed."""
+        self.prev_command_toks = ["exit"]
+        """The tokens of the previous command that was executed."""
 
     def bind_trigger(self, trigger, command_prefix):
         """Bind a trigger to a custom command.
