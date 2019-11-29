@@ -100,6 +100,7 @@ class SpotifyState(object):
         self.player_list = List("player")
         self.search_list = List("search_results", header="Search")
         self.device_list = List("devices")
+        self.help_list = List("help")
         self.confirm_list = List("confirm", header="Are you sure?")
         self.artist_list = List("artists", header="Select an artist")
         """The program state is built around Lists and manipulating them."""
@@ -224,6 +225,22 @@ class SpotifyState(object):
                 logger.debug("Loading the Saved track list")
                 self._set_playlist(self.user_list[0])
 
+        # Initialize the help list
+        help_list = []
+        for config_key, description in self.config.key_help.items():
+            key = chr(self.config.get_config_param(config_key))
+            help_list.append(Option("{}:\t{}".format(key, description)))
+
+        help_list.append(Option(""))
+        help_list.append(Option("-----------------"))
+        help_list.append(Option(""))
+
+        for line in self.config.help().split('\n'):
+            help_list.append(Option(line))
+
+        self.help_list.update_list(help_list)
+
+
     @common.asynchronously
     def sync_player_state(self):
         # Note: DO NOT set the current_context
@@ -246,7 +263,6 @@ class SpotifyState(object):
             self.playing = False
             self.current_device = UnableToFindDevice
             self.volume = 0
-            # TODO: For now, always default to this.
             self.progress = None
 
     def periodic_sync_devices(self):
@@ -681,6 +697,9 @@ class SpotifyState(object):
         def switch_to_user_state():
             self.switch_to_state(self.user_state)
 
+        def switch_to_help_state():
+            self.switch_to_state(self.help_state)
+
         def switch_to_prev_state():
             self.switch_to_state(self.prev_state)
 
@@ -906,11 +925,23 @@ class SpotifyState(object):
         self.device_state = device_state
 
         #
+        # Help State - Handles commands while user is in the help menu
+        #
+        help_state = State("help", self.help_list)
+        help_state.bind_key(uc.KEY_UP, move_up_current_list)
+        help_state.bind_key(uc.KEY_DOWN, move_down_current_list)
+        help_state.bind_key(self.BACKSPACE_KEYS + [uc.KEY_EXIT, 27] + [self.config.toggle_help], 
+                            switch_to_prev_state)
+
+        self.help_state = help_state
+
+        #
         # Command commands for all of the main states
         #
         main_states = [user_state, tracks_state, player_state, search_state]
 
         bind_to_all(main_states, self.BACKSPACE_KEYS, self.restore_previous_tracks)
+        bind_to_all(main_states, self.config.toggle_help, switch_to_help_state)
 
         def start_command(key):
             char = chr(key)

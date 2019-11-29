@@ -61,6 +61,7 @@ class CursesDisplay(object):
         """Windows in an odered list."""
 
         self._register_window("popup", self._window_sizes["popup"])
+        self._register_window("help", self._window_sizes["help"])
         self._register_window("search_results", self._window_sizes["search"])
         self._register_window("select_device", self._window_sizes["select_device"])
         self._register_window("user", self._window_sizes["user"])
@@ -122,7 +123,7 @@ class CursesDisplay(object):
         logger.debug("Curses display initialized")
 
     def start(self):
-        logger.info("Starting curses display loop")
+        logger.info("Starting main loop")
 
         # Initial render.
         self.render()
@@ -193,6 +194,7 @@ class CursesDisplay(object):
         self.set_panel_order()
 
         # Update the panel size incase the terminal size changed.
+        # TODO: Doesn't work.
         self.update_panel_size()
 
         # Clear the screen.
@@ -206,6 +208,7 @@ class CursesDisplay(object):
         self.render_search_panel()
         self.render_select_device_panel()
         self.render_popup_panel()
+        self.render_help_panel()
 
         # Required.
         uc.update_panels()
@@ -224,13 +227,16 @@ class CursesDisplay(object):
             uc.top_panel(self._panels["search_results"])
         elif self.is_active_window("select_device"):
             uc.top_panel(self._panels["select_device"])
+        elif self.is_active_window("help"):
+            uc.top_panel(self._panels["help"])
         else:
             for panel_name, panel in self._panels.items():
-                if panel_name not in ["search_results", "select_device", "popup"]:
+                if panel_name not in ["search_results", "select_device", "popup", "help"]:
                     uc.top_panel(panel)
 
     def update_panel_size(self):
         self._resize_window("popup", self._window_sizes["popup"])
+        self._resize_window("help", self._window_sizes["help"])
         self._resize_window("search_results", self._window_sizes["search"])
         self._resize_window("select_device", self._window_sizes["select_device"])
         self._resize_window("user", self._window_sizes["user"])
@@ -421,7 +427,7 @@ class CursesDisplay(object):
 
     def render_popup_panel(self):
         win, rows, cols = self._init_render_window("popup")
-        uc.box(win)\
+        uc.box(win)
 
         current_popup_list = self.state.current_state.get_list()
 
@@ -439,11 +445,36 @@ class CursesDisplay(object):
         list_start_row = title_start_row + 2
         self._render_list(win,
                           current_popup_list,
-                          list_start_row, rows-list_start_row,
+                          list_start_row, rows - list_start_row - 1,
                           2, cols-4,
                           selected_i,
                           self.is_active_window("popup"),
                           centered=True)
+
+    def render_help_panel(self):
+        win, rows, cols = self._init_render_window("help")
+        uc.box(win)
+
+        current_help_list = self.state.current_state.get_list()
+
+        # Show the title of the context.
+        prompt = "Shortcuts"
+        title_start_row = 1
+        self._render_text(win,
+                          title_start_row,
+                          (cols//2) - (len(prompt)//2) - 1,
+                          prompt,
+                          cols-3,
+                          uc.A_BOLD)
+
+        selected_i = current_help_list.i
+        list_start_row = title_start_row + 2
+        self._render_list(win,
+                          current_help_list,
+                          list_start_row, rows - list_start_row - 1,
+                          2, cols-4,
+                          selected_i,
+                          self.is_active_window("help"))
 
     def _render_list(self, win, list,
                      row_start, n_rows,
@@ -483,6 +514,8 @@ class CursesDisplay(object):
               or self.state.is_selecting_artist()
               or self.state.is_in_state(self.state.remove_track_confirm_state)):
             return window_name == "popup"
+        elif self.state.is_in_state(self.state.help_state):
+            return window_name == "help"
         else:
             return self.state.current_state.get_list().name == window_name
 
@@ -523,6 +556,11 @@ class CursesDisplay(object):
                          self._rows*2//10,
                          self._cols*2//10)
 
+        help = (self._rows*8//10,
+                  self._cols*8//10,
+                  self._rows//10,
+                  self._cols//10)
+
         popup = (self._rows//4,
                    self._cols//4,
                    self._rows*3//8,
@@ -534,5 +572,6 @@ class CursesDisplay(object):
             "player": player,
             "search": search,
             "select_device": select_device,
+            "help": help,
             "popup": popup
         }

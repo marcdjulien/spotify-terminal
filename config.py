@@ -3,6 +3,37 @@ import unicurses as uc
 
 class Config(object):
     """Read and store config parameters."""
+    key_help = {
+        "find_next": "Find the next entry matching the previous expression.",
+        "find_previous": "Find the previous entry matching the previous expression.",
+        "add_track": "Add a track to a playlist.",
+        "remove_track": "Remove a track from a playlist.",
+        "show_devices": "Show available devices",
+        "refresh": "Refresh the player.",
+        "goto_artist": "Go to the artist page of the highlighted track.",
+        "goto_album": "Go to the album page of the highlighted track.",
+        "current_artist": "Go to the artist page of the currently playing track.",
+        "current_album": "Go to the album page of the currently playing track.",
+        "current_context": "Go to the currently playing context.",
+        "next_track": "Play the next track.",
+        "previous_track": "Play the previous track.",
+        "play": "Toggle play/pause.",
+        "volume_0": "Mute volume.",
+        "volume_1": "Set volume to 10%.",
+        "volume_2": "Set volume to 20%.",
+        "volume_3": "Set volume to 30%.",
+        "volume_4": "Set volume to 40%.",
+        "volume_5": "Set volume to 50%.",
+        "volume_6": "Set volume to 60%.",
+        "volume_7": "Set volume to 70%.",
+        "volume_8": "Set volume to 80%.",
+        "volume_9": "Set volume to 90%.",
+        "volume_10": "Set volume to 100%.",
+        "volume_up": "Increase volume by 5%.",
+        "volume_down": "Decrease volume by 5%.",
+        "toggle_help": "Toggle the help menu"
+    }
+
     default = {
         "find_next": ord("n"),
         "find_previous": ord("p"),
@@ -30,7 +61,8 @@ class Config(object):
         "volume_9": ord("("),
         "volume_10": ord(")"),
         "volume_up": ord("+"),
-        "volume_down": ord("_")
+        "volume_down": ord("_"),
+        "toggle_help": ord("H")
     }
 
     def __init__(self, config_filename=None):
@@ -128,38 +160,8 @@ class Config(object):
 
     @staticmethod
     def help():
-        key_help = [
-            ("find_next", "Find the next entry matching the previous expression."),
-            ("find_previous", "Find the previous entry matching the previous expression."),
-            ("add_track", "Add a track to a playlist."),
-            ("remove_track", "Remove a track from a playlist."),
-            ("show_devices", "Show available devices"),
-            ("refresh", "Refresh the player."),
-            ("goto_artist", "Go to the artist page of the highlighted track."),
-            ("goto_album", "Go to the album page of the highlighted track."),
-            ("current_artist", "Go to the artist page of the currently playing track."),
-            ("current_album", "Go to the album page of the currently playing track."),
-            ("current_context", "Go to the currently playing context."),
-            ("next_track", "Play the next track."),
-            ("previous_track", "Play the previous track."),
-            ("play", "Toggle play/pause."),
-            ("volume_0", "Mute volume."),
-            ("volume_1", "Set volume to 10%."),
-            ("volume_2", "Set volume to 20%."),
-            ("volume_3", "Set volume to 30%."),
-            ("volume_4", "Set volume to 40%."),
-            ("volume_5", "Set volume to 50%."),
-            ("volume_6", "Set volume to 60%."),
-            ("volume_7", "Set volume to 70%."),
-            ("volume_8", "Set volume to 80%."),
-            ("volume_9", "Set volume to 90%."),
-            ("volume_10", "Set volume to 100%."),
-            ("volume_up", "Increase volume by 5%."),
-            ("volume_down", "Decrease volume by 5%.")
-        ]
-
         msg = "The following keys can be specified in the config file:\n\n"
-        for key, help_msg in key_help:
+        for key, help_msg in sorted(Config.key_help.items()):
             msg = msg + "%20s - %s (Default=\"%s\")\n" % (key, help_msg, chr(Config.default[key]))
 
         msg = msg + "\nEach key should be defined by a single character in quotes.\n"
