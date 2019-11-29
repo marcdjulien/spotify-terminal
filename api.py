@@ -74,8 +74,8 @@ def uri_cache(func):
     def wrapper(self, obj, *args, **kwargs):
         """Use the cache to fetch the URI."""
         # Keys are of the form: <function>:<uri>
-        # E.g, get_albums_from_artist:spotify:album:kjasg98qw35hg0
-        key = func.__name__ + ":" + str(obj['uri'])
+        # E.g, get_albums_from_artist#spotify:album:kjasg98qw35hg0
+        key = func.__name__ + "#" + str(obj['uri'])
 
         # Get a fresh copy and clear the cache if requested to.
         if "force_clear" in kwargs:
@@ -145,6 +145,16 @@ class SpotifyApi(object):
                                                                     self.me['id'])
             )
 
+        # Saved tracks is not included as a standard playlist in the API
+        self.saved_playlist = Playlist({
+            "name": "Saved",
+            "uri": common.SAVED_TRACKS_CONTEXT_URI,
+            "id": "",
+            "type": "playlist",
+            "owner_id": self.user_id()
+        })
+        """The Saved playlist."""
+
     def user_email(self):
         return self.me['email']
 
@@ -162,6 +172,9 @@ class SpotifyApi(object):
 
     def user_market(self):
         return self.me['country']
+
+    def user_saved_playlist(self):
+        return self.saved_playlist
 
     @common.asynchronously
     def play(self, track=None, context_uri=None, uris=None, device=None):
@@ -566,12 +579,7 @@ class SpotifyApi(object):
             Playlist: The Playlist.
         """
         if context["uri"] == common.SAVED_TRACKS_CONTEXT_URI:
-            # TODO: Consider creating a common/factory function for
-            # obtaining the Saved PLaylist.
-            return Playlist({
-                "uri":common.SAVED_TRACKS_CONTEXT_URI,
-                "name": "Saved"
-            })
+            return self.user_saved_playlist()
 
         playlist_id = id_from_uri(context["uri"])
         result = self.get_api_v1("playlists/{}".format(playlist_id))

@@ -213,13 +213,7 @@ class SpotifyState(object):
         playlists = list(playlists)
 
         # Add the Saved tracks playlist.
-        saved = Playlist({
-            "name": "Saved",
-            "uri": common.SAVED_TRACKS_CONTEXT_URI,
-            "id": "",
-            "owner_id": self.api.user_id()
-        })
-        playlists.insert(0, saved)
+        playlists.insert(0, self.api.user_saved_playlist())
         self.user_list.update_list(tuple(playlists))
 
         # Initialize track list.
@@ -233,7 +227,7 @@ class SpotifyState(object):
     @common.asynchronously
     def sync_player_state(self):
         # Note: DO NOT set the current_context
-        # Otherwise, it will confused the state of things. 
+        # Otherwise, it will confuse the state of things. 
         player_state = self.api.get_player_state()
         if player_state:
             track = player_state['item']

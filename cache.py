@@ -63,6 +63,7 @@ class UriCache(object):
         self._cache[key] = item
 
     def save(self, filename, item):
+        os.makedirs(os.path.dirname(filename), exist_ok=True)
         with open(filename, "wb") as file:
             logger.debug("Saving %s to disk", filename)
             pickle.dump(item, file)
@@ -76,5 +77,5 @@ class UriCache(object):
         Returns:
             str: The path of the cached file.
         """
-        return common.get_file_from_cache(self.username,
-                                          key.replace(":", "_"))
+        filename = key.replace("#", os.path.sep).replace(":", "_")
+        return common.get_file_from_cache(self.username, filename)

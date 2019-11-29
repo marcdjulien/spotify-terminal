@@ -19,14 +19,14 @@ Then clone or download this repository to use the application.
 # Usage
 Execute the following command to run the program:
 ```
-Linux: ./spotify.py [username]
+Linux/Mac: ./spotify.py [username]
 Windows: spotify.py [username]
 
 Use --help or -h to see more options.
 ```
 Where ```username``` is either the email associated with your Spotify account or the user id.
 
-# " Search
+# ? Search
 By typing ```?``` you can begin a search..
 
 # : Commands
@@ -84,4 +84,4 @@ By typing ```:``` you can enter commands. The following is a list of all command
 ```DELETE``` to delete a song from a playlist.
 
 # Notes
-This has only been tested on Linux and Windows with a Spotify Premium account.
+This has only been tested on Linux and Windows with a Spotify Premium account. Briefly on Mac. Feel free to submit pull requests or tickets for issues.
