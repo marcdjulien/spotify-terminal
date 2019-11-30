@@ -133,7 +133,7 @@ class Authenticator(object):
             "redirect_uri": "http://localhost:{}/".format(self.port),
             "scope": self.scope,
             "response_type": "code",
-            "show_dialog": True
+            "show_dialog": False
         }
         return "https://accounts.spotify.com/authorize" + "?" + urllib.parse.urlencode(params)
 
@@ -156,26 +156,26 @@ class Authenticator(object):
             try:
                 os.remove(common.get_auth_filename(self.username))
                 logger.debug("%s deleted", common.get_auth_filename(self.username))
-            except OSError:
-                pass
+            except OSError as e:
+                logger.warning(e)
 
 
 class AuthenticationHandler(BaseHTTPRequestHandler):
     HTML = """
-        <html>
-        You may close this tab, and continue jamming in your terminal!
-            <script type="text/javascript">
-                    window.close();
-            </script>
-        </html>
+        <p><span style="color: rgb(71, 85, 119); font-family: Tahoma, Geneva, sans-serif; font-size: 48px; font-style: normal; font-variant-ligatures: normal; font-variant-caps: normal; font-weight: 400; letter-spacing: normal; orphans: 2; text-align: start; text-indent: 0px; text-transform: none; white-space: normal; widows: 2; word-spacing: 0px; -webkit-text-stroke-width: 0px; text-decoration-style: initial; text-decoration-color: initial; float: none; display: inline !important;">You may close this tab, and continue jamming in your terminal!</span><span style="color: rgb(40, 50, 78); font-family: Tahoma, Geneva, sans-serif; font-size: 48px; font-style: normal; font-variant-ligatures: normal; font-variant-caps: normal; font-weight: 400; letter-spacing: normal; orphans: 2; text-align: start; text-indent: 0px; text-transform: none; white-space: normal; widows: 2; word-spacing: 0px; -webkit-text-stroke-width: 0px; text-decoration-style: initial; text-decoration-color: initial; float: none; display: inline !important;">&nbsp;</span></p>    
     """
 
     def do_GET(self):
         if "code=" in self.path:
             self.server.data = self.parse_path(self.path[2::])
             self.send_response(200)
+            self.send_header("Content-type", "text/html")
             self.end_headers()
-            self.wfile.write(self.HTML)
+            self.wfile.write(bytes(self.HTML, "utf-8"))
+
+        if "favicon" in self.path:
+            with open("favicon.ico", "rb") as icon_file:
+                self.wfile.write(icon_file.read()) 
 
     def parse_path(self, path):
         data = {}

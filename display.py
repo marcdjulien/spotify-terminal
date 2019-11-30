@@ -312,22 +312,34 @@ class CursesDisplay(object):
         # Draw border.
         uc.box(win)
 
+        # Display currently playing track
         self._render_text(win, 1, 2, self.state.get_currently_playing_track().track, cols-3, uc.A_BOLD)
         self._render_text(win, 2, 2, self.state.get_currently_playing_track().album, cols-3, uc.A_BOLD)
         self._render_text(win, 3, 2, self.state.get_currently_playing_track().artist, cols-3, uc.A_BOLD)
 
+        # Display the current device
         device_info = "{} ({}%)".format(self.state.current_device, self.state.volume)
         self._render_text(win, 7, 2, device_info, cols-3, uc.A_NORMAL)
 
+        # Display the media icons
         col = 2
         for i, action in enumerate(self.state.player_list):
-            if (i == self.state.player_list.i) and self.is_active_window("player"):
+            if ((i == self.state.player_list.i)
+                    and self.state.current_state.get_list().name == "player"):
                 style = uc.A_BOLD | uc.A_STANDOUT
             else:
                 style = uc.A_NORMAL
             icon = action.title
             uc.mvwaddstr(win, 5, col, icon, style)
             col += len(icon) + 2
+
+        # Display other actions
+        col = cols//2
+        self._render_list(win, self.state.other_actions_list, 
+                          1, rows-1,
+                          cols//2, (cols//2) - 2,
+                          self.state.other_actions_list.i,
+                          self.state.current_state.get_list().name == "other_actions")
 
     def render_footer(self):
         if self.state.is_loading():
@@ -512,7 +524,8 @@ class CursesDisplay(object):
         # TODO: This sucks, make it better.
         elif (self.state.is_in_state(self.state.a2p_confirm_state) 
               or self.state.is_selecting_artist()
-              or self.state.is_in_state(self.state.remove_track_confirm_state)):
+              or self.state.is_in_state(self.state.remove_track_confirm_state)
+              or self.state.is_in_state(self.state.remove_playlist_confirm_state)):
             return window_name == "popup"
         elif self.state.is_in_state(self.state.help_state):
             return window_name == "help"

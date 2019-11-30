@@ -280,7 +280,8 @@ def get_version():
 
 def get_master_version():
     try:
-        resp = requests.get("https://raw.githubusercontent.com/marcdjulien/spotifyterminal/master/.version")
+        resp = requests.get("https://raw.githubusercontent.com/marcdjulien/spotifyterminal/master/.version",
+                            timeout=1)
         return extract_version(resp)
     except BaseException as e:
         logger.info("Could not get latest version %s", e)

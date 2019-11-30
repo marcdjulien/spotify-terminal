@@ -60,7 +60,7 @@ class SpotifyState(object):
     ENTER_KEYS = [uc.KEY_ENTER, 10, 13]
 
     # List of keys for cancling.
-    CANCEL_KEYS = [uc.KEY_EXIT, 27] + BACKSPACE_KEYS
+    CANCEL_KEYS = [uc.KEY_EXIT, 27, ord('q')] + BACKSPACE_KEYS
 
     # How often to sync the player state.
     SYNC_PLAYER_PERIOD = 60 * 5
@@ -103,6 +103,7 @@ class SpotifyState(object):
         self.help_list = List("help")
         self.confirm_list = List("confirm", header="Are you sure?")
         self.artist_list = List("artists", header="Select an artist")
+        self.other_actions_list = List("other_actions")
         """The program state is built around Lists and manipulating them."""
 
         self.previous_tracks = []
@@ -146,6 +147,7 @@ class SpotifyState(object):
             "pause": self._execute_pause,
             "shuffle": self._execute_shuffle,
             "repeat": self._execute_repeat,
+            "create_playlist": self._execute_create_playlist,
             "exit": self._execute_exit
         })
         """Processes commands."""
@@ -154,6 +156,9 @@ class SpotifyState(object):
         self.cmd.bind(['q', 'Q'], 'exit')
         self.cmd.bind_trigger('/', 'find 0')
         self.cmd.bind_trigger(['?'], 'search')
+
+        self.key_queue = []
+        """Queue of keys to process."""
 
         self.text_query = TextQuery()
         """A TextQuery for commands."""
@@ -206,16 +211,7 @@ class SpotifyState(object):
         # Sync current player state.
         self.sync_player_state()
 
-        # Get the users playlists.
-        playlists = self.api.get_user_playlists(user)
-        if playlists is None:
-            print("Could not load playlists. Try again.")
-            exit(1)
-        playlists = list(playlists)
-
-        # Add the Saved tracks playlist.
-        playlists.insert(0, self.api.user_saved_playlist())
-        self.user_list.update_list(tuple(playlists))
+        self._load_playlists()
 
         # Initialize track list.
         if self.current_context is not None:
@@ -240,6 +236,34 @@ class SpotifyState(object):
 
         self.help_list.update_list(help_list)
 
+        # Initialize other program actions
+        def queue_func(key):
+            def func():
+                self.key_queue.append(key)
+            return func
+
+        self.other_actions_list.update_list([
+            PlayerAction(" [{}] Create Playlist".format(chr(self.config.create_playlist)), 
+                          queue_func(self.config.create_playlist)),
+            PlayerAction(" [{}] Show Devices".format(chr(self.config.show_devices)), 
+                         queue_func(self.config.show_devices)),
+            PlayerAction(" [{}] Refresh".format(chr(self.config.refresh)), 
+                         self.sync_player_state),
+            PlayerAction(" [{}] Help".format(chr(self.config.toggle_help)), 
+                          queue_func(self.config.toggle_help)),
+        ])
+
+    def _load_playlists(self):
+        # Get the users playlists.
+        playlists = self.api.get_user_playlists(self.api.get_user())
+        if playlists is None:
+            print("Could not load playlists. Try again later.")
+            exit(1)
+        playlists = list(playlists)
+
+        # Add the Saved tracks playlist.
+        playlists.insert(0, self.api.user_saved_playlist())
+        self.user_list.update_list(tuple(playlists))
 
     @common.asynchronously
     def sync_player_state(self):
@@ -281,6 +305,9 @@ class SpotifyState(object):
         Args:
             key (int): The key that was pressed. Can also be None.
         """
+        if key is None and self.key_queue:
+            key = self.key_queue.pop(0)
+
         action = self.current_state.process_key(key)
         if action:
             # Kinda gross, but easiest way to deal with passing in the key that was presed
@@ -421,6 +448,14 @@ class SpotifyState(object):
     def _execute_pause(self):
         self._pause()
 
+    def _execute_create_playlist(self, *query):
+        playlist_name = " ".join(query)
+        playlist = self.api.create_playlist(playlist_name)
+        if playlist is None:
+            self.alert.warn("Unable to create new playlist")
+        else:
+            self._load_playlists()
+
     def _execute_exit(self):
         self.current_state = self.exit_state
 
@@ -529,13 +564,13 @@ class SpotifyState(object):
                 "context": self.REPEAT_CONTEXT}[repeat]
 
     def _add_track_to_playlist(self, track, playlist):
-        self.track_to_add = None
-        self.playlist_to_add = None
         return self.api.add_track_to_playlist(track, playlist)
 
     def _remove_track_from_playlist(self, track, playlist):
-        self.track_to_remove = None
         return self.api.remove_track_from_playlist(track, playlist)
+
+    def _remove_playlist(self, playlist):
+        return self.api.remove_playlist(playlist)
 
     def _set_playlist(self, playlist):
         future = Future(target=(self.api.get_tracks_from_playlist, playlist),
@@ -575,7 +610,7 @@ class SpotifyState(object):
         self.execute_future(future, self.tracks_state)
 
     def _update_track_list(self, tracks, context, header):
-        if not tracks:
+        if tracks is None:
             self.alert.warn("Unable to get tracks from {}".format(header))
             return
             
@@ -694,6 +729,9 @@ class SpotifyState(object):
         def switch_to_player_state():
             self.switch_to_state(self.player_state)
 
+        def switch_to_other_actions_state():
+            self.switch_to_state(self.other_actions_state)
+
         def switch_to_user_state():
             self.switch_to_state(self.user_state)
 
@@ -710,12 +748,23 @@ class SpotifyState(object):
         user_state.bind_key(uc.KEY_UP, move_up_current_list)
         user_state.bind_key(uc.KEY_DOWN, move_down_current_list)
         user_state.bind_key(uc.KEY_RIGHT, switch_to_tracks_state)
+        user_state.bind_key(uc.KEY_LEFT, switch_to_other_actions_state)
 
         def enter():
             playlist = self.user_list.get_current_entry()
             if playlist:
                 self._set_playlist(playlist)
         user_state.bind_key(self.ENTER_KEYS, enter)
+
+        def delete():
+            entry = self.user_list.get_current_entry()
+            if entry['uri'] == common.SAVED_TRACKS_CONTEXT_URI:
+                self.alert.warn("You can't remove this playlist")
+                return
+            if entry["type"] == "playlist":
+                self.playlist_to_remove = entry
+                self.switch_to_state(self.remove_playlist_confirm_state)
+        user_state.bind_key(self.config.delete, delete)
 
         self.user_state = user_state
 
@@ -766,7 +815,7 @@ class SpotifyState(object):
             if entry['type'] == 'track':
                 self.track_to_remove = entry
                 self.switch_to_state(self.remove_track_confirm_state)
-        tracks_state.bind_key(self.config.remove_track, remove_from_playlist)
+        tracks_state.bind_key(self.config.delete, remove_from_playlist)
 
         def goto_artist():
             entry = self.tracks_list.get_current_entry()
@@ -806,18 +855,38 @@ class SpotifyState(object):
             if entry.get().lower() == "yes":
                 new_tracks = self._remove_track_from_playlist(self.track_to_remove, self.current_context)
                 self.tracks_list.update_list(new_tracks)
-            else:
-                self.track_to_remove = None
+            self.track_to_remove = None
             switch_to_tracks_state()
         remove_track_confirm_state.bind_key(self.ENTER_KEYS, enter)
         self.remove_track_confirm_state = remove_track_confirm_state
+
+        #
+        # Remove Playlist State - Handles removing a playlist
+        #
+        remove_playlist_confirm_state = State("remove_playlist_confirm", self.confirm_list)
+        remove_playlist_confirm_state.bind_key(uc.KEY_UP, move_up_current_list)
+        remove_playlist_confirm_state.bind_key(uc.KEY_DOWN, move_down_current_list)
+
+        def cancel():
+            self.playlist_to_remove = None
+            switch_to_user_state()
+        remove_playlist_confirm_state.bind_key(self.CANCEL_KEYS, cancel)
+
+        def enter():
+            entry = self.confirm_list.get_current_entry()
+            if entry.get().lower() == "yes":
+                self._remove_playlist(self.playlist_to_remove)
+                self._load_playlists()
+            self.playlist_to_remove = None
+            switch_to_user_state()
+        remove_playlist_confirm_state.bind_key(self.ENTER_KEYS, enter)
+        self.remove_playlist_confirm_state = remove_playlist_confirm_state
 
         #
         # Player State - Handles commands while in the player pane
         #
         player_state = State("player", self.player_list)
         player_state.bind_key(uc.KEY_UP, switch_to_tracks_state)
-        player_state.bind_key(uc.KEY_RIGHT, move_down_current_list)
         def left():
             if self.current_state.get_list().i == 0:
                 switch_to_user_state()
@@ -825,11 +894,40 @@ class SpotifyState(object):
                 move_up_current_list()
         player_state.bind_key(uc.KEY_LEFT, left)
 
+        def right():
+            cur_list = self.current_state.get_list()
+            if cur_list.i == (len(cur_list) - 1):
+                switch_to_other_actions_state()
+            else:
+                move_down_current_list()
+        player_state.bind_key(uc.KEY_RIGHT, right)
+
         def enter():
             self.player_list.get_current_entry().action()
         player_state.bind_key(self.ENTER_KEYS, enter)
 
         self.player_state = player_state
+
+        #
+        # Other Actions State - Handles commands for other actions in the player window
+        #
+        other_actions_state = State("other_actions", self.other_actions_list)
+        other_actions_state.bind_key(uc.KEY_DOWN, move_down_current_list)
+        other_actions_state.bind_key(uc.KEY_LEFT, switch_to_player_state)
+        other_actions_state.bind_key(uc.KEY_RIGHT, switch_to_user_state)
+
+        def up():
+            if self.current_state.get_list().i == 0:
+                switch_to_tracks_state()
+            else:
+                move_up_current_list()
+        other_actions_state.bind_key(uc.KEY_UP, up)
+        
+        def enter():
+            self.other_actions_list.get_current_entry().action()
+        other_actions_state.bind_key(self.ENTER_KEYS, enter)
+
+        self.other_actions_state = other_actions_state
 
         #
         # Creaintg Command State - Handles commands while user is typing in a command
@@ -868,6 +966,7 @@ class SpotifyState(object):
 
         def enter():
             self.cmd.process_command(self.text_query)
+            self.text_query.clear()
         creating_command_state.bind_key(self.ENTER_KEYS, enter)
 
         creating_command_state.bind_key([uc.KEY_EXIT, 27], switch_to_prev_state)
@@ -880,7 +979,7 @@ class SpotifyState(object):
         search_state = State("search", self.search_list)
         search_state.bind_key(uc.KEY_UP, move_up_current_list)
         search_state.bind_key(uc.KEY_DOWN, move_down_current_list)
-        search_state.bind_key(self.BACKSPACE_KEYS + [uc.KEY_EXIT, 27], switch_to_prev_state)
+        search_state.bind_key(self.BACKSPACE_KEYS + self.CANCEL_KEYS, switch_to_prev_state)
 
         def right():
             entry = self.search_list.get_current_entry()
@@ -913,7 +1012,7 @@ class SpotifyState(object):
         device_state = State("device", self.device_list)
         device_state.bind_key(uc.KEY_UP, move_up_current_list)
         device_state.bind_key(uc.KEY_DOWN, move_down_current_list)
-        device_state.bind_key(self.BACKSPACE_KEYS + [uc.KEY_EXIT, 27], switch_to_prev_state)
+        device_state.bind_key(self.BACKSPACE_KEYS + self.CANCEL_KEYS, switch_to_prev_state)
 
         def enter():
             new_device = self.device_list.get_current_entry()
@@ -930,7 +1029,7 @@ class SpotifyState(object):
         help_state = State("help", self.help_list)
         help_state.bind_key(uc.KEY_UP, move_up_current_list)
         help_state.bind_key(uc.KEY_DOWN, move_down_current_list)
-        help_state.bind_key(self.BACKSPACE_KEYS + [uc.KEY_EXIT, 27] + [self.config.toggle_help], 
+        help_state.bind_key(self.BACKSPACE_KEYS + self.CANCEL_KEYS + [self.config.toggle_help], 
                             switch_to_prev_state)
 
         self.help_state = help_state
@@ -938,7 +1037,7 @@ class SpotifyState(object):
         #
         # Command commands for all of the main states
         #
-        main_states = [user_state, tracks_state, player_state, search_state]
+        main_states = [user_state, tracks_state, player_state, other_actions_state, search_state]
 
         bind_to_all(main_states, self.BACKSPACE_KEYS, self.restore_previous_tracks)
         bind_to_all(main_states, self.config.toggle_help, switch_to_help_state)
@@ -1111,6 +1210,14 @@ class SpotifyState(object):
         select_artist_state.bind_key(self.ENTER_KEYS, enter)
         self.select_artist_state = select_artist_state
 
+        #
+        # Adding a playlist
+        #
+        def create_playlist():
+            self._set_command_query(":create_playlist ")
+            self.switch_to_state(self.creating_command_state)
+        bind_to_all(main_states, self.config.create_playlist, create_playlist)
+
 
         #
         # Exit State - Does nothing, indicates program should exit.
@@ -1281,7 +1388,7 @@ class Future(object):
                 "Executing Future Callback: %s",
                 str((self.result_func.__name__, self.result_args, self.result_kwargs))
             )
-            if result:
+            if result is not None:
                 self.result_func(result, *self.result_args, **self.result_kwargs)
             else:
                 self.result_func(*self.result_args, **self.result_kwargs)

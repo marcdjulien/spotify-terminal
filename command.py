@@ -108,7 +108,13 @@ class CommandProcessor(object):
             self.prev_command_toks = toks
 
             # Execute the appropriate command.
-            self.commands[command](*command_args)
+            try:
+                self.commands[command](*command_args)
+            except Exception as e:
+                if common.DEBUG:
+                    raise
+                else:
+                    logger.warning("Invalid command: %s", e)
 
         self.command_history.append(command_input)
         self.command_history_i = len(self.command_history)
@@ -146,6 +152,10 @@ class TextQuery(object):
         if self.text_cursor_i > 0:
             self.text_query.pop(self.text_cursor_i - 1)
             self.text_cursor_i -= 1
+
+    def clear(self):
+        while self.text_cursor_i > 0:
+            self.delete()
 
     def insert(self, char):
         self.text_query.insert(self.text_cursor_i, char)

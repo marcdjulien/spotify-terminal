@@ -120,6 +120,8 @@ class SpotifyApi(object):
         self.username = username
         """Email or user id."""
 
+        self.session = requests.Session()
+
         self.auth = Authenticator(username)
         """Handles OAuth 2.0 authentication."""
 
@@ -154,6 +156,7 @@ class SpotifyApi(object):
             "owner_id": self.user_id()
         })
         """The Saved playlist."""
+
 
     def user_email(self):
         return self.me['email']
@@ -609,6 +612,24 @@ class SpotifyApi(object):
         # TODO: Should make tan explicit call to refresh or clear the cache
         return self.get_tracks_from_playlist(playlist, force_clear=True)
 
+    @return_none_on_error
+    def create_playlist(self, name):
+        """Create a new playlist.
+
+        Args:
+            name (str): The name of the new playlist to create.
+
+        Returns:
+            Playlist: The newly created playlist.
+        """
+        data = {"name": name}
+        url = "users/{}/playlists".format(self.user_id())
+        resp = self.post_api_v1(url, data=data)
+
+        self.get_user_playlists(self.get_user(), force_clear=True)
+
+        return Playlist(resp)
+
     def remove_track_from_playlist(self, track, playlist):
         """Remove a Track from a Playlist.
 
@@ -631,6 +652,15 @@ class SpotifyApi(object):
 
         # Clear out current Cache.
         return self.get_tracks_from_playlist(playlist, force_clear=True)
+
+    def remove_playlist(self, playlist):
+        """Remove a playlist.
+
+        Args:
+            playlist (Playlist): The Playlist to remove.
+        """
+        self.delete_api_v1("playlists/{}/followers".format(playlist['id']))
+        self.get_user_playlists(self.get_user(), force_clear=True)
 
     def _get_saved_tracks(self, progress=Progress()):
         """Get the Tracks from the "Saved" songs.
@@ -717,7 +747,7 @@ class SpotifyApi(object):
         """
         headers = {"Authorization": "%s %s" % (self.auth.token_type, self.auth.access_token)}
         url = "{}/{}".format(self.API_URL, endpoint)
-        resp = requests.get(url, params=params, headers=headers, timeout=self.DEFAULT_TIMEOUT)
+        resp = self.session.get(url, params=params, headers=headers, timeout=self.DEFAULT_TIMEOUT)
         resp.raise_for_status()
 
         data = json.loads(common.ascii(resp.text)) if resp.text else {}
@@ -741,7 +771,7 @@ class SpotifyApi(object):
         headers = {"Authorization": "%s %s" % (self.auth.token_type, self.auth.access_token),
                    "Content-Type": "application/json"}
         api_url = "{}/{}".format(self.API_URL, endpoint)
-        resp = requests.put(api_url, headers=headers, params=params, json=data, timeout=self.DEFAULT_TIMEOUT)
+        resp = self.session.put(api_url, headers=headers, params=params, json=data, timeout=self.DEFAULT_TIMEOUT)
         resp.raise_for_status()
         return resp
 
@@ -760,17 +790,18 @@ class SpotifyApi(object):
         headers = {"Authorization": "%s %s" % (self.auth.token_type, self.auth.access_token),
                    "Content-Type": "application/json"}
         api_url = "{}/{}".format(self.API_URL, endpoint)
-        resp = requests.delete(api_url, headers=headers, params=params, json=data, timeout=self.DEFAULT_TIMEOUT)
+        resp = self.session.delete(api_url, headers=headers, params=params, json=data, timeout=self.DEFAULT_TIMEOUT)
         resp.raise_for_status()
         return resp
 
     @needs_authentication
-    def post_api_v1(self, endpoint, params=None):
+    def post_api_v1(self, endpoint, params=None, data=None):
         """Spotify v1 POST request.
 
         Args:
             endpoint (str): The API endpoint.
             params (dict): Query parameters (Default is None).
+            data (dict): Body data (Default is None).
 
         Returns:
             Reponse: The HTTP Reponse.
@@ -778,7 +809,7 @@ class SpotifyApi(object):
         headers = {"Authorization": "%s %s" % (self.auth.token_type, self.auth.access_token),
                    "Content-Type": "application/json"}
         api_url = "{}/{}".format(self.API_URL, endpoint)
-        resp = requests.post(api_url, headers=headers, params=params, timeout=self.DEFAULT_TIMEOUT)
+        resp = self.session.post(api_url, headers=headers, params=params, json=data, timeout=self.DEFAULT_TIMEOUT)
         resp.raise_for_status()
         return common.ascii(resp.text)
 
