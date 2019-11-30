@@ -1,3 +1,6 @@
 *.pyc
 tmp/*
 tmp\*
+build/*
+dist/*
+*egg-info*/*

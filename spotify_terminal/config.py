@@ -1,4 +1,4 @@
-import unicurses as uc
+from . import unicurses as uc
 
 
 class Config(object):

@@ -1,7 +1,8 @@
 import os
-import common
 import pickle
 from threading import Thread
+
+from . import common
 
 logger = common.logging.getLogger(__name__)
 

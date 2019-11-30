@@ -1,4 +1,4 @@
-import common
+from . import common
 
 
 logger = common.logging.getLogger(__name__)

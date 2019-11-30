@@ -2,13 +2,13 @@ import os
 import pickle
 import re
 import time
-import unicurses as uc
 from threading import RLock, Thread, Event, current_thread, _MainThread
 
-import common
-from command import CommandProcessor, TextQuery
-from config import Config
-from model import (
+from . import common
+from . import unicurses as uc
+from .command import CommandProcessor, TextQuery
+from .config import Config
+from .model import (
     UnableToFindDevice,
     NoneTrack,
     Playlist,
@@ -17,7 +17,7 @@ from model import (
     Device,
     Option
 )
-from periodic import PeriodicCallback, PeriodicDispatcher
+from .periodic import PeriodicCallback, PeriodicDispatcher
 
 
 logger = common.logging.getLogger(__name__)

@@ -2,10 +2,10 @@ import urllib.request, urllib.parse, urllib.error
 import json
 import requests
 
-import common
-from authentication import Authenticator
-from cache import UriCache
-from model import (
+from . import common
+from .authentication import Authenticator
+from .cache import UriCache
+from .model import (
     Artist,
     Album,
     Device,
@@ -14,7 +14,7 @@ from model import (
     NoneTrack,
     Playlist
 )
-from state import Progress
+from .state import Progress
 
 
 logger = common.logging.getLogger(__name__)

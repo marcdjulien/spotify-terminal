@@ -11,7 +11,7 @@ import webbrowser
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from threading import Thread
 
-import common
+from . import common
 
 
 logger = common.logging.getLogger(__name__)

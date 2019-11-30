@@ -1,8 +1,8 @@
 import time
-import unicurses as uc
 
-import common
-from periodic import PeriodicCallback, PeriodicDispatcher
+from . import common
+from . import unicurses as uc
+from .periodic import PeriodicCallback, PeriodicDispatcher
 
 
 logger = common.logging.getLogger(__name__)

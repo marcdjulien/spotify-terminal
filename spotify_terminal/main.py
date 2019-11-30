@@ -1,13 +1,11 @@
-#!/usr/bin/env python3
-
 import argparse
 import time
-import unicurses as uc
 
-import common
-from display import CursesDisplay
-from api import SpotifyApi, TestSpotifyApi
-from state import SpotifyState, Config
+from . import unicurses as uc
+from . import common
+from .display import CursesDisplay
+from .api import SpotifyApi, TestSpotifyApi
+from .state import SpotifyState, Config
 
 
 logger = common.logging.getLogger(__name__)
@@ -60,7 +58,7 @@ def check_version():
         logger.info("Latest version:  %s", latest_version)
 
 
-if __name__ == '__main__':
+def main():
     # Get command line arguments.
     args = get_args()
 
