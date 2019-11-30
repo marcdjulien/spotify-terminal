@@ -56,6 +56,10 @@ class UriCache(object):
             pass
 
     def __setitem__(self, key, item):
+        # This may have been an error, don't save it.
+        if item is None:
+            return
+
         # Save to disk.
         cache_filename = self.get_filename(key)
         Thread(target=self.save, args=(cache_filename, item)).start()

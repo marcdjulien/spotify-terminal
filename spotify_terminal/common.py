@@ -17,7 +17,7 @@ DEBUG = False
 
 
 def catch_exceptions(func):
-    """Decorator to catch an exceptions and print it.
+    """Decorator to catch exceptions and print it in DEBUG mode.
 
     All threaded functions should be decorated with this,
     otherwise exceptions will go uncaught.
@@ -30,7 +30,8 @@ def catch_exceptions(func):
             clear()
             traceback.print_exc()
             os._exit(1)
-    return wrapper
+
+    return wrapper if DEBUG else func
 
 
 def asynchronously(func):

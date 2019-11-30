@@ -10,7 +10,6 @@ from .state import SpotifyState, Config
 
 logger = common.logging.getLogger(__name__)
 
-
 def get_args():
     """Parse and return the command line arguments."""
     parser = argparse.ArgumentParser(description="Terminal remote Spotify player.",
@@ -89,35 +88,39 @@ def main():
     logger.debug("Parsing config file %s", args.config_path)
     config = Config(args.config_path)
 
-    # Spotify API interface.
-    ApiClass = TestSpotifyApi if args.test else SpotifyApi
-    api = ApiClass(args.username)
-
-    # Display premium warning.
-    if not api.user_is_premium():
-        print("This is not a Premium account. Most features will not work!")
-        time.sleep(3)
-
-    # Create Spotify state.
-    sp_state = SpotifyState(api, config)
-    sp_state.load_state()
-    sp_state.init()
-
-    # Initialize the curses screen.
-    stdscr = uc.initscr()
-
-    # Create the display.
-    display = CursesDisplay(stdscr, sp_state)
-
-    # Start the display.
-    # Clear the screen before raising any Exceptions.
     try:
+        # Spotify API interface.
+        ApiClass = TestSpotifyApi if args.test else SpotifyApi
+        api = ApiClass(args.username)
+
+        # Display premium warning.
+        if not api.user_is_premium():
+            print("This is not a Premium account. Most features will not work!")
+            time.sleep(3)
+
+        # Create Spotify state.
+        sp_state = SpotifyState(api, config)
+        sp_state.load_state()
+        sp_state.init()
+
+        # Initialize the curses screen.
+        stdscr = uc.initscr()
+
+        # Create the display.
+        display = CursesDisplay(stdscr, sp_state)
+
+        # Start the display.
+        # Clear the screen before raising any Exceptions.
         display.start()
     except KeyboardInterrupt:
         common.clear()
-    except BaseException:
+    except BaseException as e:
         common.clear()
-        raise
+        if common.DEBUG:
+            raise
+        else:
+            print(e)
+            exit(1)
 
     print(common.PEACE)
     time.sleep(1)

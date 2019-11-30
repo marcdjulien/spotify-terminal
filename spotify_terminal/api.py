@@ -32,7 +32,7 @@ def needs_authentication(func):
         return any([k in msg for k in keywords])
 
     @common.catch_exceptions
-    def wrapper(self, *args, **kwargs):
+    def na_wrapper(self, *args, **kwargs):
         """Call then function and wrapper on authentication failure."""
         try:
             logger.debug("Executing: %s(%s %s)", func.__name__, args, kwargs)
@@ -51,30 +51,32 @@ def needs_authentication(func):
         except requests.ConnectionError as e:
             logger.warning("Connection Error: %s", str(e))
 
-    return wrapper
+    return na_wrapper
 
+import random
 def return_none_on_error(func):
     """Catches errors and returns None."""
-    def wrapper(*args, **kwargs):
+    def rnoe_wrapper(*args, **kwargs):
         try:
             return func(*args, **kwargs)
         except Exception as e:
-            logger.warning(e)
             if common.DEBUG:
                 raise
             else:
+                logger.warning("Error encountered while running %s: %s", func.__name__, e)                
                 return None
 
-    return wrapper
+    return rnoe_wrapper
 
 
 def uri_cache(func):
     """Use the cache to fetch a URI."""
     @common.catch_exceptions
-    def wrapper(self, obj, *args, **kwargs):
+    def uc_wrapper(self, obj, *args, **kwargs):
         """Use the cache to fetch the URI."""
         # Keys are of the form: <function>:<uri>
         # E.g, get_albums_from_artist#spotify:album:kjasg98qw35hg0
+        logger.info("Searching for %s(%s, %s, %s)", func.__name__, obj, args, kwargs)
         key = func.__name__ + "#" + str(obj['uri'])
 
         # Get a fresh copy and clear the cache if requested to.
@@ -91,7 +93,7 @@ def uri_cache(func):
             self._uri_cache[key] = result
             return result
 
-    return wrapper
+    return uc_wrapper
 
 def id_from_uri(uri):
     """Return the ID from a URI.

@@ -190,10 +190,8 @@ class SpotifyState(object):
     def init(self):
         # Get the User info.
         user = self.api.get_user()
-
         if user is None:
-            print("Could not load user {}".format(self.api.user_username()))
-            exit(1)
+            raise RuntimeError("Could not load user {}".format(self.api.user_username()))
 
         # Initialize PlayerActions.
         self.player_list.update_list([
@@ -255,7 +253,11 @@ class SpotifyState(object):
 
     def _load_playlists(self):
         # Get the users playlists.
-        playlists = self.api.get_user_playlists(self.api.get_user())
+        user = self.api.get_user()
+        if user is None:
+            raise RuntimeError("Trouble finding user. Try again later.")
+
+        playlists = self.api.get_user_playlists(user)
         if playlists is None:
             print("Could not load playlists. Try again later.")
             exit(1)
@@ -574,23 +576,28 @@ class SpotifyState(object):
 
     def _set_playlist(self, playlist):
         future = Future(target=(self.api.get_tracks_from_playlist, playlist),
-                        result=(self._update_track_list, (playlist, playlist['name'])))
+                        result=(self._update_track_list, (playlist, playlist['name'])),
+                        use_return=True)
         self.execute_future(future, self.tracks_state)
 
     def _set_artist(self, artist):
         future = Future(target=(self.api.get_selections_from_artist, artist),
-                        result=(self._update_track_list, (artist, artist['name'])))
+                        result=(self._update_track_list, (artist, artist['name'])),
+                        use_return=True)
         self.execute_future(future, self.tracks_state)
 
     def _set_artist_all_tracks(self, artist):
         future = Future(target=(self.api.get_all_tracks_from_artist, artist),
-                        result=(self._update_track_list, (common.get_all_tracks_context(artist),
-                                                   "All tracks from " + artist['name'])))
+                        result=(self._update_track_list, 
+                                (common.get_all_tracks_context(artist),
+                                 "All tracks from " + artist['name'])),
+                        use_return=True)
         self.execute_future(future, self.tracks_state)
 
     def _set_album(self, album):
         future = Future(target=(self.api.get_tracks_from_album, album),
-                        result=(self._update_track_list, (album, album['name'])))
+                        result=(self._update_track_list, (album, album['name'])),
+                        use_return=True)
         self.execute_future(future, self.tracks_state)
 
     def _set_context(self, context):
@@ -606,12 +613,14 @@ class SpotifyState(object):
             return
 
         future = Future(target=(target_api_call, context),
-                        result=(self._update_track_list, (context, context['name'])))
+                        result=(self._update_track_list, (context, context['name'])),
+                        use_return=True)
         self.execute_future(future, self.tracks_state)
 
     def _update_track_list(self, tracks, context, header):
         if tracks is None:
-            self.alert.warn("Unable to get tracks from {}".format(header))
+            msg = "Unable to get tracks from {}. Try again."
+            self.alert.warn(msg.format(header))
             return
             
         # Save the track listing.
@@ -1319,7 +1328,7 @@ class Future(object):
     Also has information about the progress of the call.
     """
 
-    def __init__(self, target, result=(), progress=True):
+    def __init__(self, target, result=(), use_return=False, progress=True):
         """Constructor.
 
         Args:
@@ -1327,6 +1336,8 @@ class Future(object):
                 The target function must accept a keyword argument 'progress'
                 that is a Progress object.
             result (tuple): Contains the result function, args and kwargs.
+            use_return (bool): If True, pass the return value in as the first argument
+                of the result function.
             progress (bool): True if this Future operation has progress. If False,
                 the program will not wait on it or show progress information.
         """
@@ -1339,6 +1350,9 @@ class Future(object):
         target = to_iter(target)
 
         result = to_iter(result)
+
+        self.use_return = use_return
+        """If True, pass the return value in as the first argument of the result function."""
 
         self.target_func = target[0]
         """The target fucntion."""
@@ -1388,7 +1402,7 @@ class Future(object):
                 "Executing Future Callback: %s",
                 str((self.result_func.__name__, self.result_args, self.result_kwargs))
             )
-            if result is not None:
+            if self.use_return:
                 self.result_func(result, *self.result_args, **self.result_kwargs)
             else:
                 self.result_func(*self.result_args, **self.result_kwargs)
@@ -1541,6 +1555,7 @@ class Alert(object):
         """
         self.message = message
         self.time_left = timeout
+        logger.warning("Alert: %s", message)
 
     def get_message(self):
         """Get the current message.
