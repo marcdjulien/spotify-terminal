@@ -15,7 +15,9 @@ def get_args():
     parser = argparse.ArgumentParser(description="Terminal remote Spotify player.",
                                      epilog=Config.help(),
                                      formatter_class=argparse.RawTextHelpFormatter)
-    parser.add_argument("username", 
+    parser.add_argument("-u --username",
+                        default=None,
+                        dest="username", 
                         help="username associated with your spotify account (email or user id)")
     parser.add_argument("-c --clear_cache",
                         action="store_true",
@@ -76,11 +78,17 @@ def main():
 
     # Clear your auth keys.
     if args.clear_auth:
+        if args.username is None:
+            print("Must specify username")
+            exit(1)
         logger.debug("Clearing authorization tokens")
         common.clear_auth(args.username)
 
     # Reset the cache.
     if args.clear_cache:
+        if args.username is None:
+            print("Must specify username")
+            exit(1)
         logger.debug("Clearing the cache")
         common.clear_cache(args.username)
 

@@ -10,13 +10,16 @@ logger = common.logging.getLogger(__name__)
 class UriCache(object):
     """Cache for app URIs."""
 
-    def __init__(self, username):
+    def __init__(self, username, new=False):
         self.username = username
         """The username of the cache."""
 
         self._cache = {}
         """Storage for the memory cache."""
 
+        if new:
+            common.clear_cache(self.username)
+            
     def get(self, key):
         """Return the cached object
 

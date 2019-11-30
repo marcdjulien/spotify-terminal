@@ -317,7 +317,7 @@ SPOTIFY_BANNER = """
 TITLE = """
 
 {}
-   Loading Playlists...
+   Loading...
 
    v{}.{}.{}
 """.format(SPOTIFY_BANNER, *get_version())

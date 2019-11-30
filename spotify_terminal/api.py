@@ -53,7 +53,6 @@ def needs_authentication(func):
 
     return na_wrapper
 
-import random
 def return_none_on_error(func):
     """Catches errors and returns None."""
     def rnoe_wrapper(*args, **kwargs):
@@ -119,35 +118,28 @@ class SpotifyApi(object):
     """URL to make API requests."""
 
     def __init__(self, username):
-        self.username = username
-        """Email or user id."""
-
         self.session = requests.Session()
+        """Main Session."""
 
         self.auth = Authenticator(username)
         """Handles OAuth 2.0 authentication."""
 
-        self._uri_cache = UriCache(username)
-        """Cache of Spotify URIs."""
-
-        # Get authorization.
         self.auth.authenticate()
 
-        # Get user information and validate it.
         self.me = self.get_api_v1("me")
-        """The Spotify user information."""
+        """The Spotify user's information."""
 
         if self.me is None:
             raise RuntimeError("Could not get account information.")
 
-        if (self.me['email'] != username) and (self.me['id'] != username):
-            raise RuntimeError(
-                "\n\n\nInvalid email/user id entered!\n"
-                "You entered: {}\n"
-                "You signed in as: {} (email), {} (user id)".format(username,
-                                                                    self.me['email'],
-                                                                    self.me['id'])
-            )
+        self.username = self.user_id()
+        """User id."""
+
+        # Save authorization information for later.
+        self.auth.save(self.username)
+
+        self._uri_cache = UriCache(self.username, new=username is None)
+        """Cache of Spotify URIs."""
 
         # Saved tracks is not included as a standard playlist in the API
         self.saved_playlist = Playlist({

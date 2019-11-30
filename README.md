@@ -17,13 +17,12 @@ This application uses Unicurse: https://pypi.org/project/UniCurses
 (A version of this already comes with the checkout)
 
 
-
 # Usage
 Execute the following command to run the program:
 ```
-spotify-terminal.py [username]
+spotify-terminal.py [-u username]
 ```
-Where ```username``` is either the email associated with your Spotify account or the user id. Use --help or -h to see all options.
+Optional: ```username``` is either the email associated with your Spotify account or the user id.
 
 # ? Search
 By typing ```?``` you can begin a search..

@@ -42,11 +42,17 @@ class Authenticator(object):
         self.access_token = None
         self.refresh_token = None
         self.app_data = []
+        self._data = {}
         self._init()
 
     def authenticate(self):
         # Try to use local auth file.
-        if not self._auth_from_file():
+        success = False
+        if self.username is not None:
+            success = self._auth_from_file()
+        
+        # Re-authenticate
+        if not success:
             def start_server():
                 http_server = HTTPServer(('localhost', self.port), AuthenticationHandler)
                 http_server.handle_request()
@@ -107,6 +113,7 @@ class Authenticator(object):
                     if toks[0] in required_keys:
                         logger.info("Found %s in auth file", toks[0])
                         setattr(self, toks[0], toks[1])
+                        self._data[toks[0]] = toks[1]
                         found_keys.add(toks[0])
             return len(required_keys.symmetric_difference(found_keys)) == 0
         else:
@@ -123,9 +130,10 @@ class Authenticator(object):
         }
         resp = requests.post(self._token_url(), data=post_body)
         resp.raise_for_status()
-        data = json.loads(resp.text)
+        self._data = json.loads(resp.text)
 
-        self._save(data)
+        for key, value in self._data.items():
+            setattr(self, key, value)
 
     def _authorize_url(self):
         params = {
@@ -140,22 +148,19 @@ class Authenticator(object):
     def _token_url(self):
         return "https://accounts.spotify.com/api/token"
 
-    def _save(self, data):
-        if data:
-            for key, value in data.items():
-                setattr(self, key, value)
-
+    def save(self, username):
+        if self._data:
             if not os.path.isdir(common.get_app_dir()):
                 os.mkdir(common.get_app_dir())
 
-            with open(common.get_auth_filename(self.username), "w") as auth_file:
-                for k, v in data.items():
+            with open(common.get_auth_filename(username), "w") as auth_file:
+                for k, v in self._data.items():
                     auth_file.write("%s=%s\n" % (k, v))
-                logger.debug("%s created", common.get_auth_filename(self.username))
+                logger.debug("%s created", common.get_auth_filename(username))
         else:
             try:
-                os.remove(common.get_auth_filename(self.username))
-                logger.debug("%s deleted", common.get_auth_filename(self.username))
+                os.remove(common.get_auth_filename(username))
+                logger.debug("%s deleted", common.get_auth_filename(username))
             except OSError as e:
                 logger.warning(e)
 
@@ -163,6 +168,9 @@ class Authenticator(object):
 class AuthenticationHandler(BaseHTTPRequestHandler):
     HTML = """
         <p><span style="color: rgb(71, 85, 119); font-family: Tahoma, Geneva, sans-serif; font-size: 48px; font-style: normal; font-variant-ligatures: normal; font-variant-caps: normal; font-weight: 400; letter-spacing: normal; orphans: 2; text-align: start; text-indent: 0px; text-transform: none; white-space: normal; widows: 2; word-spacing: 0px; -webkit-text-stroke-width: 0px; text-decoration-style: initial; text-decoration-color: initial; float: none; display: inline !important;">You may close this tab, and continue jamming in your terminal!</span><span style="color: rgb(40, 50, 78); font-family: Tahoma, Geneva, sans-serif; font-size: 48px; font-style: normal; font-variant-ligatures: normal; font-variant-caps: normal; font-weight: 400; letter-spacing: normal; orphans: 2; text-align: start; text-indent: 0px; text-transform: none; white-space: normal; widows: 2; word-spacing: 0px; -webkit-text-stroke-width: 0px; text-decoration-style: initial; text-decoration-color: initial; float: none; display: inline !important;">&nbsp;</span></p>    
+    <script type="text/javascript">
+        window.close();
+    </script>
     """
 
     def do_GET(self):
