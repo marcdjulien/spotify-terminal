@@ -4,27 +4,26 @@ Terminal program to play/control music via Spotify. Some features require a Spot
 ![](README_IMG.png)
 
 # Install
-Unicurses and Requests for Python are required to run this program.
+Requires Python 3. Older versions can be manually installed for Python 2 (See releases: https://github.com/marcdjulien/spotify-terminal/releases)
+```
+pip install spotify-terminal
+```
+Or clone/download this repository and run:
+```
+python setup.py install 
+```
 
-https://pypi.org/project/UniCurses
+This application uses Unicurse: https://pypi.org/project/UniCurses
 (A version of this already comes with the checkout)
 
-http://docs.python-requests.org/en/v2.9.1/user/install/
-```
-pip install requests
-```
 
-Then clone or download this repository to use the application.
 
 # Usage
 Execute the following command to run the program:
 ```
-Linux/Mac: ./spotify.py [username]
-Windows: spotify.py [username]
-
-Use --help or -h to see more options.
+spotify-terminal.py [username]
 ```
-Where ```username``` is either the email associated with your Spotify account or the user id.
+Where ```username``` is either the email associated with your Spotify account or the user id. Use --help or -h to see all options.
 
 # ? Search
 By typing ```?``` you can begin a search..
@@ -81,7 +80,9 @@ By typing ```:``` you can enter commands. The following is a list of all command
 
 ```Shift + P ``` to add a song to a playlist.
 
-```DELETE``` to delete a song from a playlist.
+```Shift + O ``` to create a new playlist.
+
+```DELETE``` to delete a playlist or song from a playlist.
 
 # Notes
 This has only been tested on Linux and Windows with a Spotify Premium account. Briefly on Mac. Feel free to submit pull requests or tickets for issues.
