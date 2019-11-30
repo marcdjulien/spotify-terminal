@@ -1,12 +1,11 @@
 import setuptools
-from spotify_terminal import common
 
 with open("README.md", "r") as fh:
     long_description = fh.read()
 
 setuptools.setup(
-    name='spotify-terminal-marcdjulien',  
-    version='{}.{}.{}'.format(*common.get_version()),
+    name='spotify-terminal',  
+    version="0.12.0",
     scripts=['spotify-terminal.py'] ,
     author="Marc-Daniel Julien",
     author_email="marcdjulien@gmail.com",

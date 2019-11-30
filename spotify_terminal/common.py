@@ -1,22 +1,17 @@
 import logging
 import os
 import platform
+import requests
 import shutil
 import time
+import tempfile
 import traceback
 import unicodedata
-import tempfile
 
 from threading import Thread
 
-try:
-    import requests
-except:
-    print("\nPlease install requests: \"pip install requests\"\n")
-    exit(1)
 
 logger = None
-
 
 DEBUG = False
 
