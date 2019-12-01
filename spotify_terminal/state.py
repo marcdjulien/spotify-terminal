@@ -398,7 +398,7 @@ class SpotifyState(object):
 
     def _execute_search(self, *query):
         query = " ".join(query)
-        results = self.api.search(("artist", "album", "track"), query)
+        results = self.api.search(("artist", "album", "track", "playlist"), query)
         if results:
             self.search_list.update_list(results)
             self.search_list.header = "Search results for \"{}\"".format(query)
@@ -1008,6 +1008,8 @@ class SpotifyState(object):
                     self._set_artist(entry)
                 elif entry['type'] == 'album':
                     self._set_album(entry)
+                elif entry['type'] == 'playlist':
+                    self._set_playlist(entry)
                 elif entry['type'] == 'track':
                     self._play(entry, context=None)
             self.current_state = tracks_state

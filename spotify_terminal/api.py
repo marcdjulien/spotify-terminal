@@ -351,7 +351,8 @@ class SpotifyApi(object):
         cast = {
             'artists': Artist,
             'tracks': Track,
-            'albums': Album
+            'albums': Album,
+            'playlists': Playlist,
         }
 
         combined = []
