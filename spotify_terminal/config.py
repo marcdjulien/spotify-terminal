@@ -1,4 +1,8 @@
 from . import unicurses as uc
+from . import common
+
+
+logger = common.logging.getLogger(__name__)
 
 
 class Config(object):

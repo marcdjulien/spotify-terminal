@@ -100,12 +100,12 @@ def ascii(string):
     """Return an ascii encoded version of the string.
 
     Args:
-        string (str): The string to encode.
+        string (str, bytes): The string to encode.
 
     Returns:
         str: The ascii encoded string.
     """
-    return unicodedata.normalize("NFKD", string).encode('ascii', 'ignore')
+    return unicodedata.normalize("NFKD", string).encode("ascii", "ignore").decode("ascii")
 
 
 def clamp(value, low, high):

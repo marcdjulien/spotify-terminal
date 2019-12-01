@@ -509,6 +509,7 @@ class CursesDisplay(object):
             self._render_text(win, row_start+i, col_start, text, n_cols, style, centered=centered)
 
     def _render_text(self, win, row, col, text, n_cols, style, centered=False):
+        text = common.ascii(text)
         if centered:
             w2 = (n_cols-col)//2
             n2 = len(text)//2
