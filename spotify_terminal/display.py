@@ -1,7 +1,9 @@
 import time
-import unicurses as uc
 
-import common
+from . import common
+from . import unicurses as uc
+from .periodic import PeriodicCallback, PeriodicDispatcher
+
 
 logger = common.logging.getLogger(__name__)
 
@@ -28,7 +30,7 @@ class CursesDisplay(object):
     IDLE_TIMEOUT = 0.5
 
     # How long to wait before declaring the program is not idle and is sleeping.
-    SLEEP_TIMEOUT = 60
+    SLEEP_TIMEOUT = 5 * 60
 
     # How often to run the program loop when the user is actively using it.
     PROGRAM_PERIOD = 0.01
@@ -59,17 +61,18 @@ class CursesDisplay(object):
         """Windows in an odered list."""
 
         self._register_window("popup", self._window_sizes["popup"])
+        self._register_window("help", self._window_sizes["help"])
         self._register_window("search_results", self._window_sizes["search"])
         self._register_window("select_device", self._window_sizes["select_device"])
         self._register_window("user", self._window_sizes["user"])
         self._register_window("tracks", self._window_sizes["tracks"])
         self._register_window("player", self._window_sizes["player"])
 
-        self.periodics = [
-            common.PeriodicCallback(self.PROGRAM_PERIOD, self.dispatch),
-            common.PeriodicCallback(self.RENDER_PERIOD, self.render),
-            common.PeriodicCallback(self.CLEAR_PERIOD, self.clear)
-        ]
+        self.periodic_dispatcher = PeriodicDispatcher([
+            PeriodicCallback(self.PROGRAM_PERIOD, self.dispatch),
+            PeriodicCallback(self.RENDER_PERIOD, self.render),
+            PeriodicCallback(self.CLEAR_PERIOD, self.clear)
+        ])
 
         self.dispatch_time = self.ACTIVE_PROGRAM_DISPATCH_TIME
 
@@ -120,15 +123,14 @@ class CursesDisplay(object):
         logger.debug("Curses display initialized")
 
     def start(self):
-        logger.info("Starting curses display loop")
+        logger.info("Starting main loop")
 
         # Initial render.
         self.render()
 
         while self._running:
             with common.ContextDuration() as t:
-                for periodic in self.periodics:
-                    periodic.update(time.time())
+                self.periodic_dispatcher.dispatch()
 
             time.sleep(max(0, self.dispatch_time - t.duration))
 
@@ -152,9 +154,22 @@ class CursesDisplay(object):
         """Process all keyboard input."""
         key_pressed = False
         for win in self.get_windows():
-            key = uc.wgetch(win)
-            if key != -1:
+            # Gather all key inputs.
+            keys = []
+            while True:
+                k = uc.wgetch(win)
+                if k != -1:
+                    keys.append(k)
+                else:
+                    break
+            
+            # For now, we only process individual key commands.
+            # Soemthing like "Shift + Left Arrow" will result in multiple
+            # keys and could trigger unintentional commands.
+            # Disallow this until we support these kinds of key combinations.
+            if len(keys) == 1:
                 key_pressed = True
+                key = keys[0]
                 self.last_pressed_time = time.time()
                 self.state.process_key(key)
 
@@ -164,6 +179,7 @@ class CursesDisplay(object):
 
     def render_calcs(self):
         """Perform any calculations related to rendering."""
+        # TODO: Make this state based?
         key_timeout = time.time() - self.last_pressed_time
 
         if key_timeout <= self.IDLE_TIMEOUT:
@@ -178,6 +194,7 @@ class CursesDisplay(object):
         self.set_panel_order()
 
         # Update the panel size incase the terminal size changed.
+        # TODO: Doesn't work.
         self.update_panel_size()
 
         # Clear the screen.
@@ -191,6 +208,7 @@ class CursesDisplay(object):
         self.render_search_panel()
         self.render_select_device_panel()
         self.render_popup_panel()
+        self.render_help_panel()
 
         # Required.
         uc.update_panels()
@@ -209,13 +227,16 @@ class CursesDisplay(object):
             uc.top_panel(self._panels["search_results"])
         elif self.is_active_window("select_device"):
             uc.top_panel(self._panels["select_device"])
+        elif self.is_active_window("help"):
+            uc.top_panel(self._panels["help"])
         else:
             for panel_name, panel in self._panels.items():
-                if panel_name not in ["search_results", "select_device", "popup"]:
+                if panel_name not in ["search_results", "select_device", "popup", "help"]:
                     uc.top_panel(panel)
 
     def update_panel_size(self):
         self._resize_window("popup", self._window_sizes["popup"])
+        self._resize_window("help", self._window_sizes["help"])
         self._resize_window("search_results", self._window_sizes["search"])
         self._resize_window("select_device", self._window_sizes["select_device"])
         self._resize_window("user", self._window_sizes["user"])
@@ -257,8 +278,8 @@ class CursesDisplay(object):
                           uc.A_NORMAL)
 
         # Show the playlists.
-        playlists = [str(playlist) for playlist in self.state.main_menu['user']]
-        selected_i = self.state.main_menu["user"].i
+        playlists = [str(playlist) for playlist in self.state.user_list]
+        selected_i = self.state.user_list.i
         playlist_start_line = display_name_start_line + 2
         self._render_list(win,
                           playlists,
@@ -276,12 +297,12 @@ class CursesDisplay(object):
         # Show the title of the context.
         title_start_row = 1
         self._render_text(win, title_start_row, 2,
-                      self.state.main_menu['tracks'].header, cols-3, uc.A_BOLD)
+                      self.state.tracks_list.header, cols-3, uc.A_BOLD)
 
         # Show the tracks.
-        selected_i = self.state.main_menu['tracks'].i
+        selected_i = self.state.tracks_list.i
         track_start_line = title_start_row + 2
-        tracks = [track.str(cols-3) for track in self.state.main_menu['tracks']]
+        tracks = [track.str(cols-3) for track in self.state.tracks_list]
         self._render_list(win, tracks, track_start_line, rows-4,
                           2, cols-3, selected_i, self.is_active_window("tracks"))
 
@@ -291,44 +312,59 @@ class CursesDisplay(object):
         # Draw border.
         uc.box(win)
 
+        # Display currently playing track
         self._render_text(win, 1, 2, self.state.get_currently_playing_track().track, cols-3, uc.A_BOLD)
         self._render_text(win, 2, 2, self.state.get_currently_playing_track().album, cols-3, uc.A_BOLD)
         self._render_text(win, 3, 2, self.state.get_currently_playing_track().artist, cols-3, uc.A_BOLD)
 
+        # Display the current device
         device_info = "{} ({}%)".format(self.state.current_device, self.state.volume)
         self._render_text(win, 7, 2, device_info, cols-3, uc.A_NORMAL)
 
-        for i, action in enumerate(self.state.main_menu["player"]):
-            if (i == self.state.main_menu['player'].i) and self.is_active_window("player"):
+        # Display the media icons
+        col = 2
+        for i, action in enumerate(self.state.player_list):
+            if ((i == self.state.player_list.i)
+                    and self.state.current_state.get_list().name == "player"):
                 style = uc.A_BOLD | uc.A_STANDOUT
             else:
                 style = uc.A_NORMAL
-            uc.mvwaddstr(win, 5, 2 + i*4, action.title, style)
+            icon = action.title
+            uc.mvwaddstr(win, 5, col, icon, style)
+            col += len(icon) + 2
+
+        # Display other actions
+        col = cols//2
+        self._render_list(win, self.state.other_actions_list, 
+                          1, rows-1,
+                          cols//2, (cols//2) - 2,
+                          self.state.other_actions_list.i,
+                          self.state.current_state.get_list().name == "other_actions")
 
     def render_footer(self):
         if self.state.is_loading():
             percent = self.state.get_loading_progress()
-            text = " " * int(self._cols * percent)
-            uc.mvwaddstr(self.stdscr, self._rows-1, 0, text, uc.A_STANDOUT)
-
+            if percent is not None:
+                text = " " * int(self._cols * percent)
+                uc.mvwaddstr(self.stdscr, self._rows-1, 0, text, uc.A_STANDOUT)
         elif self.state.is_adding_track_to_playlist():
             text = "Select a playlist to add this track"
             uc.mvwaddstr(self.stdscr, self._rows-1, 0, text, uc.A_BOLD)
-
         elif self.state.is_creating_command():
             start_col = 1
-            text = "".join(self.state.get_command_query()) + " "
+            query = self.state.get_command_query()
+            text = str(query) + " "
             uc.mvwaddstr(self.stdscr, self._rows-1, start_col, text)
             uc.mvwaddstr(self.stdscr,
-                         self._rows-1, start_col+self.state.get_cursor_i(),
-                         text[self.state.get_cursor_i()],
+                         self._rows-1, start_col+query.get_cursor_index(),
+                         query.get_current_index() or " ",
                          uc.A_STANDOUT)
         else:
-            entry = self.state.current_menu.get_current_list_entry()
+            entry = self.state.current_state.get_list().get_current_entry()
             if entry:
                 ncols = self._cols-1
-                short_str = entry.str(ncols)
-                long_str = str(entry)
+                long_str = common.ascii(str(entry))
+                short_str = entry.str(ncols) if hasattr(entry, "str") else long_str
 
                 # Check if we need to scroll or not.
                 if "".join(short_str.split()) == "".join(long_str.split()):
@@ -339,18 +375,23 @@ class CursesDisplay(object):
                 else:
                     self._footer_roll_index += 1
                     footer_roll_index = max(0, self._footer_roll_index)
-                    footer_roll_index /= 10
+                    footer_roll_index //= 10
                     # Double the string length so that we always uniformly roll
                     # even in the case the entire string length is less than the terminal width.
                     # Also, add a border to easily identify the end.
                     long_str = 2 * (long_str + " | ")
                     text = list(long_str)
-                    for _ in xrange(footer_roll_index):
+                    for _ in range(footer_roll_index):
                         text.append(text.pop(0))
                     text = "".join(text)
                     text = text[0:ncols]
                     uc.mvwaddstr(self.stdscr, self._rows-1, 0, text, uc.A_BOLD)
-
+        
+        if self.state.alert.is_active():
+            text = self.state.alert.get_message()
+            text = "[{}]".format(text)
+            uc.mvwaddstr(self.stdscr, self._rows-1, 0, text, uc.A_STANDOUT)
+        
         # Track progress bar
         progress = self.state.get_track_progress()
         if progress:
@@ -367,12 +408,12 @@ class CursesDisplay(object):
         title_start_row = 1
         self._render_text(win,
                           title_start_row, 2,
-                          self.state.search_menu["search_results"].header,
+                          self.state.search_list.header,
                           n_display_cols, uc.A_BOLD)
 
         # Show the results.
-        results = [r.str(n_display_cols) for r in self.state.search_menu["search_results"]]
-        selected_i = self.state.search_menu.get_current_list().i
+        results = [r.str(n_display_cols) for r in self.state.search_list]
+        selected_i = self.state.search_list.i
         self._render_list(win,
                           results,
                           3, rows-4,
@@ -393,21 +434,21 @@ class CursesDisplay(object):
                           cols-3,
                           uc.A_BOLD)
 
-        selected_i = self.state.select_device_menu.get_current_list().i
-        self._render_list(win, self.state.select_device_menu["devices"], 3, rows-4, 2, cols-3, selected_i, self.is_active_window("select_device"))
+        selected_i = self.state.device_list.i
+        self._render_list(win, self.state.device_list, 3, rows-4, 2, cols-3, selected_i, self.is_active_window("select_device"))
 
     def render_popup_panel(self):
         win, rows, cols = self._init_render_window("popup")
-        uc.box(win)\
+        uc.box(win)
 
-        current_popup_list = self.state.current_popup_menu.get_current_list()
+        current_popup_list = self.state.current_state.get_list()
 
         # Show the title of the context.
         prompt = current_popup_list.header
         title_start_row = 1
         self._render_text(win,
                           title_start_row,
-                          (cols/2) - (len(prompt)/2) - 1,
+                          (cols//2) - (len(prompt)//2) - 1,
                           prompt,
                           cols-3,
                           uc.A_BOLD)
@@ -416,11 +457,36 @@ class CursesDisplay(object):
         list_start_row = title_start_row + 2
         self._render_list(win,
                           current_popup_list,
-                          list_start_row, rows-list_start_row,
+                          list_start_row, rows - list_start_row - 1,
                           2, cols-4,
                           selected_i,
                           self.is_active_window("popup"),
                           centered=True)
+
+    def render_help_panel(self):
+        win, rows, cols = self._init_render_window("help")
+        uc.box(win)
+
+        current_help_list = self.state.current_state.get_list()
+
+        # Show the title of the context.
+        prompt = "Shortcuts"
+        title_start_row = 1
+        self._render_text(win,
+                          title_start_row,
+                          (cols//2) - (len(prompt)//2) - 1,
+                          prompt,
+                          cols-3,
+                          uc.A_BOLD)
+
+        selected_i = current_help_list.i
+        list_start_row = title_start_row + 2
+        self._render_list(win,
+                          current_help_list,
+                          list_start_row, rows - list_start_row - 1,
+                          2, cols-4,
+                          selected_i,
+                          self.is_active_window("help"))
 
     def _render_list(self, win, list,
                      row_start, n_rows,
@@ -429,7 +495,7 @@ class CursesDisplay(object):
                      is_active,
                      centered=False):
         n_elems = len(list)
-        start_entry_i = common.clamp(selected_i - n_rows/2,
+        start_entry_i = common.clamp(selected_i - n_rows//2,
                                      0, max(n_elems-n_rows, 0))
         end_entry_i = start_entry_i + n_rows
         display_list = list[start_entry_i:end_entry_i]
@@ -443,9 +509,10 @@ class CursesDisplay(object):
             self._render_text(win, row_start+i, col_start, text, n_cols, style, centered=centered)
 
     def _render_text(self, win, row, col, text, n_cols, style, centered=False):
+        text = common.ascii(text)
         if centered:
-            w2 = (n_cols-col)/2
-            n2 = len(text)/2
+            w2 = (n_cols-col)//2
+            n2 = len(text)//2
             uc.mvwaddnstr(win, row, col+w2-n2, text, n_cols, style)
         else:
             uc.mvwaddnstr(win, row, col, text, n_cols, style)
@@ -455,20 +522,22 @@ class CursesDisplay(object):
             return window_name == "search_results"
         elif self.state.in_select_device_menu():
             return window_name == "select_device"
-        elif self.state.is_in_state(self.state.ADD_TO_PLAYLIST_CONFIRM_PLAYLIST) or \
-                self.state.is_selecting_artist():
+        # TODO: This sucks, make it better.
+        elif (self.state.is_in_state(self.state.a2p_confirm_state) 
+              or self.state.is_selecting_artist()
+              or self.state.is_in_state(self.state.remove_track_confirm_state)
+              or self.state.is_in_state(self.state.remove_playlist_confirm_state)):
             return window_name == "popup"
+        elif self.state.is_in_state(self.state.help_state):
+            return window_name == "help"
         else:
-            return self.state.main_menu.get_current_list().name == window_name
-
-    def get_cur_window(self):
-        return self._ordered_windows[self.state.main_menu.list_i]
+            return self.state.current_state.get_list().name == window_name
 
     def get_windows(self):
         return [w.window for w in self._windows.values()]
 
     def get_panels(self):
-        return self._panels.values()
+        return list(self._panels.values())
 
     @property
     def _rows(self):
@@ -481,10 +550,10 @@ class CursesDisplay(object):
     @property
     def _window_sizes(self):
         user = (self._rows-2,
-                self._cols/4,
+                self._cols//4,
                 0,
                 0)
-        tracks = (self._rows*2/3,
+        tracks = (self._rows*2//3,
                   self._cols-(user[1])-1,
                   0,
                   user[1]+user[3])
@@ -492,19 +561,24 @@ class CursesDisplay(object):
                   tracks[1],
                   tracks[0],
                   tracks[3])
-        search = (self._rows*8/10,
-                  self._cols*8/10,
-                  self._rows/10,
-                  self._cols/10)
-        select_device = (self._rows*6/10,
-                         self._cols*6/10,
-                         self._rows*2/10,
-                         self._cols*2/10)
+        search = (self._rows*8//10,
+                  self._cols*8//10,
+                  self._rows//10,
+                  self._cols//10)
+        select_device = (self._rows*6//10,
+                         self._cols*6//10,
+                         self._rows*2//10,
+                         self._cols*2//10)
 
-        popup = (self._rows/4,
-                   self._cols/4,
-                   self._rows*3/8,
-                   self._cols*3/8)
+        help = (self._rows*8//10,
+                  self._cols*8//10,
+                  self._rows//10,
+                  self._cols//10)
+
+        popup = (self._rows//4,
+                   self._cols//4,
+                   self._rows*3//8,
+                   self._cols*3//8)
 
         return {
             "user": user,
@@ -512,5 +586,6 @@ class CursesDisplay(object):
             "player": player,
             "search": search,
             "select_device": select_device,
+            "help": help,
             "popup": popup
         }

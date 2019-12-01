@@ -1,6 +1,6 @@
 import copy
 
-import common
+from . import common
 
 logger = common.logging.getLogger(__name__)
 
@@ -12,7 +12,11 @@ class SpotifyObject(object):
         self.info = copy.deepcopy(info)
 
     def __getitem__(self, key):
-        return self.info[key]
+        item = self.info[key]
+        if isinstance(item, str):
+            return item or "[Unable to Render]"
+        else:
+            return item
 
     def __setitem__(self, key, value):
         self.info[key] = value
@@ -68,8 +72,8 @@ class Track(SpotifyObject):
     def str(self, cols):
         # Account for 4 spaces.
         nchrs = cols - 4
-        ar_chrs = nchrs/3
-        al_chrs = nchrs/3
+        ar_chrs = nchrs//3
+        al_chrs = nchrs//3
         tr_chrs = nchrs - al_chrs - ar_chrs
         fmt = "%{0}.{0}s  %{1}.{1}s  %{2}.{2}s".format(tr_chrs, al_chrs, ar_chrs)
         return fmt % (self.track_tuple[0],
@@ -107,8 +111,8 @@ class Album(SpotifyObject):
     def str(self, cols):
         # Account for 4 spaces.
         nchrs = cols - 4
-        tr_chrs = 2*nchrs/4
-        ty_chrs = nchrs/4
+        tr_chrs = 2*nchrs//4
+        ty_chrs = nchrs//4
         ar_chrs = nchrs - tr_chrs - ty_chrs
         fmt = "%{0}.{0}s  %{1}.{1}s  %{2}.{2}s".format(tr_chrs, ty_chrs, ar_chrs)
         return fmt % (self['name'], self.extra_info, self.artists)
@@ -122,7 +126,7 @@ class Device(SpotifyObject):
 
 
 UnableToFindDevice = Device({"type": "Unable to find device",
-                             "name": "Press 'W' to see available players",
+                             "name": "Open the Devices menu to select a device.",
                              "id": None})
 
 

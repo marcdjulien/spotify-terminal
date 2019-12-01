@@ -4,19 +4,22 @@ import platform
 import requests
 import shutil
 import time
+import tempfile
 import traceback
 import unicodedata
-import tempfile
 
 from threading import Thread
 
+
 logger = None
+
+DEBUG = False
 
 
 def catch_exceptions(func):
-    """Decorator to catch an exceptions and print it.
+    """Decorator to catch exceptions and print it in DEBUG mode.
 
-    All threaded functions should be threaded with this,
+    All threaded functions should be decorated with this,
     otherwise exceptions will go uncaught.
     """
     def wrapper(*args, **kwargs):
@@ -27,10 +30,11 @@ def catch_exceptions(func):
             clear()
             traceback.print_exc()
             os._exit(1)
-    return wrapper
+
+    return wrapper if DEBUG else func
 
 
-def async(func):
+def asynchronously(func):
     """Decorator to execute a function asynchronously."""
     @catch_exceptions
     def wrapper(*args, **kwargs):
@@ -96,12 +100,12 @@ def ascii(string):
     """Return an ascii encoded version of the string.
 
     Args:
-        string (str): The string to encode.
+        string (str, bytes): The string to encode.
 
     Returns:
         str: The ascii encoded string.
     """
-    return unicodedata.normalize("NFKD", string).encode('ascii', 'ignore')
+    return unicodedata.normalize("NFKD", string).encode("ascii", "ignore").decode("ascii")
 
 
 def clamp(value, low, high):
@@ -247,6 +251,7 @@ def clear_auth(username):
 def extract_version(stream):
     version = None
     for line in stream:
+        line = line.decode()
         if "." in line:
             version = line.strip()
             break
@@ -260,7 +265,10 @@ def get_version():
             os.path.dirname(os.path.abspath(__file__)),
             ".version"
         )
-        with open(version_file, "r") as f:
+        # Read in as bytes. extract_version will decode it.
+        # This maintains compatibility with get_master_version
+        # which relies on bytes from the Request response.
+        with open(version_file, "rb") as f:
             return extract_version(f)
     except BaseException as e:
         logger.info("Could not get current version %s", e)
@@ -268,7 +276,8 @@ def get_version():
 
 def get_master_version():
     try:
-        resp = requests.get("https://raw.githubusercontent.com/marcdjulien/spotifyterminal/master/.version")
+        resp = requests.get("https://raw.githubusercontent.com/marcdjulien/spotifyterminal/master/.version",
+                            timeout=1)
         return extract_version(resp)
     except BaseException as e:
         logger.info("Could not get latest version %s", e)
@@ -288,58 +297,6 @@ class ContextDuration(object):
             return self
 
 
-class PeriodicCallback(object):
-    """Execute a callback at certain intervals."""
-
-    def __init__(self, period, func, args=(), kwargs={}, active=True):
-        self.period = period
-        """How often to run."""
-
-        self.func = func
-        """The function to call."""
-
-        self.args = args
-        """Arguments for the function."""
-
-        self.kwargs = kwargs
-        """Keyward arguments for the fucntion."""
-
-        self.active = active
-        """Whether active or not."""
-
-        self._next_call_time = time.time()
-        """The next time to call the function."""
-
-    def update(self, call_time):
-        if call_time >= self._next_call_time and self.active:
-            self.func(*self.args, **self.kwargs)
-            self._next_call_time += self.period
-
-    def call_at(self, call_time):
-        self._next_call_time = call_time
-
-    def call_in(self, delta):
-        self._next_call_time = time.time() + delta
-
-    def call_now(self):
-        self.call_in(0)
-
-    def is_active(self):
-        return self.active
-
-    def activate(self):
-        logger.debug("%s: Activating", self)
-        self.active = True
-        self.call_now()
-
-    def deactivate(self):
-        logger.debug("%s: Deactivating", self)
-        self.active = False
-
-    def __str__(self):
-        return "{}({}, {})".format(self.func.__name__, self.args, self.kwargs)
-
-
 SPOTIFY_BANNER = """
    _____             __  _ ____
   / ___/____  ____  / /_(_/ ____  __
@@ -352,16 +309,17 @@ SPOTIFY_BANNER = """
        / / / _ \/ ___/ __ `__ \/ / __ \/ __ `/ /
       / / /  __/ /  / / / / / / / / / / /_/ / /
      /_/  \___/_/  /_/ /_/ /_/_/_/ /_/\__,_/_/
+
+  [marcdjulien]
 """
 
 
 TITLE = """
 
 {}
+   Loading...
 
-   Loading Playlists...
-
-   [marcdjulien] v{}.{}.{}
+   v{}.{}.{}
 """.format(SPOTIFY_BANNER, *get_version())
 
 
@@ -370,6 +328,7 @@ PEACE = """
 {}
 
    Saving...
+
 """.format(SPOTIFY_BANNER)
 
 SAVED_TRACKS_CONTEXT_URI = "spotify_terminal:saved_tracks:context"

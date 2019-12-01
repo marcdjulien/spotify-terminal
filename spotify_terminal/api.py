@@ -1,11 +1,11 @@
-import urllib
+import urllib.request, urllib.parse, urllib.error
 import json
 import requests
 
-import common
-from authentication import Authenticator
-from cache import UriCache
-from model import (
+from . import common
+from .authentication import Authenticator
+from .cache import UriCache
+from .model import (
     Artist,
     Album,
     Device,
@@ -14,6 +14,7 @@ from model import (
     NoneTrack,
     Playlist
 )
+from .state import Progress
 
 
 logger = common.logging.getLogger(__name__)
@@ -24,23 +25,21 @@ def needs_authentication(func):
 
     Re-authenticate if the API call fails.
     """
+    # TODO: Should probably just catch specific authentication errors
     def is_auth_message(msg):
         """Return true is it's an authentication related error message."""
-        keywords = ["Unauthorized",
-                    "Expired"]
+        keywords = ["Unauthorized", "Expired"]
         return any([k in msg for k in keywords])
 
     @common.catch_exceptions
-    def wrapper(self, *args, **kwargs):
+    def na_wrapper(self, *args, **kwargs):
         """Call then function and wrapper on authentication failure."""
         try:
             logger.debug("Executing: %s(%s %s)", func.__name__, args, kwargs)
             return func(self, *args, **kwargs)
         except requests.HTTPError as e:
-            msg = str(e)
-            logger.debug(msg)
-            if is_auth_message(msg):
-                logger.warning("Failed to make request. Re-authenticating.")
+            if is_auth_message(str(e)):
+                logger.warning("Failed to make request. \"%s\".Re-authenticating.", e)
                 self.auth.refresh()
                 try:
                     return func(self, *args, **kwargs)
@@ -48,19 +47,36 @@ def needs_authentication(func):
                     logger.warning("Failed again after re-authenticating. "
                                    "Giving up.")
             else:
-                logger.warning("Failed to make API call: %s", msg)
+                logger.warning("Failed to make API call: %s", e)
         except requests.ConnectionError as e:
             logger.warning("Connection Error: %s", str(e))
 
-    return wrapper
+    return na_wrapper
+
+def return_none_on_error(func):
+    """Catches errors and returns None."""
+    def rnoe_wrapper(*args, **kwargs):
+        try:
+            return func(*args, **kwargs)
+        except Exception as e:
+            if common.DEBUG:
+                raise
+            else:
+                logger.warning("Error encountered while running %s: %s", func.__name__, e)                
+                return None
+
+    return rnoe_wrapper
 
 
 def uri_cache(func):
     """Use the cache to fetch a URI."""
     @common.catch_exceptions
-    def wrapper(self, obj, *args, **kwargs):
+    def uc_wrapper(self, obj, *args, **kwargs):
         """Use the cache to fetch the URI."""
-        key = func.__name__ + ":" + str(obj['uri'])
+        # Keys are of the form: <function>:<uri>
+        # E.g, get_albums_from_artist#spotify:album:kjasg98qw35hg0
+        logger.info("Searching for %s(%s, %s, %s)", func.__name__, obj, args, kwargs)
+        key = func.__name__ + "#" + str(obj['uri'])
 
         # Get a fresh copy and clear the cache if requested to.
         if "force_clear" in kwargs:
@@ -68,7 +84,7 @@ def uri_cache(func):
             self._uri_cache.clear(key)
 
         result = self._uri_cache.get(key)
-        if result:
+        if result is not None:
             return result
         else:
             logger.debug("Fetching data from the web...")
@@ -76,7 +92,7 @@ def uri_cache(func):
             self._uri_cache[key] = result
             return result
 
-    return wrapper
+    return uc_wrapper
 
 def id_from_uri(uri):
     """Return the ID from a URI.
@@ -95,56 +111,69 @@ def id_from_uri(uri):
 class SpotifyApi(object):
     """Interface to make API calls."""
 
+    DEFAULT_TIMEOUT = 10
+    """The default timeout for any HTTP requests."""
+
+    API_URL = "https://api.spotify.com/v1"
+    """URL to make API requests."""
+
     def __init__(self, username):
-        self.username = username
-        """Email or user id."""
+        self.session = requests.Session()
+        """Main Session."""
 
         self.auth = Authenticator(username)
         """Handles OAuth 2.0 authentication."""
 
-        self._uri_cache = UriCache(username)
-        """Cache of Spotify URIs."""
-
-        self.me = None
-        """The Spotify user information."""
-
-        # Get authorization.
         self.auth.authenticate()
 
-        # Get user information and validate it.
         self.me = self.get_api_v1("me")
+        """The Spotify user's information."""
 
-        if not self.me:
+        if self.me is None:
             raise RuntimeError("Could not get account information.")
 
-        if (self.me['email'] != username) and (self.me['id'] != username):
-            raise RuntimeError(
-                "\n\n\nInvalid email/user id entered!\n"
-                "You entered: {}\n"
-                "You signed in as: {} (email), {} (user id)".format(username,
-                                                                    self.me['email'],
-                                                                    self.me['id'])
-            )
+        self.username = self.user_id()
+        """User id."""
 
-    def get_email(self):
+        # Save authorization information for later.
+        self.auth.save(self.username)
+
+        self._uri_cache = UriCache(self.username, new=username is None)
+        """Cache of Spotify URIs."""
+
+        # Saved tracks is not included as a standard playlist in the API
+        self.saved_playlist = Playlist({
+            "name": "Saved",
+            "uri": common.SAVED_TRACKS_CONTEXT_URI,
+            "id": "",
+            "type": "playlist",
+            "owner_id": self.user_id()
+        })
+        """The Saved playlist."""
+
+
+    def user_email(self):
         return self.me['email']
 
-    def get_id(self):
+    def user_id(self):
         return self.me['id']
 
-    def get_display_name(self):
+    def user_display_name(self):
         return self.me['display_name']
 
-    def get_username(self):
+    def user_username(self):
         return self.username
 
-    def is_premium(self):
+    def user_is_premium(self):
         return self.me['product'] == "premium"
 
-    def get_market(self):
+    def user_market(self):
         return self.me['country']
 
-    @common.async
+    def user_saved_playlist(self):
+        return self.saved_playlist
+
+    @common.asynchronously
     def play(self, track=None, context_uri=None, uris=None, device=None):
         """Play a Spotify track.
 
@@ -167,12 +196,12 @@ class SpotifyApi(object):
 
             if common.is_int(track):
                 data["offset"] = {"position": track}
-            elif isinstance(track, basestring):
+            elif isinstance(track, str):
                 data["offset"] = {"uri": track}
 
         # No context given, just play the track.
         elif track is not None and not context_uri:
-            if isinstance(track, basestring) and track.startswith("spotify:track"):
+            if isinstance(track, str) and track.startswith("spotify:track"):
                 data['uris'] = [track]
 
         params = {}
@@ -181,7 +210,7 @@ class SpotifyApi(object):
 
         self.put_api_v1("me/player/play", params, data)
 
-    @common.async
+    @common.asynchronously
     def transfer_playback(self, device, play=False):
         """Transfer playback to a different Device.
 
@@ -193,54 +222,55 @@ class SpotifyApi(object):
                 "play": play}
         self.put_api_v1("me/player", data=data)
 
-    @common.async
+    @common.asynchronously
     def pause(self):
         """Pause the player."""
         self.put_api_v1("me/player/pause")
 
-    @common.async
+    @common.asynchronously
     def next(self):
         """Play the next song."""
         self.post_api_v1("me/player/next")
 
-    @common.async
+    @common.asynchronously
     def previous(self):
         """Play the previous song."""
         self.post_api_v1("me/player/previous")
 
-    @common.async
+    @common.asynchronously
     def shuffle(self, shuffle):
         """Set the player to shuffle.
 
         Args:
             shuffle (bool): Whether to shuffle or not.
         """
-        q = urllib.urlencode({"state": shuffle})
+        q = urllib.parse.urlencode({"state": shuffle})
         url = "me/player/shuffle"
         self.put_api_v1(url, q)
 
-    @common.async
+    @common.asynchronously
     def repeat(self, repeat):
         """Set the player to repeat.
 
         Args:
             repeat (bool): Whether to repeat or not.
         """
-        q = urllib.urlencode({"state": repeat})
+        q = urllib.parse.urlencode({"state": repeat})
         url = "me/player/repeat"
         self.put_api_v1(url, q)
 
-    @common.async
+    @common.asynchronously
     def volume(self, volume):
         """Set the player volume.
 
         Args:
             volume (int): Volume level. 0 - 100 (inclusive).
         """
-        q = urllib.urlencode({"volume_percent": volume})
+        q = urllib.parse.urlencode({"volume_percent": volume})
         url = "me/player/volume"
         self.put_api_v1(url, q)
 
+    @return_none_on_error
     def get_player_state(self):
         """Returns the player state.
 
@@ -253,6 +283,7 @@ class SpotifyApi(object):
         """
         return self.get_api_v1("me/player")
 
+    @return_none_on_error
     def get_currently_playing(self):
         """Get the currently playing Track.
 
@@ -270,6 +301,7 @@ class SpotifyApi(object):
         else:
             return NoneTrack
 
+    @return_none_on_error
     def get_user_info(self, user_id):
         """Returns a dict of the a users info.
 
@@ -284,6 +316,7 @@ class SpotifyApi(object):
         """
         return self.get_api_v1("users/{}".format(user_id))
 
+    @return_none_on_error
     def get_devices(self):
         """Return a list of devices with Spotify players running.
 
@@ -291,11 +324,9 @@ class SpotifyApi(object):
             list: The Devices.
         """
         results = self.get_api_v1("me/player/devices")
-        if results and "devices" in results:
-            return tuple(Device(device) for device in results['devices'])
-        else:
-            return []
+        return tuple(Device(device) for device in results['devices'])
 
+    @return_none_on_error
     def search(self, types, query, limit=20):
         """Calls Spotify's search api.
 
@@ -310,27 +341,32 @@ class SpotifyApi(object):
             dict: Collection of Artist, Album, and Track objects.
         """
         type_str = ",".join(types)
-        params = {'type': type_str,
-                  'q': query,
-                  'limit': limit}
-
+        params = {
+            'type': type_str,
+            'q': query,
+            'limit': limit
+        }
         results = self.get_api_v1("search", params)
 
         cast = {
             'artists': Artist,
             'tracks': Track,
-            'albums': Album,
+            'albums': Album
         }
 
         combined = []
         if results:
-            for type in types:
+            for spotify_type in types:
                 # Results are plural (i.e, 'artists', 'albums', 'tracks')
-                type = type + 's'
-                combined.extend([cast[type](info) for info in results[type]['items']])
+                spotify_type = spotify_type + 's'
+                combined.extend([
+                    cast[spotify_type](info) 
+                    for info in results[spotify_type]['items']
+                ])
 
         return combined
 
+    @return_none_on_error
     @uri_cache
     def get_albums_from_artist(self, artist,
                                type=("album", "single", "appears_on", "compilation"),
@@ -344,15 +380,17 @@ class SpotifyApi(object):
         Returns:
             tuple: The Albums.
         """
-        q = {"include_groups": ",".join(type),
-             "market": market or self.get_market(),
-             "limit": 50}
+        q = {
+            "include_groups": ",".join(type),
+            "market": market or self.user_market(),
+            "limit": 50
+        }
         url = "artists/{}/albums".format(artist['id'])
         page = self.get_api_v1(url, q)
-        albums = self.extract_page(page)
-
+        albums = self._extract_page(page)
         return tuple(Album(album) for album in albums)
 
+    @return_none_on_error
     @uri_cache
     def get_top_tracks_from_artist(self, artist, market=None):
         """Get top tracks from a certain Artist.
@@ -366,17 +404,15 @@ class SpotifyApi(object):
         Returns:
             tuple: The Tracks.
         """
-        q = {"country": market or self.get_market()}
+        q = {"country": market or self.user_market()}
         url = "artists/{}/top-tracks".format(artist['id'])
         result = self.get_api_v1(url, q)
+        return tuple(Track(t) for t in result["tracks"])
 
-        if result:
-            return tuple(Track(t) for t in result["tracks"])
-        else:
-            return []
 
+    @return_none_on_error
     @uri_cache
-    def get_selections_from_artist(self, artist, progress=None):
+    def get_selections_from_artist(self, artist, progress=Progress()):
         """Return the selection from an Artist.
 
         This includes the top tracks and albums from the artist.
@@ -390,18 +426,19 @@ class SpotifyApi(object):
         """
         selections = []
 
-        selections.extend(self.get_top_tracks_from_artist(artist))
-        if selections:
-            progress.set_percent(0.5)
+        tracks = self.get_top_tracks_from_artist(artist)
+        selections.extend(tracks)
+        progress.set_percent(0.5)
 
-        selections.extend(self.get_albums_from_artist(artist))
-        if progress:
-            progress.set_percent(1)
+        albums = self.get_albums_from_artist(artist)
+        selections.extend(albums)
+        progress.set_percent(1)
 
         return selections
 
+    @return_none_on_error
     @uri_cache
-    def get_all_tracks_from_artist(self, artist, progress=None):
+    def get_all_tracks_from_artist(self, artist, progress=Progress()):
         """Return all tracks from an Artist.
 
         This includes the top tracks and albums from the artist.
@@ -414,19 +451,24 @@ class SpotifyApi(object):
             iter: The Tracks.
         """
         albums = self.get_albums_from_artist(artist)
-        if albums:
-            n = len(albums)
-            tracks = []
-            for i, a in enumerate(albums):
-                for t in self.get_tracks_from_album(a):
-                    tracks.append(Track(t))
-                if progress:
-                    progress.set_percent(float(i)/n)
-            tracks = (t for t in tracks if artist['name'] in str(t))
-            return tuple(tracks)
 
+        n = len(albums)
+        tracks = []
+        for i, album in enumerate(albums):
+            tracks_from_album = self.get_tracks_from_album(album)
+            for t in tracks_from_album:
+                tracks.append(Track(t))
+            progress.set_percent(float(i)/n)
+
+        # TODO: Figure out why this is neccesary
+        # Probably to filter out other artist tracks in something
+        # like a compilation
+        tracks = (t for t in tracks if artist['name'] in str(t))
+        return tuple(tracks)
+
+    @return_none_on_error
     @uri_cache
-    def get_tracks_from_album(self, album, progress=None):
+    def get_tracks_from_album(self, album, progress=Progress()):
         """Get Tracks from a certain Album.
 
         Args:
@@ -438,14 +480,17 @@ class SpotifyApi(object):
         q = {"limit": 50}
         url = "albums/{}/tracks".format(album['id'])
         page = self.get_api_v1(url, q)
+        results = self._extract_page(page, progress)
         tracks = []
-        for track in self.extract_page(page, progress):
+        for track in results:
             track['album'] = album
             tracks.append(Track(track))
+
         return tuple(tracks)
 
+    @return_none_on_error
     @uri_cache
-    def get_tracks_from_playlist(self, playlist, progress=None):
+    def get_tracks_from_playlist(self, playlist, progress=Progress()):
         """Get Tracks from a certain Playlist.
 
         Args:
@@ -458,17 +503,18 @@ class SpotifyApi(object):
         # Special case for the "Saved" Playlist
         if playlist['uri'] == common.SAVED_TRACKS_CONTEXT_URI:
             return self._get_saved_tracks(progress)
-        else:
-            q = {"limit": 50}
-            url = "users/{}/playlists/{}/tracks".format(playlist['owner']['id'],
-                                                        playlist['id'])
-            page = self.get_api_v1(url, q)
-            result = [Track(track["track"]) for track in self.extract_page(page, progress)]
+    
+        q = {"limit": 50}
+        url = "users/{}/playlists/{}/tracks".format(playlist['owner']['id'],
+                                                    playlist['id'])
+        page = self.get_api_v1(url, q)
+        results = self._extract_page(page, progress)
+        tracks = [Track(track["track"]) for track in results]
+        return tuple(tracks)
 
-        return tuple(result)
-
+    @return_none_on_error
     @uri_cache
-    def convert_context(self, context, progress=None):
+    def convert_context(self, context, progress=Progress()):
         """Convert a Context to an Album, Playlist, or Artist.
 
         Args:
@@ -488,6 +534,7 @@ class SpotifyApi(object):
         elif context_type == "playlist":
             return self.get_playlist_from_context(context)
 
+    @return_none_on_error
     @uri_cache
     def get_artist_from_context(self, context):
         """Return an Artist from a Context.
@@ -500,8 +547,9 @@ class SpotifyApi(object):
         """
         artist_id = id_from_uri(context["uri"])
         result = self.get_api_v1("artists/{}".format(artist_id))
-        return Artist(result or {})
+        return Artist(result)
 
+    @return_none_on_error
     @uri_cache
     def get_album_from_context(self, context):
         """Return an Album from a Context.
@@ -514,8 +562,9 @@ class SpotifyApi(object):
         """
         album_id = id_from_uri(context["uri"])
         result = self.get_api_v1("albums/{}".format(album_id))
-        return Album(result or {})
+        return Album(result)
 
+    @return_none_on_error
     @uri_cache
     def get_playlist_from_context(self, context):
         """Return an Playlist from a Context.
@@ -527,16 +576,11 @@ class SpotifyApi(object):
             Playlist: The Playlist.
         """
         if context["uri"] == common.SAVED_TRACKS_CONTEXT_URI:
-            # TODO: Consider creating a common/factory function for
-            # obtaining the Saved PLaylist.
-            return Playlist({
-                "uri":common.SAVED_TRACKS_CONTEXT_URI,
-                "name": "Saved"
-                })
+            return self.user_saved_playlist()
 
         playlist_id = id_from_uri(context["uri"])
         result = self.get_api_v1("playlists/{}".format(playlist_id))
-        return Playlist(result or {})
+        return Playlist(result)
 
     def add_track_to_playlist(self, track, playlist):
         """Add a Track to a Playlist.
@@ -559,9 +603,60 @@ class SpotifyApi(object):
             self.post_api_v1(url, q)
 
         # Clear out current Cache.
+        # TODO: Should make tan explicit call to refresh or clear the cache
         return self.get_tracks_from_playlist(playlist, force_clear=True)
 
-    def _get_saved_tracks(self, progress=None):
+    @return_none_on_error
+    def create_playlist(self, name):
+        """Create a new playlist.
+
+        Args:
+            name (str): The name of the new playlist to create.
+
+        Returns:
+            Playlist: The newly created playlist.
+        """
+        data = {"name": name}
+        url = "users/{}/playlists".format(self.user_id())
+        resp = self.post_api_v1(url, data=data)
+
+        self.get_user_playlists(self.get_user(), force_clear=True)
+
+        return Playlist(resp)
+
+    def remove_track_from_playlist(self, track, playlist):
+        """Remove a Track from a Playlist.
+
+        Args:
+            track (Track): The Track to remove.
+            playlist (Playlist): The Playlist to remove the Track from.
+
+        Returns:
+            tuple: The new set of Tracks with the new Track removed.
+        """
+        # Add the track.
+        if playlist['uri'] == common.SAVED_TRACKS_CONTEXT_URI:
+            q = {"ids": [track['id']]}
+            url = "me/tracks"
+            self.delete_api_v1(url, data=q)
+        else:
+            q = {"uris": [track['uri']]}
+            url = "playlists/{}/tracks".format(playlist['id'])
+            self.delete_api_v1(url, data=q)
+
+        # Clear out current Cache.
+        return self.get_tracks_from_playlist(playlist, force_clear=True)
+
+    def remove_playlist(self, playlist):
+        """Remove a playlist.
+
+        Args:
+            playlist (Playlist): The Playlist to remove.
+        """
+        self.delete_api_v1("playlists/{}/followers".format(playlist['id']))
+        self.get_user_playlists(self.get_user(), force_clear=True)
+
+    def _get_saved_tracks(self, progress=Progress()):
         """Get the Tracks from the "Saved" songs.
 
         Args:
@@ -573,8 +668,10 @@ class SpotifyApi(object):
         q = {"limit": 50}
         url = "me/tracks"
         page = self.get_api_v1(url, q)
-        return tuple(Track(saved["track"]) for saved in self.extract_page(page, progress))
+        results = self._extract_page(page, progress)
+        return tuple(Track(saved["track"]) for saved in results)
 
+    @return_none_on_error
     def get_user(self, user_id=None):
         """Return a User from an id.
 
@@ -585,16 +682,14 @@ class SpotifyApi(object):
             User: The User.
         """
         if not user_id:
-            user_id = self.get_id()
+            user_id = self.user_id()
 
         result = self.get_api_v1("users/{}".format(user_id))
-        if result:
-            return User(result)
-        else:
-            return {}
+        return User(result)
 
+    @return_none_on_error
     @uri_cache
-    def get_user_playlists(self, user, progress=None):
+    def get_user_playlists(self, user, progress=Progress()):
         """Get the Playlists from the current user.
 
         Args:
@@ -607,9 +702,10 @@ class SpotifyApi(object):
         q = {"limit": 50}
         url = "users/{}/playlists".format(user['id'])
         page = self.get_api_v1(url, q)
-        return tuple([Playlist(p) for p in self.extract_page(page, progress)])
+        results = self._extract_page(page, progress)
+        return tuple([Playlist(p) for p in results])
 
-    def extract_page(self, page, progress=None):
+    def _extract_page(self, page, progress=Progress()):
         """Extract all items from a page.
 
         Args:
@@ -619,19 +715,18 @@ class SpotifyApi(object):
         Returns:
             list: All of the items.
         """
+        i, n = 0, page['total']
+        lists = []
+        lists.extend(page['items'])
+        while page['next'] is not None:
+            page = self.get_api_v1(page['next'].split('/v1/')[-1])
+            if page is None:
+                return lists
 
-        if page and "items" in page:
-            i, n = 0, page['total']
-            lists = []
             lists.extend(page['items'])
-            while page['next'] is not None:
-                page = self.get_api_v1(page['next'].split('/v1/')[-1])
-                lists.extend(page['items'])
-                if progress:
-                    progress.set_percent(float(len(lists))/n)
-            return lists
-        else:
-            return {}
+            progress.set_percent(float(len(lists))/n)
+       
+        return lists
 
     @needs_authentication
     def get_api_v1(self, endpoint, params=None):
@@ -645,13 +740,13 @@ class SpotifyApi(object):
             dict: The JSON information.
         """
         headers = {"Authorization": "%s %s" % (self.auth.token_type, self.auth.access_token)}
-        url = "https://api.spotify.com/v1/{}".format(endpoint)
-        resp = requests.get(url, params=params, headers=headers)
+        url = "{}/{}".format(self.API_URL, endpoint)
+        resp = self.session.get(url, params=params, headers=headers, timeout=self.DEFAULT_TIMEOUT)
         resp.raise_for_status()
 
         data = json.loads(common.ascii(resp.text)) if resp.text else {}
         if not data:
-            logger.info("GET returned no data")
+            logger.info("GET %s returned no data", endpoint)
 
         return data
 
@@ -669,25 +764,50 @@ class SpotifyApi(object):
         """
         headers = {"Authorization": "%s %s" % (self.auth.token_type, self.auth.access_token),
                    "Content-Type": "application/json"}
-        api_url = "https://api.spotify.com/v1/{}".format(endpoint)
-        resp = requests.put(api_url, headers=headers, params=params, json=data)
+        api_url = "{}/{}".format(self.API_URL, endpoint)
+        resp = self.session.put(api_url, headers=headers, params=params, json=data, timeout=self.DEFAULT_TIMEOUT)
         resp.raise_for_status()
         return resp
 
     @needs_authentication
-    def post_api_v1(self, endpoint, params=None):
-        """Spotify v1 POST request.
+    def delete_api_v1(self, endpoint, params=None, data=None):
+        """Spotify v1 DELTE request.
 
         Args:
             endpoint (str): The API endpoint.
             params (dict): Query parameters (Default is None).
+            data (dict): Body data (Default is None).
 
         Returns:
             Reponse: The HTTP Reponse.
         """
         headers = {"Authorization": "%s %s" % (self.auth.token_type, self.auth.access_token),
                    "Content-Type": "application/json"}
-        api_url = "https://api.spotify.com/v1/{}".format(endpoint)
-        resp = requests.post(api_url, headers=headers, params=params)
+        api_url = "{}/{}".format(self.API_URL, endpoint)
+        resp = self.session.delete(api_url, headers=headers, params=params, json=data, timeout=self.DEFAULT_TIMEOUT)
+        resp.raise_for_status()
+        return resp
+
+    @needs_authentication
+    def post_api_v1(self, endpoint, params=None, data=None):
+        """Spotify v1 POST request.
+
+        Args:
+            endpoint (str): The API endpoint.
+            params (dict): Query parameters (Default is None).
+            data (dict): Body data (Default is None).
+
+        Returns:
+            Reponse: The HTTP Reponse.
+        """
+        headers = {"Authorization": "%s %s" % (self.auth.token_type, self.auth.access_token),
+                   "Content-Type": "application/json"}
+        api_url = "{}/{}".format(self.API_URL, endpoint)
+        resp = self.session.post(api_url, headers=headers, params=params, json=data, timeout=self.DEFAULT_TIMEOUT)
         resp.raise_for_status()
         return common.ascii(resp.text)
+
+
+class TestSpotifyApi(SpotifyApi):
+    """Test version used for local testing."""
+    API_URL = "http://localhost:8000"

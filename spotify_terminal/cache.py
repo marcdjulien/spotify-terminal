@@ -1,7 +1,8 @@
 import os
-import common
 import pickle
 from threading import Thread
+
+from . import common
 
 logger = common.logging.getLogger(__name__)
 
@@ -9,13 +10,16 @@ logger = common.logging.getLogger(__name__)
 class UriCache(object):
     """Cache for app URIs."""
 
-    def __init__(self, username):
+    def __init__(self, username, new=False):
         self.username = username
         """The username of the cache."""
 
         self._cache = {}
         """Storage for the memory cache."""
 
+        if new:
+            common.clear_cache(self.username)
+            
     def get(self, key):
         """Return the cached object
 
@@ -55,6 +59,10 @@ class UriCache(object):
             pass
 
     def __setitem__(self, key, item):
+        # This may have been an error, don't save it.
+        if item is None:
+            return
+
         # Save to disk.
         cache_filename = self.get_filename(key)
         Thread(target=self.save, args=(cache_filename, item)).start()
@@ -63,6 +71,7 @@ class UriCache(object):
         self._cache[key] = item
 
     def save(self, filename, item):
+        os.makedirs(os.path.dirname(filename), exist_ok=True)
         with open(filename, "wb") as file:
             logger.debug("Saving %s to disk", filename)
             pickle.dump(item, file)
@@ -76,5 +85,5 @@ class UriCache(object):
         Returns:
             str: The path of the cached file.
         """
-        return common.get_file_from_cache(self.username,
-                                          key.replace(":", "_"))
+        filename = key.replace("#", os.path.sep).replace(":", "_")
+        return common.get_file_from_cache(self.username, filename)
