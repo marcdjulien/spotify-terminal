@@ -5,7 +5,7 @@ with open("README.md", "r") as fh:
 
 setuptools.setup(
     name="spotify-terminal",  
-    version="0.12.1",
+    version="0.13.1",
     scripts=["spotify-terminal.py"] ,
     author="Marc-Daniel Julien",
     author_email="marcdjulien@gmail.com",

@@ -363,7 +363,7 @@ class CursesDisplay(object):
             entry = self.state.current_state.get_list().get_current_entry()
             if entry:
                 ncols = self._cols-1
-                long_str = str(entry)
+                long_str = common.ascii(str(entry))
                 short_str = entry.str(ncols) if hasattr(entry, "str") else long_str
 
                 # Check if we need to scroll or not.
