@@ -85,6 +85,8 @@ class Authenticator(object):
         data = json.loads(resp.text)
         data["refresh_token"] = self.refresh_token
         self._data = data
+        for key, value in self._data.items():
+            setattr(self, key, value)
 
         if self.username is not None:
             self.save(self.username)
