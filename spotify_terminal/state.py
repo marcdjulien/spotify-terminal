@@ -146,6 +146,8 @@ class SpotifyState(object):
             "volume": self._execute_volume,
             "play": self._execute_play,
             "pause": self._execute_pause,
+            "next": self._execute_next,
+            "previous": self._execute_previous,
             "shuffle": self._execute_shuffle,
             "repeat": self._execute_repeat,
             "refresh": self._execute_refresh,
@@ -477,6 +479,12 @@ class SpotifyState(object):
     def _execute_pause(self):
         self._pause()
 
+    def _execute_next(self):
+        self._play_next()
+
+    def _execute_previous(self):
+        self._play_previous()
+
     def _execute_create_playlist(self, *query):
         playlist_name = " ".join(query)
         playlist = self.api.create_playlist(playlist_name)
@@ -547,25 +555,15 @@ class SpotifyState(object):
 
         self.api.play(track_id, context_uri, uris, self.current_device)
 
+    @common.asynchronously
     def _play_next(self):
-        def wait_and_sync():
-            time.sleep(2)
-            self.sync_player_state()
+        self.cmd.process_command("next")
+        self.sync_player.call_in(2)
 
-        future = Future(target=self.api.next,
-                        result=wait_and_sync,
-                        progress=False)
-        self.execute_future(future, self.current_state)
-
+    @common.asynchronously
     def _play_previous(self):
-        def wait_and_sync():
-            time.sleep(2)
-            self.sync_player_state()
-
-        future = Future(target=self.api.previous,
-                        result=wait_and_sync,
-                        progress=False)
-        self.execute_future(future, self.current_state)
+        self.cmd.process_command("previous")
+        self.sync_player.call_in(2)
 
     def _toggle_play(self):
         if self.playing:
