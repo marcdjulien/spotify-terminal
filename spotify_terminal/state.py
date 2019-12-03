@@ -141,12 +141,14 @@ class SpotifyState(object):
 
         self.cmd = CommandProcessor(":", {
             "search": self._execute_search,
+            "seek": self._execute_seek,
             "find": self._execute_find,
             "volume": self._execute_volume,
             "play": self._execute_play,
             "pause": self._execute_pause,
             "shuffle": self._execute_shuffle,
             "repeat": self._execute_repeat,
+            "refresh": self._execute_refresh,
             "create_playlist": self._execute_create_playlist,
             "exit": self._execute_exit
         })
@@ -267,29 +269,8 @@ class SpotifyState(object):
         playlists.insert(0, self.api.user_saved_playlist())
         self.user_list.update_list(tuple(playlists))
 
-    @common.asynchronously
     def sync_player_state(self):
-        # Note: DO NOT set the current_context
-        # Otherwise, it will confuse the state of things. 
-        player_state = self.api.get_player_state()
-        if player_state:
-            track = player_state['item']
-            self.currently_playing_track = Track(track) if track else NoneTrack
-            self.playing = player_state['is_playing']
-            self.current_device = Device(player_state['device'])
-            self.volume = self.current_device['volume_percent']
-            self._set_player_repeat(player_state['repeat_state'])
-            self._set_player_shuffle(player_state['shuffle_state'])
-
-            duration = player_state['progress_ms']
-            if self.currently_playing_track and duration:
-                self.progress = [duration, self.currently_playing_track['duration_ms']]
-        else:
-            self.currently_playing_track = NoneTrack
-            self.playing = False
-            self.current_device = UnableToFindDevice
-            self.volume = 0
-            self.progress = None
+        self.cmd.process_command("refresh")
 
     def periodic_sync_devices(self):
         self.available_devices = self.api.get_devices()
@@ -407,6 +388,29 @@ class SpotifyState(object):
             self.search_list.header = "No results found for \"{}\"".format(query)
         self.switch_to_state(self.search_state)
 
+    def _execute_seek(self, time, device=None):
+        if device is None:
+            device = self.current_device
+
+        if isinstance(time, str) and (':' in time):
+            converter = {
+                0: 1,    # 1 s in 1s
+                1: 60,    # 60s in 1m
+                2: 3600  # 3600s in 1hr
+            }
+            toks = time.split(':')
+            assert len(toks) <= 3, "Invalid time format"
+            ms = 0
+            for i, value in enumerate(toks[::-1]):
+                ms += converter[i] * int(value)
+        else:
+            ms = int(time)
+
+        self.api.seek(ms * 1000, device)
+
+        if self.progress is not None:
+            self.progress[0] = ms
+
     def _execute_find(self, i, *query):
         query = " ".join(query)
         # Find the right state to search in.
@@ -438,6 +442,29 @@ class SpotifyState(object):
         if state in ["off", "context", "track"]:
             self._set_player_repeat(state)
             self.api.repeat(state)
+    
+    def _execute_refresh(self):
+        # Note: DO NOT set the current_context
+        # Otherwise, it will confuse the state of things. 
+        player_state = self.api.get_player_state()
+        if player_state:
+            track = player_state['item']
+            self.currently_playing_track = Track(track) if track else NoneTrack
+            self.playing = player_state['is_playing']
+            self.current_device = Device(player_state['device'])
+            self.volume = self.current_device['volume_percent']
+            self._set_player_repeat(player_state['repeat_state'])
+            self._set_player_shuffle(player_state['shuffle_state'])
+
+            duration = player_state['progress_ms']
+            if self.currently_playing_track and duration:
+                self.progress = [duration, self.currently_playing_track['duration_ms']]
+        else:
+            self.currently_playing_track = NoneTrack
+            self.playing = False
+            self.current_device = UnableToFindDevice
+            self.volume = 0
+            self.progress = None
 
     def _execute_volume(self, volume):
         volume = common.clamp(int(volume), 0, 100)

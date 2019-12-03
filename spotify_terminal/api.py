@@ -270,6 +270,21 @@ class SpotifyApi(object):
         url = "me/player/volume"
         self.put_api_v1(url, q)
 
+    @common.asynchronously
+    def seek(self, time, device=None):
+        """Seek to position in currently playing track.
+
+        Args:
+            time (int): The time in ms.
+            device (Device): The Device to seek.
+        """
+        data = {"position_ms": time}
+        if device is not None:
+            data["device"] = device["id"]
+        q = urllib.parse.urlencode(data)
+        url = "me/player/seek"
+        self.put_api_v1(url, q)
+
     @return_none_on_error
     def get_player_state(self):
         """Returns the player state.
