@@ -557,12 +557,12 @@ class SpotifyState(object):
 
     @common.asynchronously
     def _play_next(self):
-        self.cmd.process_command("next")
+        self.api.next()
         self.sync_player.call_in(2)
 
     @common.asynchronously
     def _play_previous(self):
-        self.cmd.process_command("previous")
+        self.api.previous()
         self.sync_player.call_in(2)
 
     def _toggle_play(self):
@@ -999,7 +999,7 @@ class SpotifyState(object):
         creating_command_state.bind_key(list(range(32, 128)), ascii_key)
 
         def enter():
-            self.cmd.process_command(self.text_query)
+            self.cmd.process_command(self.text_query, save=True)
             self.text_query.clear()
         creating_command_state.bind_key(self.ENTER_KEYS, enter)
 
