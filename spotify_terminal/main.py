@@ -1,7 +1,6 @@
 import argparse
 import time
 
-from . import unicurses as uc
 from . import common
 from .display import CursesDisplay
 from .api import SpotifyApi, TestSpotifyApi
@@ -111,16 +110,10 @@ def main():
         sp_state.load_state()
         sp_state.init()
 
-        # Initialize the curses screen.
-        stdscr = uc.initscr()
-
         # Create the display.
-        display = CursesDisplay(stdscr, sp_state)
-
-        # Start the display.
-        # Clear the screen before raising any Exceptions.
-        display.start()
+        CursesDisplay(sp_state).start()
     except KeyboardInterrupt:
+        # Clear the screen before raising any Exceptions.
         common.clear()
     except BaseException as e:
         common.clear()
