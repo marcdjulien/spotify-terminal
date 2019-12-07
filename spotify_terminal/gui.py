@@ -57,7 +57,7 @@ class Window(object):
         self.col = col
         uc.move_panel(self._uc_panel, row, col)
 
-    def resize(self, rows, cols):
+    def resize(self, rows, cols, start_row, start_col):
         """Resize the Window.
 
         Args:
@@ -66,7 +66,9 @@ class Window(object):
         """
         self.rows = rows
         self.cols = cols
-        self._uc_window = uc.newwin(rows, cols, self.row, self.col)
+        self.start_row = start_row
+        self.start_col = start_col
+        self._uc_window = uc.newwin(rows, cols, start_row, start_col)
         uc.replace_panel(self._uc_panel, self._uc_window)
 
     def show(self):
@@ -146,6 +148,14 @@ class Window(object):
         """
         return self.rows, self.cols
 
+    def get_focus(self):
+        """Return True if the Window is in focus.
+
+        Args:
+            bool: True if the Window is in focus.
+        """
+        return self._focus
+
     def erase(self):
         """Erase the Window."""
         uc.werase(self._uc_window)
@@ -161,6 +171,9 @@ class WindowManager(object):
 
         self._windows = {}
         """The Windows to manage."""
+
+        self._resize_requested = False
+        """Whether the terminal has resized."""
 
         # Don't echo text.
         uc.noecho()
@@ -215,6 +228,25 @@ class WindowManager(object):
         uc.clrtobot()
         uc.refresh()
 
+    def resize(self, window_sizes):
+        """Resize the Windows.
+
+        Args:
+            window_sizes (dict): Information about the new sizes. Keys
+                are the Window names, values are the new sizes.
+        """
+        for name, size in window_sizes.items():
+            self.get_window(name).resize(*size)
+        self._resize_requested = False
+
+    def resize_requested(self):
+        """Whether a resize is requested.
+
+        Returns:
+            bool: True if the resize is requested.
+        """
+        return self._resize_requested
+
     def get_size(self):
         """Return the size of the main screen.
 
@@ -241,7 +273,10 @@ class WindowManager(object):
         Returns:
             int: The key code. None if no input.
         """
-        return uc.getch()
+        key = uc.getch()
+        if key == uc.KEY_RESIZE:
+            self._resize_requested = True
+        return key
 
     def exit(self):
         """Clean up."""

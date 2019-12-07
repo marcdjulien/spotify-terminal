@@ -34,6 +34,8 @@ class CursesDisplay(object):
     # How often to clear the screen.
     CLEAR_PERIOD = 60 * 15
 
+    POP_UP_WINDOW_NAMES = ["search", "help", "popup", "select_device"]
+
     def __init__(self, sp_state):
         self.state = sp_state
         """The SpotifyState object."""
@@ -128,17 +130,25 @@ class CursesDisplay(object):
             self.dispatch_time = self.SLEEP_PROGRAM_DISPATCH_TIME
 
         self.set_active_window()
+        self.set_popup_window()
 
     def render(self):
+        # Check if we need to resize.
+        if self.wm.resize_requested():
+            self.resize()
+
         # Draw all of the panels.
         self.render_user_panel()
         self.render_tracks_panel()
         self.render_player_panel()
+        self.render_other_panel()
         self.render_footer()
         self.render_search_panel()
         self.render_select_device_panel()
         self.render_popup_panel()
         self.render_help_panel()
+        
+        # Render!
         self.wm.render()
 
     def render_user_panel(self):
@@ -155,7 +165,7 @@ class CursesDisplay(object):
             "[Spotify Terminal]",
             title_start_line, 2,
             cols-3,
-            uc.A_BOLD,
+            style=uc.A_BOLD,
             centered=True
         )
 
@@ -165,7 +175,7 @@ class CursesDisplay(object):
             self.state.get_display_name(),
             display_name_start_line, 2,
             cols-3,
-            uc.A_BOLD,
+            style=uc.A_BOLD,
             centered=True
         )
 
@@ -174,7 +184,7 @@ class CursesDisplay(object):
             "_"*cols,
             display_name_start_line+1, 1,
             cols-2,
-            uc.A_NORMAL
+            style=uc.A_NORMAL
         )
 
         # Show the playlists.
@@ -202,7 +212,7 @@ class CursesDisplay(object):
             self.state.tracks_list.header,
             title_start_row, 2,
             cols-3, 
-            uc.A_BOLD
+            style=uc.A_BOLD
         )
 
         # Show the tracks.
@@ -225,13 +235,13 @@ class CursesDisplay(object):
         win.draw_box()
 
         # Display currently playing track
-        win.draw_text(self.state.get_currently_playing_track().track, 1, 2, cols-3, uc.A_BOLD)
-        win.draw_text(self.state.get_currently_playing_track().album, 2, 2, cols-3, uc.A_BOLD)
-        win.draw_text(self.state.get_currently_playing_track().artist, 3, 2, cols-3, uc.A_BOLD)
+        win.draw_text(self.state.get_currently_playing_track().track, 1, 2, cols-3, style=uc.A_BOLD)
+        win.draw_text(self.state.get_currently_playing_track().album, 2, 2, cols-3, style=uc.A_BOLD)
+        win.draw_text(self.state.get_currently_playing_track().artist, 3, 2, cols-3, style=uc.A_BOLD)
 
         # Display the current device
         device_info = "{} ({}%)".format(self.state.current_device, self.state.volume)
-        win.draw_text(device_info, 7, 2, cols-3, uc.A_NORMAL)
+        win.draw_text(device_info, 7, 2, cols-3, style=uc.A_NORMAL)
 
         # Display the media icons
         col = 2
@@ -245,12 +255,18 @@ class CursesDisplay(object):
             win.draw_text(icon, 5, col, style=style)
             col += len(icon) + 2
 
+    def render_other_panel(self):
+        win = self.wm.get_window("other")
+        rows, cols = win.get_size()
+        win.erase()
+        
+        # Draw border.
+        win.draw_box()
         # Display other actions
-        col = cols//2
         win.draw_list(
             self.state.other_actions_list, 
-            1, rows-1,
-            cols//2, (cols//2) - 2,
+            1, rows-2,
+            1, cols-1,
             self.state.other_actions_list.i
         )
 
@@ -263,10 +279,10 @@ class CursesDisplay(object):
             percent = self.state.get_loading_progress()
             if percent is not None:
                 text = " " * int(cols * percent)
-                win.draw_text(text, rows-1, 0, uc.A_STANDOUT)
+                win.draw_text(text, rows-1, 0, style=uc.A_STANDOUT)
         elif self.state.is_adding_track_to_playlist():
             text = "Select a playlist to add this track"
-            win.draw_text(text,  rows-1, 0, uc.A_BOLD)
+            win.draw_text(text,  rows-1, 0, style=uc.A_BOLD)
         elif self.state.is_creating_command():
             start_col = 1
             query = self.state.get_command_query()
@@ -275,7 +291,7 @@ class CursesDisplay(object):
             win.draw_text(
                 query.get_current_index() or " ",
                 rows-1, start_col+query.get_cursor_index(),
-                uc.A_STANDOUT
+                style=uc.A_STANDOUT
             )
         else:
             entry = self.state.current_state.get_list().get_current_entry()
@@ -286,7 +302,7 @@ class CursesDisplay(object):
 
                 # Check if we need to scroll or not.
                 if "".join(short_str.split()) == "".join(long_str.split()):
-                    win.draw_text(short_str, rows-1, 0, uc.A_BOLD)
+                    win.draw_text(short_str, rows-1, 0, style=uc.A_BOLD)
                     # This ensures that we always start form the same position
                     # when we go from a static footer to a long footer that needs rolling.
                     self._footer_roll_index = -200
@@ -303,19 +319,19 @@ class CursesDisplay(object):
                         text.append(text.pop(0))
                     text = "".join(text)
                     text = text[0:ncols]
-                    win.draw_text(text, rows-1, 0, uc.A_BOLD)
+                    win.draw_text(text, rows-1, 0, style=uc.A_BOLD)
         
         if self.state.alert.is_active():
             text = self.state.alert.get_message()
             text = "[{}]".format(text)
-            win.draw_text(text, rows-1, 0, uc.A_STANDOUT)
+            win.draw_text(text, rows-1, 0, style=uc.A_STANDOUT)
         
         # Track progress bar
         progress = self.state.get_track_progress()
         if progress:
             percent = float(progress[0])/progress[1]
             text = "-"*int(cols*percent)
-            win.draw_text(text, rows-2, 0, cols, uc.A_BOLD)
+            win.draw_text(text, rows-2, 0, cols, style=uc.A_BOLD)
 
     def render_search_panel(self):
         win = self.wm.get_window("search")
@@ -331,7 +347,7 @@ class CursesDisplay(object):
             self.state.search_list.header,
             title_start_row, 2,
             n_display_cols, 
-            uc.A_BOLD
+            style=uc.A_BOLD
         )
 
         # Show the results.
@@ -357,7 +373,7 @@ class CursesDisplay(object):
             "Select a Player",
             title_start_row,
             2, cols-3,
-            uc.A_BOLD
+            style=uc.A_BOLD
         )
 
         selected_i = self.state.device_list.i
@@ -385,7 +401,7 @@ class CursesDisplay(object):
             title_start_row,
             (cols//2) - (len(prompt)//2) - 1,
             cols-3,
-            uc.A_BOLD
+            style=uc.A_BOLD
         )
 
         selected_i = current_popup_list.i
@@ -415,7 +431,7 @@ class CursesDisplay(object):
             title_start_row,
             (cols//2) - (len(prompt)//2) - 1,
             cols-3,
-            uc.A_BOLD
+            style=uc.A_BOLD
         )
 
         selected_i = current_help_list.i
@@ -429,7 +445,7 @@ class CursesDisplay(object):
 
     def set_active_window(self):
         if self.state.in_search_menu():
-            window_name = "search_results"
+            window_name = "search"
         elif self.state.in_select_device_menu():
             window_name = "select_device"
         elif (self.state.is_in_state(self.state.a2p_confirm_state) 
@@ -441,6 +457,8 @@ class CursesDisplay(object):
             window_name = "help"
         elif self.state.is_in_state(self.state.player_state):
             window_name = "player"
+        elif self.state.is_in_state(self.state.other_actions_state):
+            window_name = "other"
         elif self.state.is_in_state(self.state.tracks_state):
             window_name = "tracks"
         elif self.state.is_in_state(self.state.user_state):
@@ -450,7 +468,34 @@ class CursesDisplay(object):
 
         self.wm.set_focus(window_name)
 
+    def set_popup_window(self):
+        for window_name in self.POP_UP_WINDOW_NAMES:
+            window = self.wm.get_window(window_name)
+            if window.get_focus():
+                window.show()
+            else:
+                window.hide()
+
+    def resize(self):
+        self.wm.resize(self.get_window_sizes())
+
     def create_all_windows(self):
+        sizes = self.get_window_sizes()
+
+        self.wm.create_window("user", *sizes["user"])
+        self.wm.create_window("tracks", *sizes["tracks"])
+        self.wm.create_window("player", *sizes["player"])
+        self.wm.create_window("other", *sizes["other"])
+        self.wm.create_window("search", *sizes["search"])
+        self.wm.create_window("select_device", *sizes["select_device"])
+        self.wm.create_window("help", *sizes["help"])
+        self.wm.create_window("popup", *sizes["popup"])
+        self.wm.create_window("footer", *sizes["footer"])
+
+        for name in self.POP_UP_WINDOW_NAMES:
+            self.wm.get_window(name).hide()
+
+    def get_window_sizes(self):
         rows, cols = self.wm.get_size()
 
         user = (rows-2,
@@ -464,9 +509,14 @@ class CursesDisplay(object):
                   user[1]+user[3])
 
         player = (rows-tracks[0]-2,
-                  tracks[1],
+                  tracks[1]*2//3,
                   tracks[0],
                   tracks[3])
+
+        other = (player[0],
+                  tracks[1]*1//3,
+                  player[2],
+                  player[3]+player[1])
         
         search = (rows*8//10,
                   cols*8//10,
@@ -488,18 +538,16 @@ class CursesDisplay(object):
                    rows*3//8,
                    cols*3//8)
 
-        footer = (1, cols, rows-1, 0)
+        footer = (2, cols, rows-2, 0)
 
-        self.wm.create_window("user", *user)
-        self.wm.create_window("tracks", *tracks)
-        self.wm.create_window("player", *player)
-        self.wm.create_window("search", *search)
-        self.wm.create_window("select_device", *select_device)
-        self.wm.create_window("help", *help)
-        self.wm.create_window("popup", *popup)
-        self.wm.create_window("footer", *footer)
-
-        for name in ["user", "tracks", "player", "footer"]:
-            self.wm.get_window(name).show()
-
-
+        return {
+            "user": user,
+            "tracks": tracks,
+            "player": player,
+            "other": other,
+            "search": search,
+            "select_device": select_device,
+            "help": help,
+            "popup": popup,
+            "footer": footer
+        }
