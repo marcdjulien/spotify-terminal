@@ -697,7 +697,7 @@ class SpotifyState(object):
         return self.is_in_state(self.search_state)
 
     def in_main_menu(self):
-        return self.is_in_state(self.tracks_state, self.user_state, self.player_state)
+        return self.is_in_state([self.tracks_state, self.user_state, self.player_state])
 
     def in_select_device_menu(self):
         return self.is_in_state(self.device_state)
@@ -706,7 +706,7 @@ class SpotifyState(object):
         return self.is_in_state(self.loading_state)
 
     def is_adding_track_to_playlist(self):
-        return self.is_in_state(self.a2p_select_state, self.a2p_confirm_state)
+        return self.is_in_state([self.a2p_select_state, self.a2p_confirm_state])
 
     def is_selecting_artist(self):
         return self.is_in_state(self.select_artist_state)
@@ -714,7 +714,9 @@ class SpotifyState(object):
     def is_running(self):
         return not self.is_in_state(self.exit_state)
 
-    def is_in_state(self, *states):
+    def is_in_state(self, states):
+        if not isinstance(states, (list, tuple)):
+            states = [states]
         return self.current_state in states
 
     def get_display_name(self):

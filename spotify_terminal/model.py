@@ -125,7 +125,7 @@ class Device(SpotifyObject):
         return "{}: {}".format(self['type'], self['name'])
 
 
-UnableToFindDevice = Device({"type": "Unable to find device",
+UnableToFindDevice = Device({"type": "?",
                              "name": "Open the Devices menu to select a device.",
                              "id": None})
 

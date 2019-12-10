@@ -370,7 +370,7 @@ class CursesDisplay(object):
         # Show the title of the context.
         title_start_row = 1
         win.draw_text(
-            "Select a Player",
+            "Searching...",
             title_start_row,
             2, cols-3,
             style=uc.A_BOLD
@@ -444,14 +444,23 @@ class CursesDisplay(object):
         )
 
     def set_active_window(self):
+        popup_states = [
+            self.state.a2p_confirm_state,
+            self.state.remove_track_confirm_state,
+            self.state.remove_playlist_confirm_state,
+            self.state.select_artist_state
+        ]
+
+        playlist_states =[
+            self.state.user_state,
+            self.state.a2p_select_state
+        ]
+
         if self.state.in_search_menu():
             window_name = "search"
         elif self.state.in_select_device_menu():
             window_name = "select_device"
-        elif (self.state.is_in_state(self.state.a2p_confirm_state) 
-              or self.state.is_selecting_artist()
-              or self.state.is_in_state(self.state.remove_track_confirm_state)
-              or self.state.is_in_state(self.state.remove_playlist_confirm_state)):
+        elif self.state.is_in_state(popup_states):
             window_name = "popup"
         elif self.state.is_in_state(self.state.help_state):
             window_name = "help"
@@ -461,7 +470,7 @@ class CursesDisplay(object):
             window_name = "other"
         elif self.state.is_in_state(self.state.tracks_state):
             window_name = "tracks"
-        elif self.state.is_in_state(self.state.user_state):
+        elif self.state.is_in_state(playlist_states):
             window_name = "user"
         else:
             window_name = "footer"
@@ -509,14 +518,15 @@ class CursesDisplay(object):
                   user[1]+user[3])
 
         player = (rows-tracks[0]-2,
-                  tracks[1]*2//3,
+                  tracks[1],
                   tracks[0],
                   tracks[3])
 
-        other = (player[0],
-                  tracks[1]*1//3,
-                  player[2],
-                  player[3]+player[1])
+        start = user[1]+(player[1]*2//3)
+        other = (rows - tracks[0] - 2 - 3,
+                 cols - start - 3,
+                 player[2],
+                 start)
         
         search = (rows*8//10,
                   cols*8//10,

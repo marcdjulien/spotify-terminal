@@ -68,7 +68,7 @@ class Window(object):
         self.cols = cols
         self.start_row = start_row
         self.start_col = start_col
-        self._uc_window = uc.newwin(rows, cols, start_row, start_col)
+        self._uc_window = uc.newwin(rows, cols, start_row, start_col)   
         uc.replace_panel(self._uc_panel, self._uc_window)
 
     def show(self):
