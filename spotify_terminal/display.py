@@ -1,4 +1,5 @@
 import time
+import datetime
 
 from . import common
 from . import unicurses as uc
@@ -251,13 +252,21 @@ class CursesDisplay(object):
         win.draw_box()
 
         # Display currently playing track
-        win.draw_text(self.state.get_currently_playing_track().track, 1, 2, cols-3, style=uc.A_BOLD)
-        win.draw_text(self.state.get_currently_playing_track().album, 2, 2, cols-3, style=uc.A_BOLD)
-        win.draw_text(self.state.get_currently_playing_track().artist, 3, 2, cols-3, style=uc.A_BOLD)
+        current_track = self.state.get_currently_playing_track()
+        win.draw_text(current_track.track, 1, 2, cols-3, style=uc.A_BOLD)
+        win.draw_text(current_track.album, 2, 2, cols-3, style=uc.A_BOLD)
+        win.draw_text(current_track.artist, 3, 2, cols-3, style=uc.A_BOLD)
+
+        if self.state.progress is not None:
+            dur, total_dur = self.state.progress
+            fmt = "%H:%M:%S" if total_dur >= 60 * 60 * 1000 else "%M:%S"
+            dur = time.strftime(fmt, time.gmtime(dur//1000))
+            total_dur = time.strftime(fmt, time.gmtime(total_dur//1000))
+            win.draw_text("{} // {}".format(dur, total_dur), 4, 2, cols-3, style=uc.A_BOLD)
 
         # Display the current device
         device_info = "{} ({}%)".format(self.state.current_device, self.state.volume)
-        win.draw_text(device_info, 7, 2, cols-3, style=uc.A_NORMAL)
+        win.draw_text(device_info, 8, 2, cols-3, style=uc.A_NORMAL)
 
         # Display the media icons
         col = 2
@@ -268,7 +277,7 @@ class CursesDisplay(object):
             else:
                 style = uc.A_NORMAL
             icon = action.title
-            win.draw_text(icon, 5, col, style=style)
+            win.draw_text(icon, 6, col, style=style)
             col += len(icon) + 2
 
     def render_other_panel(self):

@@ -412,16 +412,16 @@ class SpotifyState(object):
             }
             toks = time.split(':')
             assert len(toks) <= 3, "Invalid time format"
-            ms = 0
+            seconds = 0
             for i, value in enumerate(toks[::-1]):
-                ms += converter[i] * int(value)
+                seconds += converter[i] * int(value)
         else:
-            ms = int(time)
+            seconds = int(time)
 
-        self.api.seek(ms * 1000, device)
+        self.api.seek(seconds * 1000, device)
 
         if self.progress is not None:
-            self.progress[0] = ms
+            self.progress[0] = seconds * 1000
 
     def _execute_find(self, i, *query):
         query = " ".join(query)
