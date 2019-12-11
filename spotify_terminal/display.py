@@ -10,8 +10,11 @@ logger = common.logging.getLogger(__name__)
 
 
 class CursesDisplay(object):
+    # How often to clear the screen if it gets garbled.
+    CLEAR_PERIOD = 60 * 15
+
     # Max amount of time to dispatch each cycle when the program is active.
-    ACTIVE_PROGRAM_DISPATCH_TIME = 0.02
+    ACTIVE_PROGRAM_DISPATCH_TIME = 0.01
 
     # Max amount of time to dispatch each cycle when the program is idle.
     IDLE_PROGRAM_DISPATCH_TIME = 0.1
@@ -20,25 +23,22 @@ class CursesDisplay(object):
     SLEEP_PROGRAM_DISPATCH_TIME = 0.4
 
     # How long to wait before declaring the program is not active and is idle.
-    IDLE_TIMEOUT = 0.5
+    ACTIVE_TO_IDLE_TIMEOUT = 0.5
 
     # How long to wait before declaring the program is not idle and is sleeping.
-    SLEEP_TIMEOUT = 5 * 60
-
-    # How often to run the program loop when the user is actively using it.
-    PROGRAM_PERIOD = 0.01
-
-    # How often to re-render.
-    RENDER_PERIOD = 0.01
-
-    # How often to clear the screen.
-    CLEAR_PERIOD = 60 * 15
+    IDLE_TO_SLEEP_TIMEOUT = 5 * 60
 
     POP_UP_WINDOW_NAMES = ["search", "help", "popup", "select_device"]
+
+    ACTIVE_STATE, IDLE_STATE, SLEEP_STATE = (1, 2, 3)
 
     def __init__(self, sp_state):
         self.state = sp_state
         """The SpotifyState object."""
+
+        self.activity_state = self.ACTIVE_STATE
+        self.dispatch_time = self.ACTIVE_PROGRAM_DISPATCH_TIME
+        """Active, idle, or sleep."""
 
         self.wm = WindowManager()
         """The WindowManager."""
@@ -48,20 +48,23 @@ class CursesDisplay(object):
         self._running = True
         """Whether to continue running."""
 
-        self.periodic_dispatcher = PeriodicDispatcher([
-            PeriodicCallback(self.PROGRAM_PERIOD, self.dispatch),
-            PeriodicCallback(self.RENDER_PERIOD, self.render),
+        self.other_tasks = PeriodicDispatcher([
             PeriodicCallback(self.CLEAR_PERIOD, self.wm.clear)
         ])
-
-        self.dispatch_time = self.ACTIVE_PROGRAM_DISPATCH_TIME
+        """Other tasks to run periodically."""
 
         # This increments each control loop. A value of -50 means that we'll have
         # 2s (200 * PROGRAM_LOOP) until the footer begins to roll.
+        # TODO: Not valid for all activity states 
         self._footer_roll_index = -200
 
         self.last_pressed_time = time.time()
 
+        self.dispatch_times = {
+            self.ACTIVE_STATE: self.ACTIVE_PROGRAM_DISPATCH_TIME,
+            self.IDLE_STATE: self.IDLE_PROGRAM_DISPATCH_TIME,
+            self.SLEEP_STATE: self.SLEEP_PROGRAM_DISPATCH_TIME
+        }
     def start(self):
         # Initial render.
         self.wm.render()
@@ -72,7 +75,9 @@ class CursesDisplay(object):
 
         while self._running:
             with common.ContextDuration() as t:
-                self.periodic_dispatcher.dispatch()
+                self.process()
+                self.render()
+                self.other_tasks.dispatch()
 
             time.sleep(max(0, self.dispatch_time - t.duration))
 
@@ -80,7 +85,7 @@ class CursesDisplay(object):
         self.wm.exit()
         common.clear()
 
-    def dispatch(self):
+    def process(self):
         """Dispatch main program logic."""
         # Handle user input.
         self.process_input()
@@ -122,12 +127,14 @@ class CursesDisplay(object):
         # TODO: Make this state based?
         key_timeout = time.time() - self.last_pressed_time
 
-        if key_timeout <= self.IDLE_TIMEOUT:
-            self.dispatch_time = self.ACTIVE_PROGRAM_DISPATCH_TIME
-        elif self.IDLE_TIMEOUT < key_timeout and key_timeout <= self.SLEEP_TIMEOUT:
-            self.dispatch_time = self.IDLE_PROGRAM_DISPATCH_TIME
-        elif self.SLEEP_TIMEOUT < key_timeout:
-            self.dispatch_time = self.SLEEP_PROGRAM_DISPATCH_TIME
+        if key_timeout <= self.ACTIVE_TO_IDLE_TIMEOUT:
+            self.activity_state = self.ACTIVE_STATE
+        elif self.ACTIVE_TO_IDLE_TIMEOUT < key_timeout and key_timeout <= self.IDLE_TO_SLEEP_TIMEOUT:
+            self.activity_state = self.IDLE_STATE
+        elif self.IDLE_TO_SLEEP_TIMEOUT < key_timeout:
+            self.activity_state = self.SLEEP_STATE
+
+        self.dispatch_time = self.dispatch_times[self.activity_state]
 
         self.set_active_window()
         self.set_popup_window()
@@ -218,11 +225,20 @@ class CursesDisplay(object):
         # Show the tracks.
         selected_i = self.state.tracks_list.i
         track_start_line = title_start_row + 2
-        tracks = [track.str(cols-3) for track in self.state.tracks_list]
+
+        text_disp_width = cols-3
+        tracks = []
+        for track in self.state.tracks_list:
+            track_str = track.str(text_disp_width+1) # +1 to account for >
+            if track == self.state.get_currently_playing_track():
+                track_str = ">"+track_str
+            else:
+                track_str = " "+track_str
+            tracks.append(track_str)
         win.draw_list(
             tracks, 
             track_start_line, rows-4,
-            2, cols-3, 
+            1, text_disp_width, 
             selected_i, 
         )
 

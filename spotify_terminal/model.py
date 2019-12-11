@@ -80,6 +80,8 @@ class Track(SpotifyObject):
                       self.track_tuple[1],
                       self.track_tuple[2])
 
+    def __eq__(self, other_track):
+        return str(self) == str(other_track)
 
 NoneTrack = Track({"name": "---",
                    "artists": [{"name": "---"}],

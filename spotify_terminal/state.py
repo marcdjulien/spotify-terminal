@@ -244,15 +244,25 @@ class SpotifyState(object):
                 self.key_queue.append(key)
             return func
 
+        def run_command(command):
+            def func():
+                self.cmd.process_command(command)
+            return func
+
         self.other_actions_list.update_list([
-            PlayerAction(" [{}] Create Playlist".format(chr(self.config.create_playlist)), 
-                          queue_func(self.config.create_playlist)),
             PlayerAction(" [{}] Show Devices".format(chr(self.config.show_devices)), 
                          queue_func(self.config.show_devices)),
+            PlayerAction(" [{}] Goto Artist".format(chr(self.config.current_artist)), 
+                         queue_func(self.config.current_artist)),
+            PlayerAction(" [{}] Goto Album".format(chr(self.config.current_album)), 
+                         queue_func(self.config.current_album)),
+            PlayerAction(" [{}] Create Playlist".format(chr(self.config.create_playlist)), 
+                         queue_func(self.config.create_playlist)),
             PlayerAction(" [{}] Refresh".format(chr(self.config.refresh)), 
-                         self.sync_player_state),
+                         run_command("refresh")),
             PlayerAction(" [{}] Help".format(chr(self.config.toggle_help)), 
                           queue_func(self.config.toggle_help)),
+            PlayerAction(" Exit", run_command("exit"))
         ])
 
     def _load_playlists(self):
