@@ -232,7 +232,7 @@ class CursesDisplay(object):
         text_disp_width = cols-3
         tracks = []
         for track in self.state.tracks_list:
-            track_str = track.str(text_disp_width+1) # +1 to account for >
+            track_str = track.str(text_disp_width-1) # +1 to account for >
             if track == self.state.get_currently_playing_track():
                 track_str = ">"+track_str
             else:
