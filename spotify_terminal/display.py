@@ -199,11 +199,13 @@ class CursesDisplay(object):
         playlists = [str(playlist) for playlist in self.state.user_list]
         selected_i = self.state.user_list.i
         playlist_start_line = display_name_start_line + 2
+        nplaylist_rows = rows-(playlist_start_line+1)
         win.draw_list(
             playlists,
-            playlist_start_line, rows-(playlist_start_line+1),
-            2, cols-3,
-            selected_i
+            playlist_start_line, nplaylist_rows,
+            2, cols-4,
+            selected_i,
+            scroll_bar=(playlist_start_line+1, cols-2, nplaylist_rows-1)
         )
 
     def render_tracks_panel(self):
@@ -236,12 +238,15 @@ class CursesDisplay(object):
             else:
                 track_str = " "+track_str
             tracks.append(track_str)
+        
         win.draw_list(
             tracks, 
-            track_start_line, rows-4,
+            track_start_line, rows - 4,
             1, text_disp_width, 
-            selected_i, 
+            selected_i,
+            scroll_bar=(2, cols-2, rows-3) 
         )
+
 
     def render_player_panel(self):
         win = self.wm.get_window("player")
@@ -286,7 +291,7 @@ class CursesDisplay(object):
         win.erase()
         
         # Draw border.
-        win.draw_box()
+        win.draw_tab_box()
         # Display other actions
         win.draw_list(
             self.state.other_actions_list, 

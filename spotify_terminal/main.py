@@ -18,11 +18,11 @@ def get_args():
                         default=None,
                         dest="username", 
                         help="username associated with your spotify account (email or user id)")
-    parser.add_argument("-c --clear_cache",
+    parser.add_argument("-c --use_cache",
                         action="store_true",
                         default=False,
-                        dest="clear_cache",
-                        help="clear the cache")
+                        dest="use_cache",
+                        help="use the cache if avialable")
     parser.add_argument("-a --clear_auth",
                         action="store_true",
                         default=False,
@@ -83,14 +83,6 @@ def main():
         logger.debug("Clearing authorization tokens")
         common.clear_auth(args.username)
 
-    # Reset the cache.
-    if args.clear_cache:
-        if args.username is None:
-            print("Must specify username")
-            exit(1)
-        logger.debug("Clearing the cache")
-        common.clear_cache(args.username)
-
     # Parse config file.
     logger.debug("Parsing config file %s", args.config_path)
     config = Config(args.config_path)
@@ -98,7 +90,7 @@ def main():
     try:
         # Spotify API interface.
         ApiClass = TestSpotifyApi if args.test else SpotifyApi
-        api = ApiClass(args.username)
+        api = ApiClass(args.username, args.use_cache)
 
         # Display premium warning.
         if not api.user_is_premium():
@@ -124,7 +116,6 @@ def main():
             exit(1)
 
     print(common.PEACE)
-    time.sleep(1)
 
     # Save the state.
     sp_state.save_state()

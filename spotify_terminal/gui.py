@@ -102,7 +102,7 @@ class Window(object):
         else:
             uc.mvwaddnstr(self._uc_window, row, col, text, ncols, style)
 
-    def draw_list(self, texts, row, nrows, col, ncols, index, centered=False):
+    def draw_list(self, texts, row, nrows, col, ncols, index, centered=False, scroll_bar=None):
         """Draw text on the window.
 
         Args:
@@ -113,6 +113,7 @@ class Window(object):
             ncols (int): Max columns to use.
             i (int): An index to optionally highlight.
             centered (bool): Whether to center the text or not.
+            scroll_bar (tuple): Information on where to draw the scroll bar (row, col, nrows).
         """
         def clamp(value, low, high):
             return max(low, min(value, high))
@@ -136,9 +137,21 @@ class Window(object):
                            style, 
                            centered=centered)
 
+        if scroll_bar is not None and texts:
+            srow, scol, snrows = scroll_bar
+            percent_visible = min(1.0, float(nrows) / nelems)
+            percent_offset = float(start_entry_i) / nelems
+            rows_to_draw = max(1, int(snrows * percent_visible))
+            row_offset = int(snrows * percent_offset)
+            self.uc("mvwvline", srow + row_offset, scol, uc.ACS_VLINE, rows_to_draw)
+
     def draw_box(self):
         """Draw a border around the Window."""
         uc.box(self._uc_window)
+
+    def draw_tab_box(self):
+        """Draw a border around the Window as a tab."""
+        uc.wborder(self._uc_window, tr=uc.ACS_ULCORNER, tl=uc.ACS_URCORNER)
 
     def get_size(self):
         """Return the size of the window.
@@ -160,6 +173,17 @@ class Window(object):
         """Erase the Window."""
         uc.werase(self._uc_window)
 
+    def uc(self, func_name, *args, **kwargs):
+        """Call a unicurses function directly.
+
+        Args:
+            win (Window): The window. 
+            func_name (str): The unicurses function name. Must be the window
+                variant.
+            args (tuple): The args.
+            kwargs (dict): The keyword arguments.
+        """
+        return getattr(uc, func_name)(self._uc_window, *args, **kwargs)
 
 
 class WindowManager(object):

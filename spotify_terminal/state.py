@@ -326,12 +326,6 @@ class SpotifyState(object):
 
         self._set_player_icons()
 
-        # We probably just selected a Track, let's plan
-        # to re-sync in 5s.
-        # TODO: This should be handled by the state machine
-        if key in self.ENTER_KEYS:
-            self.sync_player.call_in(5)
-
     def calculate_track_progress(self):
         # Calculate track progress.
         time_delta = 1000*(time.time() - self.track_progress_last_update_time)
@@ -564,6 +558,8 @@ class SpotifyState(object):
             track_id -= offset_i
 
         self.api.play(track_id, context_uri, uris, self.current_device)
+        self.sync_player.call_in(2)
+
 
     @common.asynchronously
     def _play_next(self):
