@@ -258,8 +258,10 @@ class SpotifyState(object):
                          queue_func(self.config.current_album)),
             PlayerAction(" [{}] Create Playlist".format(chr(self.config.create_playlist)), 
                          queue_func(self.config.create_playlist)),
-            PlayerAction(" [{}] Refresh".format(chr(self.config.refresh)), 
+            PlayerAction(" [{}] Sync Player".format(chr(self.config.refresh)), 
                          run_command("refresh")),
+            PlayerAction(" [{}] Seek".format(chr(self.config.seek)), 
+                         queue_func(self.config.seek)),
             PlayerAction(" [{}] Help".format(chr(self.config.toggle_help)), 
                           queue_func(self.config.toggle_help)),
             PlayerAction(" Exit", run_command("exit"))
@@ -1009,6 +1011,7 @@ class SpotifyState(object):
         def enter():
             self.cmd.process_command(self.text_query, save=True)
             self.text_query.clear()
+            switch_to_tracks_state()
         creating_command_state.bind_key(self.ENTER_KEYS, enter)
 
         creating_command_state.bind_key([uc.KEY_EXIT, 27], switch_to_prev_state)
@@ -1262,6 +1265,13 @@ class SpotifyState(object):
             self.switch_to_state(self.creating_command_state)
         bind_to_all(main_states, self.config.create_playlist, create_playlist)
 
+        #
+        # Seek
+        #
+        def start_seek():
+            self._set_command_query(":seek ")
+            self.switch_to_state(self.creating_command_state)
+        bind_to_all(main_states, self.config.seek, start_seek)
 
         #
         # Exit State - Does nothing, indicates program should exit.
