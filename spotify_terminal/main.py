@@ -51,8 +51,11 @@ def check_version():
     latest_version = common.get_master_version()
     if my_version and latest_version and (my_version < latest_version):
         print("Version {}.{}.{} is now available".format(*latest_version))
-        print("Run with -c after upgrading to clear your cache!".format(*latest_version))
-        time.sleep(3)
+        print("")
+        print("`pip install -U spotify-terminal`")
+        print("")
+        print("Or visit https://github.com/marcdjulien/spotify-terminal to download the latest version!")
+        time.sleep(5)
     else:
         logger.info("Current version: %s", my_version)
         logger.info("Latest version:  %s", latest_version)

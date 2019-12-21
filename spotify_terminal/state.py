@@ -416,8 +416,7 @@ class SpotifyState(object):
 
         self.api.seek(seconds * 1000, device)
 
-        if self.progress is not None:
-            self.progress[0] = seconds * 1000
+        self.sync_player.call_in(1)
 
     def _execute_find(self, i, *query):
         query = " ".join(query)
@@ -1141,7 +1140,7 @@ class SpotifyState(object):
         def current_context():
             state = self.api.get_player_state()
             if state is not None:
-                context = state['context']
+                context = state.get("context")
                 if context is None:
                     self.alert.warn("Unable to go to currently playing context!")
                 else:

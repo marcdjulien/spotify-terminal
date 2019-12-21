@@ -1,4 +1,6 @@
 from . import unicurses as uc
+from . import common
+
 
 class Window(object):
     """A Window in the display."""
@@ -90,8 +92,7 @@ class Window(object):
             style (int): Unicurses style.
             centered (bool): Whether to center the text or not.
         """
-        # TODO: put this back in
-        #text = common.ascii(text)
+        text = common.ascii(text)
         if ncols is None:
             ncols = len(text)
 
