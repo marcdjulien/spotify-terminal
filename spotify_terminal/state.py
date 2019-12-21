@@ -141,12 +141,16 @@ class SpotifyState(object):
 
         self.cmd = CommandProcessor(":", {
             "search": self._execute_search,
+            "seek": self._execute_seek,
             "find": self._execute_find,
             "volume": self._execute_volume,
             "play": self._execute_play,
             "pause": self._execute_pause,
+            "next": self._execute_next,
+            "previous": self._execute_previous,
             "shuffle": self._execute_shuffle,
             "repeat": self._execute_repeat,
+            "refresh": self._execute_refresh,
             "create_playlist": self._execute_create_playlist,
             "exit": self._execute_exit
         })
@@ -240,15 +244,27 @@ class SpotifyState(object):
                 self.key_queue.append(key)
             return func
 
+        def run_command(command):
+            def func():
+                self.cmd.process_command(command)
+            return func
+
         self.other_actions_list.update_list([
-            PlayerAction(" [{}] Create Playlist".format(chr(self.config.create_playlist)), 
-                          queue_func(self.config.create_playlist)),
             PlayerAction(" [{}] Show Devices".format(chr(self.config.show_devices)), 
                          queue_func(self.config.show_devices)),
-            PlayerAction(" [{}] Refresh".format(chr(self.config.refresh)), 
-                         self.sync_player_state),
+            PlayerAction(" [{}] Goto Artist".format(chr(self.config.current_artist)), 
+                         queue_func(self.config.current_artist)),
+            PlayerAction(" [{}] Goto Album".format(chr(self.config.current_album)), 
+                         queue_func(self.config.current_album)),
+            PlayerAction(" [{}] Create Playlist".format(chr(self.config.create_playlist)), 
+                         queue_func(self.config.create_playlist)),
+            PlayerAction(" [{}] Sync Player".format(chr(self.config.refresh)), 
+                         run_command("refresh")),
+            PlayerAction(" [{}] Seek".format(chr(self.config.seek)), 
+                         queue_func(self.config.seek)),
             PlayerAction(" [{}] Help".format(chr(self.config.toggle_help)), 
                           queue_func(self.config.toggle_help)),
+            PlayerAction(" Exit", run_command("exit"))
         ])
 
     def _load_playlists(self):
@@ -267,29 +283,8 @@ class SpotifyState(object):
         playlists.insert(0, self.api.user_saved_playlist())
         self.user_list.update_list(tuple(playlists))
 
-    @common.asynchronously
     def sync_player_state(self):
-        # Note: DO NOT set the current_context
-        # Otherwise, it will confuse the state of things. 
-        player_state = self.api.get_player_state()
-        if player_state:
-            track = player_state['item']
-            self.currently_playing_track = Track(track) if track else NoneTrack
-            self.playing = player_state['is_playing']
-            self.current_device = Device(player_state['device'])
-            self.volume = self.current_device['volume_percent']
-            self._set_player_repeat(player_state['repeat_state'])
-            self._set_player_shuffle(player_state['shuffle_state'])
-
-            duration = player_state['progress_ms']
-            if self.currently_playing_track and duration:
-                self.progress = [duration, self.currently_playing_track['duration_ms']]
-        else:
-            self.currently_playing_track = NoneTrack
-            self.playing = False
-            self.current_device = UnableToFindDevice
-            self.volume = 0
-            self.progress = None
+        self.cmd.process_command("refresh")
 
     def periodic_sync_devices(self):
         self.available_devices = self.api.get_devices()
@@ -332,12 +327,6 @@ class SpotifyState(object):
                 self.sync_devices.deactivate()
 
         self._set_player_icons()
-
-        # We probably just selected a Track, let's plan
-        # to re-sync in 5s.
-        # TODO: This should be handled by the state machine
-        if key in self.ENTER_KEYS:
-            self.sync_player.call_in(5)
 
     def calculate_track_progress(self):
         # Calculate track progress.
@@ -407,6 +396,28 @@ class SpotifyState(object):
             self.search_list.header = "No results found for \"{}\"".format(query)
         self.switch_to_state(self.search_state)
 
+    def _execute_seek(self, time, device=None):
+        if device is None:
+            device = self.current_device
+
+        if isinstance(time, str) and (':' in time):
+            converter = {
+                0: 1,    # 1 s in 1s
+                1: 60,    # 60s in 1m
+                2: 3600  # 3600s in 1hr
+            }
+            toks = time.split(':')
+            assert len(toks) <= 3, "Invalid time format"
+            seconds = 0
+            for i, value in enumerate(toks[::-1]):
+                seconds += converter[i] * int(value)
+        else:
+            seconds = int(time)
+
+        self.api.seek(seconds * 1000, device)
+
+        self.sync_player.call_in(1)
+
     def _execute_find(self, i, *query):
         query = " ".join(query)
         # Find the right state to search in.
@@ -438,6 +449,29 @@ class SpotifyState(object):
         if state in ["off", "context", "track"]:
             self._set_player_repeat(state)
             self.api.repeat(state)
+    
+    def _execute_refresh(self):
+        # Note: DO NOT set the current_context
+        # Otherwise, it will confuse the state of things. 
+        player_state = self.api.get_player_state()
+        if player_state:
+            track = player_state['item']
+            self.currently_playing_track = Track(track) if track else NoneTrack
+            self.playing = player_state['is_playing']
+            self.current_device = Device(player_state['device'])
+            self.volume = self.current_device['volume_percent']
+            self._set_player_repeat(player_state['repeat_state'])
+            self._set_player_shuffle(player_state['shuffle_state'])
+
+            duration = player_state['progress_ms']
+            if self.currently_playing_track and duration:
+                self.progress = [duration, self.currently_playing_track['duration_ms']]
+        else:
+            self.currently_playing_track = NoneTrack
+            self.playing = False
+            self.current_device = UnableToFindDevice
+            self.volume = 0
+            self.progress = None
 
     def _execute_volume(self, volume):
         volume = common.clamp(int(volume), 0, 100)
@@ -449,6 +483,12 @@ class SpotifyState(object):
 
     def _execute_pause(self):
         self._pause()
+
+    def _execute_next(self):
+        self._play_next()
+
+    def _execute_previous(self):
+        self._play_previous()
 
     def _execute_create_playlist(self, *query):
         playlist_name = " ".join(query)
@@ -519,26 +559,18 @@ class SpotifyState(object):
             track_id -= offset_i
 
         self.api.play(track_id, context_uri, uris, self.current_device)
+        self.sync_player.call_in(2)
 
+
+    @common.asynchronously
     def _play_next(self):
-        def wait_and_sync():
-            time.sleep(2)
-            self.sync_player_state()
+        self.api.next()
+        self.sync_player.call_in(2)
 
-        future = Future(target=self.api.next,
-                        result=wait_and_sync,
-                        progress=False)
-        self.execute_future(future, self.current_state)
-
+    @common.asynchronously
     def _play_previous(self):
-        def wait_and_sync():
-            time.sleep(2)
-            self.sync_player_state()
-
-        future = Future(target=self.api.previous,
-                        result=wait_and_sync,
-                        progress=False)
-        self.execute_future(future, self.current_state)
+        self.api.previous()
+        self.sync_player.call_in(2)
 
     def _toggle_play(self):
         if self.playing:
@@ -672,7 +704,7 @@ class SpotifyState(object):
         return self.is_in_state(self.search_state)
 
     def in_main_menu(self):
-        return self.is_in_state(self.tracks_state, self.user_state, self.player_state)
+        return self.is_in_state([self.tracks_state, self.user_state, self.player_state])
 
     def in_select_device_menu(self):
         return self.is_in_state(self.device_state)
@@ -681,7 +713,7 @@ class SpotifyState(object):
         return self.is_in_state(self.loading_state)
 
     def is_adding_track_to_playlist(self):
-        return self.is_in_state(self.a2p_select_state, self.a2p_confirm_state)
+        return self.is_in_state([self.a2p_select_state, self.a2p_confirm_state])
 
     def is_selecting_artist(self):
         return self.is_in_state(self.select_artist_state)
@@ -689,7 +721,9 @@ class SpotifyState(object):
     def is_running(self):
         return not self.is_in_state(self.exit_state)
 
-    def is_in_state(self, *states):
+    def is_in_state(self, states):
+        if not isinstance(states, (list, tuple)):
+            states = [states]
         return self.current_state in states
 
     def get_display_name(self):
@@ -974,8 +1008,9 @@ class SpotifyState(object):
         creating_command_state.bind_key(list(range(32, 128)), ascii_key)
 
         def enter():
-            self.cmd.process_command(self.text_query)
+            self.cmd.process_command(self.text_query, save=True)
             self.text_query.clear()
+            switch_to_tracks_state()
         creating_command_state.bind_key(self.ENTER_KEYS, enter)
 
         creating_command_state.bind_key([uc.KEY_EXIT, 27], switch_to_prev_state)
@@ -1105,7 +1140,7 @@ class SpotifyState(object):
         def current_context():
             state = self.api.get_player_state()
             if state is not None:
-                context = state['context']
+                context = state.get("context")
                 if context is None:
                     self.alert.warn("Unable to go to currently playing context!")
                 else:
@@ -1229,6 +1264,13 @@ class SpotifyState(object):
             self.switch_to_state(self.creating_command_state)
         bind_to_all(main_states, self.config.create_playlist, create_playlist)
 
+        #
+        # Seek
+        #
+        def start_seek():
+            self._set_command_query(":seek ")
+            self.switch_to_state(self.creating_command_state)
+        bind_to_all(main_states, self.config.seek, start_seek)
 
         #
         # Exit State - Does nothing, indicates program should exit.

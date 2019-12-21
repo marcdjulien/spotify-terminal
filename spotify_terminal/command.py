@@ -65,7 +65,7 @@ class CommandProcessor(object):
         for sh in shorthand:
             self.shorthand_commands[sh] = command
 
-    def process_command(self, command_input):
+    def process_command(self, command_input, save=False):
         logger.debug("Pre-processing command: %s", command_input)
 
         # Convert everything to string first
@@ -116,16 +116,21 @@ class CommandProcessor(object):
                 else:
                     logger.warning("Invalid command: %s", e)
 
-        self.command_history.append(command_input)
-        self.command_history_i = len(self.command_history)
+        if save:
+            self.command_history.append(command_input)
+            self.command_history_i = len(self.command_history)
 
     def back(self):
         if self.command_history_i > 0:
             self.command_history_i -= 1
+        else:
+            self.command_history_i = 0
 
     def forward(self):
-        if self.command_history_i < len(self.command_history) - 1:
+        if self.command_history_i < (len(self.command_history) - 1):
             self.command_history_i += 1
+        else:
+            self.command_history_i = len(self.command_history) - 1
 
     def get_command(self):
         return self.command_history[self.command_history_i]

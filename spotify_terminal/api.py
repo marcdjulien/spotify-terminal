@@ -117,7 +117,7 @@ class SpotifyApi(object):
     API_URL = "https://api.spotify.com/v1"
     """URL to make API requests."""
 
-    def __init__(self, username):
+    def __init__(self, username, use_cache):
         self.session = requests.Session()
         """Main Session."""
 
@@ -138,7 +138,10 @@ class SpotifyApi(object):
         # Save authorization information for later.
         self.auth.save(self.username)
 
-        self._uri_cache = UriCache(self.username, new=username is None)
+        self._uri_cache = UriCache(
+            self.username, 
+            new=(username is None) or not use_cache
+        )
         """Cache of Spotify URIs."""
 
         # Saved tracks is not included as a standard playlist in the API
@@ -268,6 +271,21 @@ class SpotifyApi(object):
         """
         q = urllib.parse.urlencode({"volume_percent": volume})
         url = "me/player/volume"
+        self.put_api_v1(url, q)
+
+    @common.asynchronously
+    def seek(self, time, device=None):
+        """Seek to position in currently playing track.
+
+        Args:
+            time (int): The time in ms.
+            device (Device): The Device to seek.
+        """
+        data = {"position_ms": time}
+        if device is not None:
+            data["device"] = device["id"]
+        q = urllib.parse.urlencode(data)
+        url = "me/player/seek"
         self.put_api_v1(url, q)
 
     @return_none_on_error

@@ -80,6 +80,8 @@ class Track(SpotifyObject):
                       self.track_tuple[1],
                       self.track_tuple[2])
 
+    def __eq__(self, other_track):
+        return str(self) == str(other_track)
 
 NoneTrack = Track({"name": "---",
                    "artists": [{"name": "---"}],
@@ -125,7 +127,7 @@ class Device(SpotifyObject):
         return "{}: {}".format(self['type'], self['name'])
 
 
-UnableToFindDevice = Device({"type": "Unable to find device",
+UnableToFindDevice = Device({"type": "?",
                              "name": "Open the Devices menu to select a device.",
                              "id": None})
 
