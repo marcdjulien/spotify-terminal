@@ -239,7 +239,7 @@ class SpotifyState(object):
         self.help_list.update_list(help_list)
 
         # Initialize other program actions
-        def queue_func(key):
+        def queue_key(key):
             def func():
                 self.key_queue.append(key)
             return func
@@ -251,19 +251,19 @@ class SpotifyState(object):
 
         self.other_actions_list.update_list([
             PlayerAction(" [{}] Show Devices".format(chr(self.config.show_devices)), 
-                         queue_func(self.config.show_devices)),
+                         queue_key(self.config.show_devices)),
             PlayerAction(" [{}] Goto Artist".format(chr(self.config.current_artist)), 
-                         queue_func(self.config.current_artist)),
+                         queue_key(self.config.current_artist)),
             PlayerAction(" [{}] Goto Album".format(chr(self.config.current_album)), 
-                         queue_func(self.config.current_album)),
+                         queue_key(self.config.current_album)),
             PlayerAction(" [{}] Create Playlist".format(chr(self.config.create_playlist)), 
-                         queue_func(self.config.create_playlist)),
+                         queue_key(self.config.create_playlist)),
             PlayerAction(" [{}] Sync Player".format(chr(self.config.refresh)), 
                          run_command("refresh")),
             PlayerAction(" [{}] Seek".format(chr(self.config.seek)), 
-                         queue_func(self.config.seek)),
+                         queue_key(self.config.seek)),
             PlayerAction(" [{}] Help".format(chr(self.config.toggle_help)), 
-                          queue_func(self.config.toggle_help)),
+                          queue_key(self.config.toggle_help)),
             PlayerAction(" Exit", run_command("exit"))
         ])
 
@@ -418,6 +418,8 @@ class SpotifyState(object):
 
         self.sync_player.call_in(1)
 
+        self.switch_to_state(self.tracks_state)
+
     def _execute_find(self, i, *query):
         query = " ".join(query)
         # Find the right state to search in.
@@ -444,11 +446,11 @@ class SpotifyState(object):
         self._set_player_shuffle(state)
         self.api.shuffle(state)
 
-    def _execute_repeat(self, state):
-        state = state.lower().strip()
-        if state in ["off", "context", "track"]:
-            self._set_player_repeat(state)
-            self.api.repeat(state)
+    def _execute_repeat(self, repeat_option):
+        repeat_option = repeat_option.lower().strip()
+        if repeat_option in ["off", "context", "track"]:
+            self._set_player_repeat(repeat_option)
+            self.api.repeat(repeat_option)
     
     def _execute_refresh(self):
         # Note: DO NOT set the current_context
@@ -497,6 +499,7 @@ class SpotifyState(object):
             self.alert.warn("Unable to create new playlist")
         else:
             self._load_playlists()
+            self.switch_to_state(self.tracks_state)
 
     def _execute_exit(self):
         self.current_state = self.exit_state
@@ -1010,7 +1013,6 @@ class SpotifyState(object):
         def enter():
             self.cmd.process_command(self.text_query, save=True)
             self.text_query.clear()
-            switch_to_tracks_state()
         creating_command_state.bind_key(self.ENTER_KEYS, enter)
 
         creating_command_state.bind_key([uc.KEY_EXIT, 27], switch_to_prev_state)
