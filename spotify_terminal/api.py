@@ -62,7 +62,7 @@ def return_none_on_error(func):
             if common.DEBUG:
                 raise
             else:
-                logger.warning("Error encountered while running %s: %s", func.__name__, e)                
+                logger.warning("Error encountered while running %s: %s", func.__name__, e)
                 return None
 
     return rnoe_wrapper
@@ -139,8 +139,8 @@ class SpotifyApi(object):
         self.auth.save(self.username)
 
         self._uri_cache = UriCache(
-            self.username, 
-            new=(username is None) or not use_cache
+            self.username,
+            new=not use_cache
         )
         """Cache of Spotify URIs."""
 
@@ -379,7 +379,7 @@ class SpotifyApi(object):
                 # Results are plural (i.e, 'artists', 'albums', 'tracks')
                 spotify_type = spotify_type + 's'
                 combined.extend([
-                    cast[spotify_type](info) 
+                    cast[spotify_type](info)
                     for info in results[spotify_type]['items']
                 ])
 
@@ -522,7 +522,7 @@ class SpotifyApi(object):
         # Special case for the "Saved" Playlist
         if playlist['uri'] == common.SAVED_TRACKS_CONTEXT_URI:
             return self._get_saved_tracks(progress)
-    
+
         q = {"limit": 50}
         url = "users/{}/playlists/{}/tracks".format(playlist['owner']['id'],
                                                     playlist['id'])
@@ -744,7 +744,7 @@ class SpotifyApi(object):
 
             lists.extend(page['items'])
             progress.set_percent(float(len(lists))/n)
-       
+
         return lists
 
     @needs_authentication

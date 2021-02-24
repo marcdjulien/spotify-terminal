@@ -14,21 +14,21 @@ def get_args():
     parser = argparse.ArgumentParser(description="Terminal remote Spotify player.",
                                      epilog=Config.help(),
                                      formatter_class=argparse.RawTextHelpFormatter)
-    parser.add_argument("-u --username",
+    parser.add_argument("-u", "--username",
                         default=None,
-                        dest="username", 
+                        dest="username",
                         help="username associated with your spotify account (email or user id)")
-    parser.add_argument("-c --use_cache",
+    parser.add_argument("-c", "--use_cache",
                         action="store_true",
                         default=False,
                         dest="use_cache",
-                        help="use the cache if avialable")
-    parser.add_argument("-a --clear_auth",
+                        help="use the cache if available")
+    parser.add_argument("-a", "--clear_auth",
                         action="store_true",
                         default=False,
                         dest="clear_auth",
                         help="clear your authorization tokens")
-    parser.add_argument("-p --config_path",
+    parser.add_argument("-p", "--config_path",
                         default=None,
                         dest="config_path",
                         help="pass a configuration file")
@@ -89,6 +89,7 @@ def main():
     # Parse config file.
     logger.debug("Parsing config file %s", args.config_path)
     config = Config(args.config_path)
+    sp_state = None
 
     try:
         # Spotify API interface.
@@ -121,7 +122,8 @@ def main():
     print(common.PEACE)
 
     # Save the state.
-    sp_state.save_state()
+    if sp_state is not None:
+        sp_state.save_state()
 
     # Clear the screen to leave a clean terminal.
     common.clear()
