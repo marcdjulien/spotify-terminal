@@ -5,7 +5,7 @@ with open("README.md", "r") as fh:
 
 setuptools.setup(
     name="spotify-terminal",  
-    version="0.15.1",
+    version="0.15.2",
     scripts=["spotify-terminal.py"] ,
     author="Marc-Daniel Julien",
     author_email="marcdjulien@gmail.com",
@@ -17,7 +17,7 @@ setuptools.setup(
     package_data={"spotify_terminal": [".*", "pdc34dll/*"]},
     classifiers=[
         "Programming Language :: Python :: 3",
-        "License :: OSI Approved :: MIT License",
+        "License :: OSI Approved :: GNU General Public License v3 or later (GPLv3+)",
         "Operating System :: OS Independent"
     ],
     install_requires=["requests"]
