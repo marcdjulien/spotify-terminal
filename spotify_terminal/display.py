@@ -45,7 +45,7 @@ class CursesDisplay(object):
         """The WindowManager."""
 
         self.create_all_windows()
-        
+
         self._running = True
         """Whether to continue running."""
 
@@ -56,7 +56,7 @@ class CursesDisplay(object):
 
         # This increments each control loop. A value of -50 means that we'll have
         # 2s (200 * PROGRAM_LOOP) until the footer begins to roll.
-        # TODO: Not valid for all activity states 
+        # TODO: Not valid for all activity states
         self._footer_roll_index = -200
 
         self.last_pressed_time = time.time()
@@ -108,7 +108,7 @@ class CursesDisplay(object):
                 keys.append(k)
             else:
                 break
-        
+
         # For now, we only process individual key commands.
         # Soemthing like "Shift + Left Arrow" will result in multiple
         # keys and could trigger unintentional commands.
@@ -155,7 +155,7 @@ class CursesDisplay(object):
         self.render_select_device_panel()
         self.render_popup_panel()
         self.render_help_panel()
-        
+
         # Render!
         self.wm.render()
 
@@ -212,7 +212,7 @@ class CursesDisplay(object):
         win = self.wm.get_window("tracks")
         rows, cols = win.get_size()
         win.erase()
-        
+
         # Draw border.
         win.draw_box()
 
@@ -221,7 +221,7 @@ class CursesDisplay(object):
         win.draw_text(
             self.state.tracks_list.header,
             title_start_row, 2,
-            cols-3, 
+            cols-3,
             style=uc.A_BOLD
         )
 
@@ -238,13 +238,13 @@ class CursesDisplay(object):
             else:
                 track_str = " "+track_str
             tracks.append(track_str)
-        
+
         win.draw_list(
-            tracks, 
+            tracks,
             track_start_line, rows - 4,
-            1, text_disp_width, 
+            1, text_disp_width,
             selected_i,
-            scroll_bar=(2, cols-2, rows-3) 
+            scroll_bar=(2, cols-2, rows-3)
         )
 
 
@@ -252,7 +252,7 @@ class CursesDisplay(object):
         win = self.wm.get_window("player")
         rows, cols = win.get_size()
         win.erase()
-        
+
         # Draw border.
         win.draw_box()
 
@@ -289,12 +289,12 @@ class CursesDisplay(object):
         win = self.wm.get_window("other")
         rows, cols = win.get_size()
         win.erase()
-        
+
         # Draw border.
         win.draw_tab_box()
         # Display other actions
         win.draw_list(
-            self.state.other_actions_list, 
+            self.state.other_actions_list,
             1, rows-2,
             1, cols-1,
             self.state.other_actions_list.i
@@ -350,12 +350,12 @@ class CursesDisplay(object):
                     text = "".join(text)
                     text = text[0:ncols]
                     win.draw_text(text, rows-1, 0, style=uc.A_BOLD)
-        
+
         if self.state.alert.is_active():
             text = self.state.alert.get_message()
             text = "[{}]".format(text)
             win.draw_text(text, rows-1, 0, style=uc.A_STANDOUT)
-        
+
         # Track progress bar
         progress = self.state.get_track_progress()
         if progress:
@@ -367,7 +367,7 @@ class CursesDisplay(object):
         win = self.wm.get_window("search")
         rows, cols = win.get_size()
         win.erase()
-        
+
         win.draw_box()
         n_display_cols = cols - 4
 
@@ -376,7 +376,7 @@ class CursesDisplay(object):
         win.draw_text(
             self.state.search_list.header,
             title_start_row, 2,
-            n_display_cols, 
+            n_display_cols,
             style=uc.A_BOLD
         )
 
@@ -394,23 +394,29 @@ class CursesDisplay(object):
         win = self.wm.get_window("select_device")
         rows, cols = win.get_size()
         win.erase()
-        
+
         win.draw_box()
 
         # Show the title of the context.
         title_start_row = 1
         win.draw_text(
-            "Searching...",
+            "Searching." + ("."*(int(time.time())%3)),
             title_start_row,
             2, cols-3,
             style=uc.A_BOLD
         )
 
+        win.draw_text(
+            "Open Spotify on your computer or any device",
+            title_start_row+1,
+            2, cols-3
+        )
+
         selected_i = self.state.device_list.i
         win.draw_list(
-            self.state.device_list, 
-            3, rows-4, 2, 
-            cols-3, 
+            self.state.device_list,
+            title_start_row+3, rows-4, 2,
+            cols-3,
             selected_i
         )
 
@@ -418,7 +424,7 @@ class CursesDisplay(object):
         win = self.wm.get_window("popup")
         rows, cols = win.get_size()
         win.erase()
-        
+
         win.draw_box()
 
         current_popup_list = self.state.current_state.get_list()
@@ -448,7 +454,7 @@ class CursesDisplay(object):
         win = self.wm.get_window("help")
         rows, cols = win.get_size()
         win.erase()
-        
+
         win.draw_box()
 
         current_help_list = self.state.current_state.get_list()
@@ -557,7 +563,7 @@ class CursesDisplay(object):
                  cols - start - 3,
                  player[2],
                  start)
-        
+
         search = (rows*8//10,
                   cols*8//10,
                   rows//10,

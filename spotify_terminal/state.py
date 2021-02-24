@@ -250,19 +250,19 @@ class SpotifyState(object):
             return func
 
         self.other_actions_list.update_list([
-            PlayerAction(" [{}] Show Devices".format(chr(self.config.show_devices)), 
+            PlayerAction(" [{}] Show Devices".format(chr(self.config.show_devices)),
                          queue_key(self.config.show_devices)),
-            PlayerAction(" [{}] Goto Artist".format(chr(self.config.current_artist)), 
+            PlayerAction(" [{}] Goto Artist".format(chr(self.config.current_artist)),
                          queue_key(self.config.current_artist)),
-            PlayerAction(" [{}] Goto Album".format(chr(self.config.current_album)), 
+            PlayerAction(" [{}] Goto Album".format(chr(self.config.current_album)),
                          queue_key(self.config.current_album)),
-            PlayerAction(" [{}] Create Playlist".format(chr(self.config.create_playlist)), 
+            PlayerAction(" [{}] Create Playlist".format(chr(self.config.create_playlist)),
                          queue_key(self.config.create_playlist)),
-            PlayerAction(" [{}] Sync Player".format(chr(self.config.refresh)), 
+            PlayerAction(" [{}] Sync Player".format(chr(self.config.refresh)),
                          run_command("refresh")),
-            PlayerAction(" [{}] Seek".format(chr(self.config.seek)), 
+            PlayerAction(" [{}] Seek".format(chr(self.config.seek)),
                          queue_key(self.config.seek)),
-            PlayerAction(" [{}] Help".format(chr(self.config.toggle_help)), 
+            PlayerAction(" [{}] Help".format(chr(self.config.toggle_help)),
                           queue_key(self.config.toggle_help)),
             PlayerAction(" Exit", run_command("exit"))
         ])
@@ -291,7 +291,7 @@ class SpotifyState(object):
         if self.available_devices is None:
             self.alert.warn("Could not find any devices")
             return
-        
+
         # Don't reset the index since this is called every 1s when the devices
         # menu is open.
         self.device_list.update_list(self.available_devices, reset_index=False)
@@ -451,10 +451,10 @@ class SpotifyState(object):
         if repeat_option in ["off", "context", "track"]:
             self._set_player_repeat(repeat_option)
             self.api.repeat(repeat_option)
-    
+
     def _execute_refresh(self):
         # Note: DO NOT set the current_context
-        # Otherwise, it will confuse the state of things. 
+        # Otherwise, it will confuse the state of things.
         player_state = self.api.get_player_state()
         if player_state:
             track = player_state['item']
@@ -513,7 +513,7 @@ class SpotifyState(object):
         if self.current_device is UnableToFindDevice:
             key_ord = self.config.show_devices
             key_chr = str(key_ord)
-            try: 
+            try:
                 key_chr = chr(self.config.show_devices)
             except:
                 pass
@@ -623,7 +623,7 @@ class SpotifyState(object):
 
     def _set_artist_all_tracks(self, artist):
         future = Future(target=(self.api.get_all_tracks_from_artist, artist),
-                        result=(self._update_track_list, 
+                        result=(self._update_track_list,
                                 (common.get_all_tracks_context(artist),
                                  "All tracks from " + artist['name'])),
                         use_return=True)
@@ -657,7 +657,7 @@ class SpotifyState(object):
             msg = "Unable to get tracks from {}. Try again."
             self.alert.warn(msg.format(header))
             return
-            
+
         # Save the track listing.
         self.previous_tracks.append((tracks, context, header))
 
@@ -795,6 +795,14 @@ class SpotifyState(object):
         user_state.bind_key(uc.KEY_DOWN, move_down_current_list)
         user_state.bind_key(uc.KEY_RIGHT, switch_to_tracks_state)
         user_state.bind_key(uc.KEY_LEFT, switch_to_other_actions_state)
+
+        def dec():
+            self.user_list.decrement(15)
+        user_state.bind_key(uc.KEY_PPAGE, dec)
+
+        def inc():
+            self.user_list.increment(15)
+        user_state.bind_key(uc.KEY_NPAGE, inc)
 
         def enter():
             playlist = self.user_list.get_current_entry()
@@ -968,10 +976,19 @@ class SpotifyState(object):
             else:
                 move_up_current_list()
         other_actions_state.bind_key(uc.KEY_UP, up)
-        
+
         def enter():
             self.other_actions_list.get_current_entry().action()
         other_actions_state.bind_key(self.ENTER_KEYS, enter)
+
+
+        def dec():
+            self.other_actions_list.decrement(15)
+        other_actions_state.bind_key(uc.KEY_PPAGE, dec)
+
+        def inc():
+            self.other_actions_list.increment(15)
+        other_actions_state.bind_key(uc.KEY_NPAGE, inc)
 
         self.other_actions_state = other_actions_state
 
@@ -1077,7 +1094,7 @@ class SpotifyState(object):
         help_state = State("help", self.help_list)
         help_state.bind_key(uc.KEY_UP, move_up_current_list)
         help_state.bind_key(uc.KEY_DOWN, move_down_current_list)
-        help_state.bind_key(self.BACKSPACE_KEYS + self.CANCEL_KEYS + [self.config.toggle_help], 
+        help_state.bind_key(self.BACKSPACE_KEYS + self.CANCEL_KEYS + [self.config.toggle_help],
                             switch_to_prev_state)
 
         self.help_state = help_state
@@ -1609,7 +1626,7 @@ class Alert(object):
         Returns the current message if the Alert is active.
 
         Returns:
-            str: The message. None if the Alert is not active.    
+            str: The message. None if the Alert is not active.
         """
         return self.message if self.is_active() else None
 
@@ -1617,7 +1634,7 @@ class Alert(object):
         """If the Alert is active.
 
         An Alert is active if there is still time remaining.
-        
+
         Returns:
             bool: True if there is time left in the Alert.
         """
