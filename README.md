@@ -83,5 +83,9 @@ By typing ```:``` you can enter commands. The following is a list of all command
 
 ```DELETE``` to delete a playlist or song from a playlist.
 
-# Notes
-This has only been tested on Linux and Windows with a Spotify Premium account. Briefly on Mac. Feel free to submit pull requests or tickets for issues.
+# OS Compatibility
+This has only been tested on Linux and Windows with a Spotify Premium account. Briefly on Mac. 
+
+32-bit Python only.
+
+Feel free to submit pull requests or tickets for issues.
