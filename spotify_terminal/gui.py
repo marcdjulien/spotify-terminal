@@ -33,7 +33,7 @@ class Window(object):
         self._init()
 
     def _init(self):
-        """Initialize the Window."""    
+        """Initialize the Window."""
         # Make getch and getstr non-blocking.
         uc.nodelay(self._uc_window, True)
 
@@ -70,7 +70,7 @@ class Window(object):
         self.cols = cols
         self.start_row = start_row
         self.start_col = start_col
-        self._uc_window = uc.newwin(rows, cols, start_row, start_col)   
+        self._uc_window = uc.newwin(rows, cols, start_row, start_col)
         uc.replace_panel(self._uc_panel, self._uc_window)
 
     def show(self):
@@ -132,10 +132,10 @@ class Window(object):
             else:
                 style = uc.A_NORMAL
             self.draw_text(text,
-                           row + i, 
-                           col, 
-                           ncols, 
-                           style, 
+                           row + i,
+                           col,
+                           ncols,
+                           style,
                            centered=centered)
 
         if scroll_bar is not None and texts:
@@ -178,7 +178,7 @@ class Window(object):
         """Call a unicurses function directly.
 
         Args:
-            win (Window): The window. 
+            win (Window): The window.
             func_name (str): The unicurses function name. Must be the window
                 variant.
             args (tuple): The args.
@@ -217,10 +217,10 @@ class WindowManager(object):
         err_msg = "A Window with this name already exists: {}".format(name)
         assert name not in self._windows, err_msg
         self._windows[name] = Window(
-            name, 
-            start_row, 
-            start_col, 
-            rows, 
+            name,
+            start_row,
+            start_col,
+            rows,
             cols
         )
 
@@ -242,7 +242,7 @@ class WindowManager(object):
         #for window in self._windows.values():
             # TODO: Do we still need werase?
             #window.render()
-        
+
         uc.update_panels()
         uc.doupdate()
 

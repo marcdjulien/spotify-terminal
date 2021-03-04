@@ -195,18 +195,40 @@ class CursesDisplay(object):
             style=uc.A_NORMAL
         )
 
-        # Show the playlists.
-        playlists = [str(playlist) for playlist in self.state.user_list]
+        # Show the playlists/albums.
+        entries = [entry.text(style=1) for entry in self.state.user_list]
         selected_i = self.state.user_list.i
-        playlist_start_line = display_name_start_line + 2
-        nplaylist_rows = rows-(playlist_start_line+1)
+        user_list_start_line = display_name_start_line + 2
+        nuser_list_rows = rows-(user_list_start_line+1+2) # 1 for the bottom bar + 2 for the Playlist/Album section
         win.draw_list(
-            playlists,
-            playlist_start_line, nplaylist_rows,
+            entries,
+            user_list_start_line, nuser_list_rows,
             2, cols-4,
             selected_i,
-            scroll_bar=(playlist_start_line+1, cols-2, nplaylist_rows-1)
+            scroll_bar=(user_list_start_line+1, cols-2, nuser_list_rows-1)
         )
+
+        # Bar.
+        bar_start_line = user_list_start_line + nuser_list_rows
+        win.draw_text(
+            "_"*cols,
+            bar_start_line, 1,
+            cols-2,
+            style=uc.A_NORMAL
+        )
+        if self.state.user_list.header.lower() == "playlists":
+            text = "[Playlists] |  Albums "
+        else:
+            text = " Playlists  | [Albums]"
+        win.draw_text(
+            text,
+            bar_start_line+1, 1,
+            cols-2,
+            style=uc.A_NORMAL,
+            centered=True
+        )
+
+
 
     def render_tracks_panel(self):
         win = self.wm.get_window("tracks")

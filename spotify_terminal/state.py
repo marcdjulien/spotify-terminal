@@ -224,7 +224,11 @@ class SpotifyState(object):
                 self._set_playlist(self.user_list[0])
 
         # Initialize the help list
-        help_list = []
+        help_list = [
+            Option("TAB: Toggle between playlists and saved albums [When in Playlist/Album menu]"),
+            Option("TAB: Go to current Artist's All Tracks [When on Artists Page]"),
+            Option(""),
+        ]
         for config_key, description in self.config.key_help.items():
             key = chr(self.config.get_config_param(config_key))
             help_list.append(Option("{}:\t{}".format(key, description)))
@@ -275,13 +279,8 @@ class SpotifyState(object):
 
         playlists = self.api.get_user_playlists(user)
         if playlists is None:
-            print("Could not load playlists. Try again later.")
-            exit(1)
-        playlists = list(playlists)
-
-        # Add the Saved tracks playlist.
-        playlists.insert(0, self.api.user_saved_playlist())
-        self.user_list.update_list(tuple(playlists))
+            raise RuntimeError("Could not load playlists. Try again later.")
+        self._update_user_list(playlists, "playlists")
 
     def sync_player_state(self):
         self.cmd.process_command("refresh")
@@ -669,6 +668,13 @@ class SpotifyState(object):
         # Go to the tracks pane.
         self.tracks_list.set_index(0)
 
+    def _update_user_list(self, collection, header):
+        if collection is None:
+            self.alert.warn("Failed to load {}.".format(header))
+            return
+        self.user_list.update_list(collection, reset_index=False)
+        self.user_list.header = header
+
     def _update_artist_list(self, artists):
         self.artist_list.update_list(artists)
         self.artist_list.set_index(0)
@@ -805,9 +811,11 @@ class SpotifyState(object):
         user_state.bind_key(uc.KEY_NPAGE, inc)
 
         def enter():
-            playlist = self.user_list.get_current_entry()
-            if playlist:
-                self._set_playlist(playlist)
+            entry = self.user_list.get_current_entry()
+            if entry["type"] == "playlist":
+                self._set_playlist(entry)
+            elif entry["type"] == "album":
+                self._set_album(entry)
         user_state.bind_key(self.ENTER_KEYS, enter)
 
         def delete():
@@ -819,6 +827,15 @@ class SpotifyState(object):
                 self.playlist_to_remove = entry
                 self.switch_to_state(self.remove_playlist_confirm_state)
         user_state.bind_key(self.config.delete, delete)
+
+        def switch_user_list():
+            user = self.api.get_user()
+            if self.user_list.header.lower() == "playlists":
+                self._update_user_list(self.api.get_user_saved_albums(user), "albums")
+            else: # "albums"
+                self._update_user_list(self.api.get_user_playlists(user), "playlists")
+
+        user_state.bind_key(ord('\t'), switch_user_list)
 
         self.user_state = user_state
 
@@ -889,6 +906,15 @@ class SpotifyState(object):
             elif entry['type'] == 'album':
                 self._set_album(entry)
         tracks_state.bind_key(self.config.goto_album, goto_album)
+
+        def all_tracks():
+            if self.current_context:
+                if common.is_all_tracks_context(self.current_context):
+                    artist = self.current_context['artist']
+                    self._set_artist(artist)
+                elif self.current_context.get("type") == "artist":
+                    self._set_artist_all_tracks(self.current_context)
+        tracks_state.bind_key(ord('\t'), all_tracks)
 
         self.tracks_state = tracks_state
 
@@ -1165,15 +1191,6 @@ class SpotifyState(object):
                 else:
                     self._set_context(context)
         bind_to_all(main_states, self.config.current_context, current_context)
-
-        def all_tracks():
-            if self.current_context:
-                if common.is_all_tracks_context(self.current_context):
-                    artist = self.current_context['artist']
-                    self._set_artist(artist)
-                elif self.current_context.get("type") == "artist":
-                    self._set_artist_all_tracks(self.current_context)
-        bind_to_all(main_states, ord('\t'), all_tracks)
 
         bind_to_all(main_states, self.config.play, self._toggle_play)
         bind_to_all(main_states, self.config.next_track, self._play_next)

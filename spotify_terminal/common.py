@@ -51,7 +51,7 @@ def is_linux():
     return platform.system() == "Linux"
 
 
-def is_mac(): 
+def is_mac():
     return platform.system() == 'Darwin'
 
 
@@ -312,7 +312,7 @@ SPOTIFY_BANNER = """
       / / /  __/ /  / / / / / / / / / / /_/ / /
      /_/  \___/_/  /_/ /_/ /_/_/_/ /_/\__,_/_/
 
-  [marcdjulien]
+  [marc-djulien]
 """
 
 

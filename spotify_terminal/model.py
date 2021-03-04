@@ -24,7 +24,11 @@ class SpotifyObject(object):
     def get(self, key, default=None):
         return self.info.get(key, default)
 
+    # TODO: This should be deprecated
     def str(self, cols):
+        return str(self)
+
+    def text(self, style=0, cols=0):
         return str(self)
 
 
@@ -118,6 +122,13 @@ class Album(SpotifyObject):
         ar_chrs = nchrs - tr_chrs - ty_chrs
         fmt = "%{0}.{0}s  %{1}.{1}s  %{2}.{2}s".format(tr_chrs, ty_chrs, ar_chrs)
         return fmt % (self['name'], self.extra_info, self.artists)
+
+    def text(self, style=0):
+        # User List
+        if style == 1:
+            return "{} | {}".format(self["name"], self.artists)
+        else:
+            return str(self)
 
 
 class Device(SpotifyObject):

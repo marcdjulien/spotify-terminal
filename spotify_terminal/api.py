@@ -94,6 +94,7 @@ def uri_cache(func):
 
     return uc_wrapper
 
+
 def id_from_uri(uri):
     """Return the ID from a URI.
 
@@ -146,7 +147,7 @@ class SpotifyApi(object):
 
         # Saved tracks is not included as a standard playlist in the API
         self.saved_playlist = Playlist({
-            "name": "Saved",
+            "name": "Liked Songs",
             "uri": common.SAVED_TRACKS_CONTEXT_URI,
             "id": "",
             "type": "playlist",
@@ -719,10 +720,32 @@ class SpotifyApi(object):
             tuple: The Playlists.
         """
         q = {"limit": 50}
-        url = "users/{}/playlists".format(user['id'])
+        # Use this instead of me/playlists since we have to pass in a user
+        # for the UriCache
+        url = "users/{}/playlists".format(user["id"])
         page = self.get_api_v1(url, q)
         results = self._extract_page(page, progress)
-        return tuple([Playlist(p) for p in results])
+        return tuple([Playlist(p) for p in [self.user_saved_playlist()] + results])
+
+    @return_none_on_error
+    @uri_cache
+    def get_user_saved_albums(self, _, progress=Progress()):
+        """Get the Saved Albums from the current user.
+
+        Args:
+            _ (User): The User. Only passed in to satisfy UriCache.
+            progress (Progress): Progress associated with this call.
+
+        Return:
+            tuple: The Albums.
+        """
+        q = {"limit": 50}
+        url = "me/albums"
+        page = self.get_api_v1(url, q)
+        results = self._extract_page(page, progress)
+        # Returns a SavedAlbumObject which consists of the time added and album object
+        # For now, we don't care about the time added, just get the Album object.
+        return tuple([Album(sa["album"]) for sa in results])
 
     def _extract_page(self, page, progress=Progress()):
         """Extract all items from a page.
