@@ -10,7 +10,7 @@ import urllib.request, urllib.parse, urllib.error
 import webbrowser
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from threading import Thread
-
+import time
 from . import common
 
 
@@ -61,6 +61,13 @@ class Authenticator(object):
             logger.debug("Starting auth server")
             web_thread = Thread(target=start_server)
             web_thread.start()
+
+            def show_link():
+                time.sleep(5)
+                if web_thread.isAlive():
+                    print("If stuck, visit: {}".format(self._authorize_url()))
+            message_thread = Thread(target=show_link)
+            message_thread.start()
 
             logger.debug("Opening %s in browser", self._authorize_url())
             webbrowser.open_new_tab(self._authorize_url())
