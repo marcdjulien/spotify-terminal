@@ -107,7 +107,7 @@ class Authenticator(object):
         )
         with open(filename, "rb") as f:
             line = "".join([
-                chr(i-1993) for i in struct.unpack("64I", f.readline())
+                chr(i-1993) for i in struct.unpack("<64I", f.readline())
             ])
             self.app_data.append(line[0:32])
             self.app_data.append(line[32::])
