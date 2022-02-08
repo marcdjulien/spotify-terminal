@@ -64,7 +64,7 @@ class Authenticator(object):
 
             def show_link():
                 time.sleep(5)
-                if web_thread.isAlive():
+                if web_thread.is_alive():
                     print("If stuck, visit: {}".format(self._authorize_url()))
             message_thread = Thread(target=show_link)
             message_thread.start()
