@@ -299,7 +299,7 @@ class ContextDuration(object):
             return self
 
 
-SPOTIFY_BANNER = """
+SPOTIFY_BANNER = r"""
    _____             __  _ ____
   / ___/____  ____  / /_(_/ ____  __
   \__ \/ __ \/ __ \/ __/ / /_/ / / /
